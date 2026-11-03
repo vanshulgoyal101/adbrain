@@ -1433,12 +1433,12 @@
     "websiteStatus": "Your website {host} answered with an error{coded, select, yes { ({status})} other {}} when AdBrain opened it. Check the address on the Your business page, or make sure the site is up, then review again.",
     "websiteBlocked": "{host} isn't a public website address. Add your business's public site on the Your business page.",
     "websiteRedirect": "Your website {host} sends visitors on to {known, select, yes {{finalHost}} other {another site}}. Add the address of your own site on the Your business page, so the ad opens your business.",
-    "trackingNone": "Your ad account has no website tracking (Meta pixel) yet, so Meta can't count {goal, select, leads {signups} other {sales}} from this ad. Add tracking to your site, or choose the visits goal.",
-    "trackingChoose": "Choose which website tracking counts your {goal, select, leads {signups} other {sales}} on the Your business page, then review again.",
+    "trackingNone": "Your ad account has no website tracking (Meta pixel) yet, so Meta can't count {goal, select, leads {signups from this ad} other {sales from this ad}}. Add tracking to your site, or choose the visits goal.",
+    "trackingChoose": "Choose which website tracking counts {goal, select, leads {your signups} other {your sales}} on the Your business page, then review again.",
     "trackingUnreadable": "AdBrain couldn't read your website tracking from Meta. {reconnect, select, yes {Connect Facebook again, then review again.} other {Try reviewing again in a few minutes.}}",
     "trackingQuiet": "Your website tracking reported nothing from {since} to {until}{seen, select, yes { (last heard {lastSeen})} other {}}. Check that it is on your site, then review again, or choose the visits goal.",
     "trackingEventMissing": "Your website tracking works but reported no {goal, select, leads {signup (Lead)} other {sale (Purchase)}} from {since} to {until}. Make sure your site sends it, then review again, or choose the visits goal.",
-    "goalWords": "The ad {named, select, yes {\"{headline}\"} other {you chose}} asks people to {goal, select, leads {buy, but this campaign looks for signups} other {sign up, but this campaign looks for sales}}. Choose an ad that fits, or change the goal."
+    "goalWords": "The ad {named, select, yes {\"{headline}\"} other {you chose}} asks people {goal, select, leads {to buy, but this campaign looks for signups} other {to sign up, but this campaign looks for sales}}. Choose an ad that fits, or change the goal."
   },
   "media": {
     "page": {

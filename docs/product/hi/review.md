@@ -1,5 +1,5 @@
 # जाँचें और लाइव करें
-<!-- mirrors ../review.md b31d30c472f9 -->
+<!-- mirrors ../review.md 5bdf238290fc -->
 
 यह [Review and Go Live](../review.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -100,8 +100,8 @@ Button दबाएँ, वह एक चीज़ ठीक करें, फ�
 | `REVIEW_NO_LEAD_FORM` | "Choose an active lead form from your Facebook Page in the Lead form field." | "Choose a lead form" | Active form चुनें, या पहले Facebook Page पर एक बनाएँ। |
 | `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add website in Your business" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | अपनी website डालें, या WhatsApp chat ads पर जाएँ। |
 | `REVIEW_WEBSITE_UNREACHABLE` | सिर्फ़ website ads (#2599): "AdBrain couldn't open your website {site}", "answered with an error ({code})", "isn't a public website address" या "sends visitors on to {other site}" | "Fix link in Your business" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | Address ठीक करें ताकि आपकी अपनी site खुले, site फिर से चालू करें, या WhatsApp chat ads पर जाएँ। |
-| `REVIEW_TRACKING` | सिर्फ़ website के signup या sales लक्ष्य (#2714): "Your ad account has no website tracking (Meta pixel) yet", "Choose which website tracking counts your {signups/sales}", "couldn't read your website tracking", "reported nothing from {date} to {date}" या "reported no {signup (Lead)/sale (Purchase)} from {date} to {date}" | "Check tracking in Your business" (Brand खुलता है) | ऐसी tracking जोड़ें या चुनें जो लक्ष्य का event भेजे, Facebook फिर से जोड़ें, या visits का लक्ष्य चुनें। |
-| `REVIEW_GOAL_WORDS` | सिर्फ़ website के signup या sales लक्ष्य (#2714): "The ad {headline} asks people to buy, but this campaign looks for signups" (या sign up / sales) | "Choose your ads" (ads पर ले जाता है) | ऐसा ad चुनें जिसका button लक्ष्य से मेल खाए, या लक्ष्य बदलें। |
+| `REVIEW_TRACKING` | सिर्फ़ website के signup या sales लक्ष्य (#2714): "Your ad account has no website tracking (Meta pixel) yet", "Choose which website tracking counts", "couldn't read your website tracking", "reported nothing from {date} to {date}" या "reported no {signup (Lead)/sale (Purchase)} from {date} to {date}" | "Check tracking in Your business" (Brand खुलता है) | ऐसी tracking जोड़ें या चुनें जो लक्ष्य का event भेजे, Facebook फिर से जोड़ें, या visits का लक्ष्य चुनें। |
+| `REVIEW_GOAL_WORDS` | सिर्फ़ website के signup या sales लक्ष्य (#2714): ad का बटन signup लक्ष्य पर ख़रीदने को कहता है, या sales लक्ष्य पर sign up करने को | "Choose your ads" (ads पर ले जाता है) | ऐसा ad चुनें जिसका button लक्ष्य से मेल खाए, या लक्ष्य बदलें। |
 | `REVIEW_AD_POLICY` | ad में "{word}" is a health promise (clinics) या a promise (बाकी) "Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | लिखें कि सेवा क्या है, यह नहीं कि वह क्या ठीक करती है या किसकी गारंटी देती है। |
 | `REVIEW_BUDGET` | "Set a daily budget above ₹0." या "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | रोज़ ₹300, ₹500 या ₹1,000 चुनें। |
 | `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | उम्र चुनें, या **Recommend audience** दबाएँ। |
