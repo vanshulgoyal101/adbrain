@@ -74,7 +74,6 @@ function createBatches(list: Creative[]): CreateBatch[] {
 }
 
 function formatBatchDate(made: number): string {
-  // #2748: the label uses the viewer's clock and engine Intl, so WebKit and Node can differ; callers suppress the text-mismatch warning.
   // #724: several batches a day are common, so the time tells them apart.
   return formatDate(new Date(made));
 }
