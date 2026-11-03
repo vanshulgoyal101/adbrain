@@ -912,7 +912,9 @@
         "REVIEW_NO_AUDIENCE": "Recommend audience पर जाएँ",
         "REVIEW_AD_POLICY": "विज्ञापन के शब्द बदलें",
         "REVIEW_INTERESTS_UNRESOLVED": "रुचियाँ बदलें",
-        "REVIEW_WHATSAPP_MESSAGE": "WhatsApp मैसेज बदलें"
+        "REVIEW_WHATSAPP_MESSAGE": "WhatsApp मैसेज बदलें",
+        "REVIEW_TRACKING": "बिज़नेस में ट्रैकिंग जाँचें",
+        "REVIEW_GOAL_WORDS": "अपने विज्ञापन चुनें"
       }
     },
     "destination": {
@@ -1430,7 +1432,13 @@
     "websiteUnreachable": "AdBrain आपकी वेबसाइट {host} नहीं खोल पाया। Your business पेज पर पता जाँचें, या पक्का करें कि साइट चल रही है, फिर से रिव्यू करें।",
     "websiteStatus": "AdBrain ने आपकी वेबसाइट {host} खोली तो उसने गड़बड़ी{coded, select, yes { ({status})} other {}} बताई। Your business पेज पर पता जाँचें, या पक्का करें कि साइट चल रही है, फिर से रिव्यू करें।",
     "websiteBlocked": "{host} कोई सार्वजनिक वेबसाइट पता नहीं है। Your business पेज पर अपने बिज़नेस की सार्वजनिक साइट जोड़ें।",
-    "websiteRedirect": "आपकी वेबसाइट {host} लोगों को {known, select, yes {{finalHost}} other {किसी दूसरी साइट}} पर भेज देती है। Your business पेज पर अपनी साइट का पता जोड़ें, ताकि विज्ञापन आपका बिज़नेस खोले।"
+    "websiteRedirect": "आपकी वेबसाइट {host} लोगों को {known, select, yes {{finalHost}} other {किसी दूसरी साइट}} पर भेज देती है। Your business पेज पर अपनी साइट का पता जोड़ें, ताकि विज्ञापन आपका बिज़नेस खोले।",
+    "trackingNone": "आपके ad account में अभी वेबसाइट ट्रैकिंग (Meta pixel) नहीं है, इसलिए Meta इस विज्ञापन से {goal, select, leads {साइनअप} other {बिक्री}} नहीं गिन सकता। अपनी साइट पर ट्रैकिंग लगाएँ, या visits का लक्ष्य चुनें।",
+    "trackingChoose": "Your business पेज पर चुनें कि कौन-सी वेबसाइट ट्रैकिंग आपके {goal, select, leads {साइनअप} other {बिक्री}} गिनती है, फिर से रिव्यू करें।",
+    "trackingUnreadable": "AdBrain Meta से आपकी वेबसाइट ट्रैकिंग नहीं पढ़ पाया। {reconnect, select, yes {Facebook फिर से जोड़ें, फिर से रिव्यू करें।} other {कुछ मिनट बाद फिर से रिव्यू करें।}}",
+    "trackingQuiet": "आपकी वेबसाइट ट्रैकिंग ने {since} से {until} तक कुछ नहीं बताया{seen, select, yes { (आख़िरी बार {lastSeen} को)} other {}}। जाँचें कि वह आपकी साइट पर लगी है, फिर से रिव्यू करें, या visits का लक्ष्य चुनें।",
+    "trackingEventMissing": "आपकी वेबसाइट ट्रैकिंग चल रही है, पर {since} से {until} तक कोई {goal, select, leads {साइनअप (Lead)} other {बिक्री (Purchase)}} नहीं बताया। पक्का करें कि आपकी साइट उसे भेजती है, फिर से रिव्यू करें, या visits का लक्ष्य चुनें।",
+    "goalWords": "{named, select, yes {विज्ञापन \"{headline}\"} other {आपका चुना विज्ञापन}} लोगों से {goal, select, leads {ख़रीदने को कहता है, पर यह campaign साइनअप ढूँढता है} other {साइनअप करने को कहता है, पर यह campaign बिक्री ढूँढता है}}। सही विज्ञापन चुनें, या लक्ष्य बदलें।"
   },
   "media": {
     "page": {
