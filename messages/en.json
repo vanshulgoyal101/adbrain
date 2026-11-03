@@ -1710,7 +1710,22 @@
     "resetButton": "Reset to suggested",
     "preview": "WhatsApp preview",
     "questionsToTap": "Questions to tap",
-    "readyToSend": "Ready to send: "
+    "readyToSend": "Ready to send: ",
+    "campaign": {
+      "title": "WhatsApp message for this campaign",
+      "description": "What customers see after tapping this campaign's ads.",
+      "alsoSave": "Also save as my message",
+      "alsoSaveNote": "New WhatsApp campaigns will start from it. Running campaigns don't change.",
+      "undo": "Undo my edit",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "use": "Use for this campaign",
+      "problems": {
+        "greeting": "Write a welcome of up to 300 characters.",
+        "prefill": "Write a pre-typed message of up to 300 characters.",
+        "questions": "Use 1 to 3 different questions of up to 40 characters."
+      }
+    }
   },
   "create": {
     "title": "Create ads",
