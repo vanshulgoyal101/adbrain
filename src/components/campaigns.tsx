@@ -2221,6 +2221,7 @@ function BusinessCampaigns({
                   <div><Label htmlFor="campaign-goal">Campaign goal</Label><Input id="campaign-goal" value={draftGoal} onChange={(event) => setDraftGoal(event.target.value)} placeholder="Qualified enquiries for the current offer" /></div>
                   <Label className="mt-4">Audience &amp; location</Label>
                   <TargetingControls
+                    words={campaignWords}
                     value={targeting}
                     onDecide={(field) => void requestAudienceRecommendation(field)}
                     onChange={(value) => { setTargeting(value.radiusKm !== targeting.radiusKm ? { ...value, locationMode: "manual" } : value); if (!unresolvedRecovery()) setPrepareReview(null); }}
