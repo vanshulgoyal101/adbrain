@@ -5,6 +5,8 @@ import { Campaigns } from "@/components/campaigns";
 import { WhenTheyTap, whenTheyTapLine } from "@/components/when-they-tap";
 import { setupTranslator } from "@/i18n/setup-words";
 import hi from "../messages/hi.json";
+import en from "../messages/en.json";
+import { WHATSAPP_UNVERIFIED_STEP } from "@/lib/meta/setup-checklist";
 import type { DraftDTO, DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { Business, Creative } from "@/lib/types";
 
@@ -138,12 +140,41 @@ describe("Review: a WhatsApp number Meta doesn't confirm (#1301)", () => {
     expect(await screen.findByText(/WhatsApp chat \(number not verified\)/)).toBeInTheDocument();
     expect(screen.getByText(/Meta hasn't confirmed a WhatsApp Business number on your Page\. Link it in Meta Business Suite, then check again\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open WhatsApp settings" })).toHaveAttribute("href", "https://business.facebook.com/latest/settings/whatsapp_account");
+    expect(screen.getByText("Solar account, Page Solaride Energy (INR)")).toBeInTheDocument();
+    expect(screen.getByText(/^Ages 25–55, all genders, /)).toBeInTheDocument();
     const calls = mocks.preflight.mock.calls.length;
     verified = true;
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(mocks.preflight.mock.calls.length).toBe(calls + 1));
     expect(await screen.findByText(/WhatsApp chat \+919800000874/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Check again" })).toBeNull();
+  });
+});
+
+describe("Review in the owner's language (#1438)", () => {
+  it("shows the facts, the unverified number step and the account in Hindi", async () => {
+    mocks.preflight.mockImplementation(async () => ({
+      draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1, canCreatePaused: true, blockers: [], planHash: "a".repeat(64), currency: "INR",
+      perAdSetDailyBudgetRupees: 300, totalDailyBudgetRupees: 300, adSetCount: 1, resolvedAreaLabel: "Chandigarh", selected,
+      destination: "whatsapp", whatsappNumber: null, whatsappMessage: reviewedMessage,
+    }));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" campaignWords={{ locale: "hi", messages: hi.campaigns }} />);
+    await screen.findByLabelText("WhatsApp button number");
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
+    const region = await screen.findByRole("region", { name: "कैंपेन रिव्यू का नतीजा" });
+    expect(await within(region).findByText(/WhatsApp चैट \(नंबर की पुष्टि नहीं हुई\)/)).toBeInTheDocument();
+    expect(within(region).getByText("बजट")).toBeInTheDocument();
+    expect(within(region).getByText("₹300 प्रतिदिन")).toBeInTheDocument();
+    expect(within(region).getByText(/^उम्र 25–55, सभी लिंग, /)).toBeInTheDocument();
+    expect(within(region).getByText("Solar account, Page Solaride Energy (INR)")).toBeInTheDocument();
+    expect(within(region).getByRole("link", { name: "WhatsApp सेटिंग खोलें" })).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "फिर से जाँचें" })).toBeInTheDocument();
+    expect(within(region).queryByText(/Ages |Open WhatsApp settings|Location includes residents/)).toBeNull();
+  });
+
+  it("keeps the English unverified step the same as Setup's", () => {
+    expect(en.campaigns.review.facts.whatsappUnverifiedStep).toBe(WHATSAPP_UNVERIFIED_STEP);
   });
 });
 
