@@ -6,7 +6,7 @@
 .skip { position: absolute; top: -100px; z-index: 20; padding: 12px; background: white; }
 .skip:focus { top: 8px; }
 .header { max-width: 1440px; margin: auto; height: 80px; padding: 0 48px; display: flex; align-items: center; justify-content: space-between; }
-.logo { display: inline-flex; align-items: center; gap: 10px; font-size: var(--t-lg); font-weight: 600; }
+.logo { display: inline-flex; align-items: center; min-height: 44px; gap: 10px; font-size: var(--t-lg); font-weight: 600; }
 .header nav { display: flex; align-items: center; gap: 32px; }
 .exampleLink { font-size: var(--t-sm); }
 .signIn, .primary, .heroSecondary, .textLink { display: inline-flex; align-items: center; justify-content: center; gap: 12px; font-weight: 600; }
@@ -63,7 +63,8 @@
 .pricing li strong { color: var(--ink); }
 .faq details p { margin-top: 5px; font-size: var(--t-sm); line-height: 1.7; color: var(--subtle); }
 .footer { border-top: 1px solid var(--line); padding: 28px 48px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; font-size: var(--t-xs); color: var(--subtle); }
-.footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
+.footer nav { display: flex; flex-wrap: wrap; gap: 0 20px; }
+.footer a { display: inline-flex; align-items: center; min-height: 44px; }
 @media (max-width: 1000px) {
   .hero::after { background: linear-gradient(90deg, #f6f7f4 0%, rgba(246, 247, 244, .98) 60%, rgba(246, 247, 244, .9) 72%, rgba(246, 247, 244, 0) 94%); }
   .safety, .faq { gap: 32px; }
