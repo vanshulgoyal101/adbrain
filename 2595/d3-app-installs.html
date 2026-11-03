@@ -180,7 +180,7 @@
           <div><dt data-t="app"></dt><dd>Cedar Ridge Booking</dd><dd class="sub" data-t="appSub"></dd></div>
           <div><dt data-t="storeLink"></dt><dd class="url"><span class="host">play.google.com</span><span class="path">/store/apps/details?id=in.cedarridge.book</span></dd><dd class="sub" data-t="buttonInstall"></dd></div>
           <div><dt data-t="whoSees"></dt><dd data-t="whoSeesVal"></dd></div>
-          <div class="ann"><span class="pin">7</span><dt data-t="counting"></dt><dd data-t="countingVal"></dd><dd class="sub" data-t="countingSub"></dd></div>
+          <div class="ann"><span class="pin">7</span><dt data-t="attribution"></dt><dd data-t="attributionVal"></dd><dd class="sub" data-t="countingLine"></dd><dd class="sub" data-t="countingSub"></dd></div>
           <div><dt data-t="dates"></dt><dd data-t="datesVal"></dd></div>
           <div><dt data-t="budget"></dt><dd data-t="budgetVal"></dd></div>
         </dl>
@@ -197,8 +197,7 @@
       <div><h2 data-t="reviewBlocked"></h2><p class="muted" data-t="paused"></p></div>
       <div class="state ann"><span class="pin">8</span><b data-t="linkNotRegTitle"></b><span data-t="linkNotRegBody"></span>
         <div class="actions"><span class="btn" data-t="checkAgain"></span><a class="link" data-t="metaAppSettings"></a></div></div>
-      <div class="state ann"><span class="pin">9</span><b data-t="countingBlockTitle"></b><span data-t="countingBlockBody"></span>
-        <div class="actions"><span class="btn" data-t="checkAgain"></span><a class="link" data-t="howToCount"></a></div></div>
+      <div class="state info ann"><span class="pin">9</span><b data-t="countingLine"></b><span data-t="countingSub"></span></div>
       <div class="state info ann"><span class="pin">10</span><b data-t="changedTitle"></b><span data-t="changedBody"></span>
         <div class="actions"><span class="btn" data-t="reviewAgain"></span></div></div>
       <span class="btn primary off" aria-disabled="true" data-t="send"></span>
@@ -236,9 +235,9 @@
     <li><span class="pin">4</span><span><b>Phone type</b> is a 2-column radio group. An OS with no Brand link stays visible as <code>aria-disabled</code> with "Not in Brand". The hint says another phone type needs its own reviewed campaign. No automatic second ad set or budget.</span></li>
     <li><span class="pin">5</span><span>Show the full store link as host/path, with "Open ↗" and "Change in Brand", like website ads (#2600).</span></li>
     <li><span class="pin">6</span><span>The preview shows the actual validated button (Install now), taken from the ad, never fixed copy.</span></li>
-    <li><span class="pin">7</span><span><b>Install counting</b> shows the campaign's attribution setting when Meta returns it, otherwise "Not confirmed". Never infer SDK/MMP readiness from a listing or past installs.</span></li>
+    <li><span class="pin">7</span><span><b>Results counted within</b> shows the campaign's attribution setting as Meta returns it, never fixed copy. Directly under it: "Install counting: not confirmed". Never infer SDK/MMP readiness from a listing or past installs.</span></li>
     <li><span class="pin">8</span><span>Blocker copy for the eight <code>AppBlocker</code> values (wording in the HI/EN table): <code>unreadable</code>, <code>no_app</code> → Check again + Meta app settings; <code>no_store_link</code>, <code>unsafe_link</code> → Change in Brand; <code>app_not_available</code>, <code>ambiguous</code> → Choose app (Brand); <code>os_mismatch</code>, <code>link_not_registered</code> → Meta app settings ↗ + Check again. Send stays off.</span></li>
-    <li><span class="pin">9</span><span><b>Open question → CTO:</b> the CPO asks Review to block on "unverified install measurement", but #2828 has no signal or blocker for it. I mocked it as a blocker; it needs a readable signal (e.g. the app's install events seen by Meta) before it can be built. Otherwise it should be the "Not confirmed" line in 7, not a block.</span></li>
+    <li><span class="pin">9</span><span><b>Install counting is information, never a blocker</b> (CTO, 6604535267): nothing AdBrain can read proves the SDK/MMP is set up, so a blocker could never clear. The same grey line stays on a blocked Review. If Meta later exposes a readable install signal, it becomes a blocker then.</span></li>
     <li><span class="pin">10</span><span>A change to the app, phone type, link or budget after Review invalidates the reviewed hash. Show this as information with one "Review again" button, not as an error.</span></li>
     <li><span class="pin">11</span><span><b>Manage</b> shows installs and cost per install for the same date range, from Meta insights, with the attribution line. It never says customers or enquiries.</span></li>
     <li><span class="pin">12</span><span>Measured zero is "0" and "—". Unavailable (Meta returned no install metric) is a grey info box with no numbers. A late sync is amber, with the last sync time and Sync now. These three never share copy.</span></li>
@@ -286,24 +285,21 @@ const T = {
     app: "App", appSub: "Android · checked on this ad account at 14:05",
     storeLink: "People will go to", buttonInstall: "Button: Install now",
     whoSees: "Who sees it", whoSeesVal: "People on Android phones, 25 km around Indiranagar",
-    counting: "Install counting",
-    countingVal: "Not confirmed",
-    countingSub: "Meta counts an install only when your app reports it to Meta. AdBrain can't check your app's setup.",
+    countingLine: "Install counting: not confirmed",
+    countingSub: "Meta counts installs only if your app reports them. AdBrain can't check your app's setup.",
+    attribution: "Results counted within", attributionVal: "1 day after a click",
     dates: "Dates", datesVal: "From 4 Nov, no end date",
     budget: "Budget", budgetVal: "₹500 a day · up to ₹3,500 a week",
     expectInstalls: "AdBrain hasn't run enough app campaigns yet to quote a cost per install.",
     send: "Send to Meta (paused)",
     linkNotRegTitle: "Meta doesn't list this link for Cedar Ridge Booking",
     linkNotRegBody: "In your Meta app settings, add Android with this Google Play link, then check again.",
-    countingBlockTitle: "Install counting isn't set up for this app",
-    countingBlockBody: "Meta hasn't seen your app report any activity, so installs wouldn't be counted. Set up Meta's SDK or your measurement partner, then check again.",
-    howToCount: "How to set it up ↗",
     changedTitle: "The app link changed after Review",
     changedBody: "Review again so you approve exactly what goes to Meta.",
     reviewAgain: "Review again",
     manageRange: "Last 7 days · 28 Oct – 3 Nov",
     installs: "installs", perInstall: "per install",
-    spentLine: "₹2,310 spent · counted 7 days after a click",
+    spentLine: "₹2,310 spent · counted 1 day after a click",
     notCustomers: "Installs Meta reports for these dates. They aren't customers or enquiries.",
     unavailTitle: "Meta hasn't shared installs for this campaign.",
     unavailBody: "Spend and clicks are still shown. Installs appear here once Meta reports them.",
@@ -349,24 +345,21 @@ const T = {
     app: "ऐप", appSub: "Android · 14:05 पर इस विज्ञापन खाते पर जाँचा",
     storeLink: "लोग यहाँ जाएँगे", buttonInstall: "बटन: अभी इंस्टॉल करें",
     whoSees: "किसे दिखेगा", whoSeesVal: "इंदिरानगर के 25 किमी में Android फ़ोन वाले लोग",
-    counting: "इंस्टॉल की गिनती",
-    countingVal: "पक्का नहीं",
-    countingSub: "Meta इंस्टॉल तभी गिनता है जब आपका ऐप उसे Meta को बताता है। AdBrain आपके ऐप का सेटअप नहीं जाँच सकता।",
+    countingLine: "इंस्टॉल की गिनती: पक्का नहीं",
+    countingSub: "Meta इंस्टॉल तभी गिनता है जब आपका ऐप उन्हें Meta को बताए। AdBrain आपके ऐप का सेटअप नहीं जाँच सकता।",
+    attribution: "नतीजे गिनने की अवधि", attributionVal: "क्लिक के 1 दिन बाद तक",
     dates: "तारीख़ें", datesVal: "4 नवंबर से, कोई आख़िरी तारीख़ नहीं",
     budget: "बजट", budgetVal: "₹500 रोज़ · हफ़्ते में ₹3,500 तक",
     expectInstalls: "AdBrain ने अभी इतने ऐप कैंपेन नहीं चलाए हैं कि प्रति इंस्टॉल खर्च बता सके।",
     send: "Meta को भेजें (रुका हुआ)",
     linkNotRegTitle: "Meta में Cedar Ridge Booking के लिए यह लिंक दर्ज नहीं है",
     linkNotRegBody: "अपनी Meta ऐप सेटिंग में इस Google Play लिंक के साथ Android जोड़ें, फिर दोबारा जाँचें।",
-    countingBlockTitle: "इस ऐप के लिए इंस्टॉल की गिनती सेट नहीं है",
-    countingBlockBody: "Meta को आपके ऐप से कोई गतिविधि नहीं मिली, इसलिए इंस्टॉल गिने नहीं जाएँगे। Meta का SDK या अपना मेज़रमेंट पार्टनर सेट करें, फिर दोबारा जाँचें।",
-    howToCount: "कैसे सेट करें ↗",
     changedTitle: "रिव्यू के बाद ऐप का लिंक बदला",
     changedBody: "फिर से रिव्यू करें, ताकि Meta को वही जाए जो आपने मंज़ूर किया।",
     reviewAgain: "फिर से रिव्यू करें",
     manageRange: "पिछले 7 दिन · 28 अक्टूबर – 3 नवंबर",
     installs: "इंस्टॉल", perInstall: "प्रति इंस्टॉल",
-    spentLine: "₹2,310 खर्च · क्लिक के 7 दिन तक गिना गया",
+    spentLine: "₹2,310 खर्च · क्लिक के 1 दिन तक गिना गया",
     notCustomers: "इन तारीख़ों के लिए Meta के बताए इंस्टॉल। ये ग्राहक या पूछताछ नहीं हैं।",
     unavailTitle: "Meta ने इस कैंपेन के इंस्टॉल नहीं बताए हैं।",
     unavailBody: "खर्च और क्लिक अब भी दिख रहे हैं। Meta के बताते ही इंस्टॉल यहाँ दिखेंगे।",
