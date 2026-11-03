@@ -14,7 +14,7 @@ const codec: Codec = async (file) => {
   const [width, height] = shapes[file.name] ?? [1080, 1080];
   return { blob: new Blob([file.name], { type: "image/jpeg" }), width, height };
 };
-const photo: MediaView = { id: "m1", name: "Kitchen", tags: [], width: 1080, height: 1080, bytes: 1, fit: { level: "feed", ratio: "1:1", message: "Square: fine for Feed." }, url: "https://example.com/m1.jpg", createdAt: "2026-10-29T10:00:00Z" };
+const photo: MediaView = { id: "m1", kind: "image", durationMs: null, name: "Kitchen", tags: [], width: 1080, height: 1080, bytes: 1, fit: { level: "feed", ratio: "1:1", message: "Square: fine for Feed." }, url: "https://example.com/m1.jpg", createdAt: "2026-10-29T10:00:00Z" };
 
 afterEach(cleanup);
 
