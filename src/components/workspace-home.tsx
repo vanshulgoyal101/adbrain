@@ -61,7 +61,7 @@ export interface WorkspaceHomeProps {
 }
 
 const primaryClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover";
+  "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover";
 const linkClass = "inline-flex min-h-11 items-center font-medium text-blue-700 hover:underline";
 
 /** #847 "calm by default": three figures, one next step, campaigns and the latest ads. */
@@ -202,7 +202,7 @@ export function WorkspaceHome({
               <>
                 <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                   <div className="min-w-0">
-                    <h3 className="text-lg font-semibold text-slate-950">{next.title}</h3>
+                    <h3 className="text-balance text-lg font-semibold text-slate-950">{next.title}</h3>
                     <p className="mt-1 max-w-xl text-sm text-slate-600">{next.detail}</p>
                   </div>
                   <Link href={next.href} className={primaryClass}>
