@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { outcomeDefinition, type CampaignDestination } from "@/lib/campaign/outcomes";
+import { outcomeDefinition, WEBSITE_CONVERSIONS, type CampaignDestination, type ConversionGoal } from "@/lib/campaign/outcomes";
 
 export interface CampaignInsights {
   destination?: CampaignDestination;
@@ -19,6 +19,14 @@ export interface CampaignInsights {
   linkClicks?: number;
   cpc?: number | null;
   costPerLandingPageView?: number | null;
+  /**
+   * #2716: website leads/sales only, beside the page views. Meta-attributed pixel conversions, their value
+   * (null: Meta sent no value, not zero) and ₹ per conversion. Never enquiries.
+   */
+  conversionGoal?: ConversionGoal;
+  conversions?: number;
+  conversionValue?: number | null;
+  costPerConversion?: number | null;
   /** Meta returned no rows: nothing delivered in the requested period. */
   noDelivery?: true;
   /** #1903: the campaign's own status and budgets, read with the binding check (no extra call). */
@@ -43,6 +51,8 @@ const rowSchema = z.object({
   date_start: z.iso.date().optional(),
   date_stop: z.iso.date().optional(),
   actions: z.array(z.object({ action_type: z.string(), value: z.string() })).optional(),
+  /** #2716: requested only for a website leads/sales goal. */
+  action_values: z.array(z.object({ action_type: z.string(), value: z.string() })).optional(),
 });
 type InsightRow = z.infer<typeof rowSchema>;
 const insightsSchema = z.object({
@@ -66,6 +76,31 @@ function actionCounter(row: InsightRow | undefined) {
   };
 }
 
+/** #2716: one action's value in an insights row (`action_values`); null when Meta lists none, so absent never reads as ₹0. */
+function actionValue(row: InsightRow | undefined) {
+  return (names: readonly string[]) => {
+    for (const name of names) {
+      const matches = row?.action_values?.filter(action => action.action_type === name) ?? [];
+      if (matches.length > 1) throw new Error("Campaign insight action values are ambiguous.");
+      if (matches.length === 1) {
+        const amount = amountSchema.safeParse(matches[0].value);
+        if (!amount.success) throw new Error("Campaign insight value is invalid.");
+        return amount.data;
+      }
+    }
+    return null;
+  };
+}
+
+/** #2716: a website leads/sales goal's conversions, read from the same row as its page views. */
+function conversionFigures(row: InsightRow | undefined, goal: ConversionGoal, spend: number) {
+  const action = WEBSITE_CONVERSIONS[goal];
+  const conversions = actionCounter(row)(action.metaActions);
+  return { conversionGoal: goal, conversions, conversionValue: actionValue(row)(action.metaValueActions), costPerConversion: conversions > 0 ? spend / conversions : null };
+}
+
+const adConversions = ({ conversions, conversionValue }: ReturnType<typeof conversionFigures>) => ({ conversions, conversionValue });
+
 const LEAD_ACTIONS = outcomeDefinition("instant_form").metaActions;
 /** #371/#789: the headline WhatsApp result; Meta also reports first replies and depth, which we don't switch to silently. */
 const CONVERSATION_ACTIONS = outcomeDefinition("whatsapp").metaActions;
@@ -77,7 +112,7 @@ function resultCount(count: ReturnType<typeof actionCounter>, destination: Campa
   return count(outcomeDefinition(destination).metaActions);
 }
 
-export function decodeCampaignInsights(payload: unknown, destination: CampaignDestination, options?: { requireSpend?: boolean }): CampaignInsights {
+export function decodeCampaignInsights(payload: unknown, destination: CampaignDestination, options?: { requireSpend?: boolean; conversionGoal?: ConversionGoal | null }): CampaignInsights {
   const parsed = insightsSchema.safeParse(payload);
   if (!parsed.success || parsed.data.paging?.next) throw new Error("Campaign insights are incomplete or invalid.");
   const row = parsed.data.data[0];
@@ -96,6 +131,7 @@ export function decodeCampaignInsights(payload: unknown, destination: CampaignDe
     spend, leads, cpl: leads > 0 ? spend / leads : null,
     ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null, whatsappOpens: actionCount(LINK_CLICK_ACTIONS) } : {}),
     ...(destination === "website" ? websiteFigures(spend, resultCount(actionCount, destination), actionCount(LINK_CLICK_ACTIONS)) : {}),
+    ...(destination === "website" && options?.conversionGoal ? conversionFigures(row, options.conversionGoal, spend) : {}),
     ...(row ? {} : { noDelivery: true as const }),
   };
 }
@@ -126,6 +162,8 @@ export type AdResult = {
   results: number; costPerResult: number | null; whatsappOpens?: number;
   /** #2601: a website campaign's ad also counts its results as landing-page views, so storage knows which they are. */
   landingPageViews?: number;
+  /** #2716: a website leads/sales ad's pixel conversions and their value (null: none sent), apart from its page views. */
+  conversions?: number; conversionValue?: number | null;
   /** Archived (an audience edit rebuilt its ad set) or gone from the listing: its results count, but it can't be "Best so far". */
   replaced: boolean;
 };
@@ -144,7 +182,7 @@ const adInsightsSchema = z.object({
  * insights, which list only delivering ads, so a paused or unspent ad stays visible. Same action names as the
  * campaign total.
  */
-export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, destination: CampaignDestination): AdResult[] {
+export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, destination: CampaignDestination, conversionGoal?: ConversionGoal | null): AdResult[] {
   const ads = adListSchema.safeParse(adsPayload);
   const insights = adInsightsSchema.safeParse(insightsPayload);
   if (!ads.success || !insights.success || ads.data.paging?.next || insights.data.paging?.next) throw new Error("Ad results are incomplete or invalid.");
@@ -168,6 +206,7 @@ export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, d
       results, costPerResult: results > 0 ? spend / results : null,
       ...(destination === "whatsapp" ? { whatsappOpens: count(LINK_CLICK_ACTIONS) } : {}),
       ...(destination === "website" ? { landingPageViews: results } : {}),
+      ...(destination === "website" && conversionGoal ? adConversions(conversionFigures(row, conversionGoal, spend)) : {}),
       replaced: !known.has(ad.id) || ad.effective_status === "ARCHIVED",
     };
   });

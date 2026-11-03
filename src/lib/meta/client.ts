@@ -5,7 +5,7 @@ import { GRAPH } from "@/lib/meta/graph-version";
 import { FACEBOOK_FEED_POSITIONS, FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
 import type { CampaignDeliverySnapshot } from "./types";
-import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
+import { conversionGoalFromAdSets, destinationFromAdSets, type CampaignDestination, type ConversionGoal } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
 import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
 import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
@@ -1611,7 +1611,7 @@ export class MetaClient {
   }
 
   /** The binding check; #1903: with `withState` the same two reads also carry the campaign's status and budgets (#2290: and ad-set end times). */
-  private async readCampaignBinding(campaignId: string, withState: boolean): Promise<{ destination: CampaignDestination; state: MetaCampaignState | null }> {
+  private async readCampaignBinding(campaignId: string, withState: boolean): Promise<{ destination: CampaignDestination; conversionGoal: ConversionGoal | null; state: MetaCampaignState | null }> {
     const node = encodeURIComponent(campaignId);
     const campaign = await this.graph<{ id?: string; account_id?: string; status?: string; daily_budget?: string; lifetime_budget?: string }>(
       `${node}?fields=id,account_id${withState ? ",status,daily_budget,lifetime_budget" : ""}`,
@@ -1619,7 +1619,7 @@ export class MetaClient {
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
       throw new MetaError("Campaign does not match the connected ad account.");
     }
-    const adSets = await this.graph<{ data?: Array<{ id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; end_time?: string; destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+    const adSets = await this.graph<{ data?: Array<{ id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; end_time?: string; destination_type?: string; promoted_object?: { page_id?: string; custom_event_type?: string } }>; paging?: { next?: string } }>(
       `${node}/adsets?fields=${withState ? "id,status,daily_budget,lifetime_budget,end_time," : ""}promoted_object,destination_type&limit=100`,
     );
     if (Array.isArray(adSets.data) && !adSets.data.length && !adSets.paging?.next) {
@@ -1637,14 +1637,16 @@ export class MetaClient {
       status: campaign.status, dailyBudget: campaign.daily_budget, lifetimeBudget: campaign.lifetime_budget,
       adSets: adSets.data.map(adSet => ({ id: String(adSet.id ?? ""), status: adSet.status, dailyBudget: adSet.daily_budget, lifetimeBudget: adSet.lifetime_budget, endTime: adSet.end_time })),
     } : null;
-    return { destination: destinationFromAdSets(adSets.data), state };
+    const destination = destinationFromAdSets(adSets.data);
+    // #2716: a website leads/sales goal, from the promoted pixel event this read already returns.
+    return { destination, conversionGoal: destination === "website" ? conversionGoalFromAdSets(adSets.data) : null, state };
   }
 
   async getCampaignInsights(campaignId: string, options?: { weekly?: boolean }): Promise<CampaignInsights> {
-    const { destination, state } = await this.readCampaignBinding(campaignId, true);
+    const { destination, conversionGoal, state } = await this.readCampaignBinding(campaignId, true);
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
-    const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
-    const insights = decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,${conversionGoal ? "action_values," : ""}date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
+    const insights = decodeCampaignInsights(data, destination, { requireSpend: options?.weekly, conversionGoal });
     return state ? { ...insights, metaState: state } : insights;
   }
 
@@ -1654,15 +1656,15 @@ export class MetaClient {
    */
   async getAdResults(campaignId: string, options?: { day?: string }): Promise<AdResult[]> {
     if (options?.day !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(options.day)) throw new MetaError("Invalid results day.");
-    const destination = await this.verifyCampaignBinding(campaignId);
+    const { destination, conversionGoal } = await this.readCampaignBinding(campaignId, false);
     const node = encodeURIComponent(campaignId);
     const period = options?.day ? `time_range=${encodeURIComponent(JSON.stringify({ since: options.day, until: options.day }))}` : "date_preset=maximum";
     const [ads, insights] = await Promise.all([
       // Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and refuses DELETED (1815001).
       this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100&effective_status=${encodeURIComponent(JSON.stringify(LISTED_AD_STATUSES))}`),
-      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&${period}&limit=100`),
+      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions${conversionGoal ? ",action_values" : ""}&${period}&limit=100`),
     ]);
-    return decodeAdResults(ads, insights, destination);
+    return decodeAdResults(ads, insights, destination, conversionGoal);
   }
 
   /** Read-only lifetime spend (account currency, exact paise) for customer cost evidence (#216). */
