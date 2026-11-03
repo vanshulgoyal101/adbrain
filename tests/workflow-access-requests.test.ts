@@ -23,24 +23,26 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 type Match = { number: number; state: "OPEN" | "CLOSED"; closedAt: string | null };
 
-function runStep(response: unknown, existing: Record<string, Match[]> = {}) {
+function runStep(response: unknown, existing: Record<string, Match[]> = {}, failOn = "") {
   dir = mkdtempSync(join(tmpdir(), "access-step-"));
   writeFileSync(join(dir, "response.json"), JSON.stringify(response));
   writeFileSync(join(dir, "curl"), `#!/bin/bash\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && cp "${dir}/response.json" "$2"; shift; done\nprintf 200\n`);
   writeFileSync(join(dir, "gh"), `#!/bin/bash
 echo "$*" >> "${dir}/gh.log"
+[ "$1 $2" = "issue ${failOn}" ] && exit 1
 if [ "$1 $2" = "issue list" ]; then for k in ${Object.keys(existing).join(" ")}; do [[ "$*" == *"$k"* ]] && { cat "${dir}/$k.json"; exit 0; }; done; echo '[]'; exit 0; fi
 if [ "$1 $2" = "issue create" ]; then while [ $# -gt 0 ]; do [ "$1" = -b ] && printf '%s\0' "$2" >> "${dir}/bodies"; shift; done; echo "https://github.com/o/r/issues/$RANDOM"; fi
 `);
   for (const [k, matches] of Object.entries(existing)) writeFileSync(join(dir, `${k}.json`), JSON.stringify(matches));
   chmodSync(join(dir, "curl"), 0o755);
   chmodSync(join(dir, "gh"), 0o755);
-  execFileSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", stepScript()], {
+  const run = () => execFileSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", stepScript()], {
     cwd: dir,
     env: { SCRIPTS: join(process.cwd(), "scripts"), NODE_ENV: "test", PATH: `${dir}:${process.env.PATH}`, CRON_SECRET: "s", BASE: "https://example.test", GITHUB_REPOSITORY: "o/r",
       GITHUB_SERVER_URL: "https://github.com", GITHUB_RUN_ID: "1" },
     stdio: "pipe",
   });
+  if (failOn) expect(run).toThrow(); else run();
   let log = "";
   try { log = readFileSync(join(dir, "gh.log"), "utf8"); } catch { /* no gh calls */ }
   return log.trim().split("\n").filter(Boolean);
@@ -81,6 +83,14 @@ describe("scheduled job: Facebook access requests (#692, #725)", () => {
     const comments = calls.filter((call) => call.startsWith("issue comment"));
     expect(comments).toHaveLength(1);
     expect(comments[0]).toContain("Asked again 5 h ago → CEO");
+  });
+
+  it.each(["edit", "comment", "reopen"])("fails the step and keeps the handoff retryable when `gh issue %s` fails (#2806)", (failing) => {
+    const calls = runStep(at("2026-11-02T18:22:00.000Z"), { [key(4)]: [closed] }, failing);
+    // The issue only reopens after the label and comment landed; until then it stays closed, so the next run tries again.
+    if (failing !== "reopen") expect(calls.some((call) => call.startsWith("issue reopen"))).toBe(false);
+    const retry = runStep(at("2026-11-02T18:22:00.000Z"), { [key(4)]: [closed] });
+    expect(retry).toContain("issue reopen 9 -R o/r");
   });
 
   it("does nothing for a closed issue when the request is older than its close, or an issue is open", () => {

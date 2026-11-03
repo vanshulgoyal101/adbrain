@@ -177,7 +177,7 @@ jobs:
           # Public repo: an opaque key and hours only; the owner's name and number stay in the database.
           echo "HTTP $code $(jq -c '{ok, requests: (.requests // [] | length), more, error}' access.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
           # #725: at most 5 public issues a run; the rest wait for the next run, noted on the newest issue.
-          opened=0; waiting=$(jq -r '.more // 0' access.json 2>/dev/null); [[ "$waiting" =~ ^[0-9]+$ ]] || waiting=0; last=""
+          opened=0; waiting=$(jq -r '.more // 0' access.json 2>/dev/null); [[ "$waiting" =~ ^[0-9]+$ ]] || waiting=0; last=""; failed=0
           for row in $(jq -r '.requests[]? | "\(.key):\(.hours):\(.at // "")"' access.json 2>/dev/null); do
             IFS=: read -r key hours at <<<"$row"
             [[ "$key" =~ ^[a-f0-9]{12}$ && "$hours" =~ ^[0-9]+$ ]] || continue
@@ -188,10 +188,11 @@ jobs:
             if [ "$opened" -ge 5 ]; then waiting=$((waiting + 1)); continue; fi
             opened=$((opened + 1))
             if [ "${action%%:*}" = reopen ]; then
-              last="${action#reopen:}"
-              gh issue reopen "$last" -R "$GITHUB_REPOSITORY"
-              gh issue edit "$last" -R "$GITHUB_REPOSITORY" --add-label waiting-owner
-              gh issue comment "$last" -R "$GITHUB_REPOSITORY" --body "$(printf 'Asked again %s h ago → CEO\nRun: %s/%s/actions/runs/%s\n' "$hours" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+              # Reopen last: while the issue stays closed a failed label or comment is retried next run; a failure fails the step.
+              n="${action#reopen:}"
+              if gh issue edit "$n" -R "$GITHUB_REPOSITORY" --add-label waiting-owner \
+                && gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "$(printf 'Asked again %s h ago → CEO\nRun: %s/%s/actions/runs/%s\n' "$hours" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")" \
+                && gh issue reopen "$n" -R "$GITHUB_REPOSITORY"; then last="$n"; else failed=1; fi
               continue
             fi
             last=$(gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Facebook access request ($key)" \
@@ -200,7 +201,7 @@ jobs:
           if [ -n "$last" ] && [ "$waiting" -gt 0 ]; then
             gh issue comment "$last" -R "$GITHUB_REPOSITORY" --body "$waiting more access requests are waiting; the next runs open them."
           fi
-          [ "$code" = 200 ]
+          [ "$code" = 200 ] && [ "$failed" = 0 ]
       - name: Launch reconciliation (#734)
         if: always()
         env:
