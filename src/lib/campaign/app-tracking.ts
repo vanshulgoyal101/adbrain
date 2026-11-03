@@ -21,11 +21,11 @@ export type AppChoice = { appId: string; os: AppOs; storeUrl: string | null | un
 
 const STORE_HOSTS: Record<AppOs, string> = { android: "play.google.com", ios: "apps.apple.com" };
 
-/** The comparable form of an official store link, or null when it isn't one (https only, exact store host, no credentials). */
+/** The comparable form of an official store link, or null when it isn't one (https only, exact store host, no credentials or port). */
 export function normalizeStoreUrl(raw: string, os?: AppOs): string | null {
   try {
     const url = new URL(raw.trim());
-    if (url.protocol !== "https:" || url.username || url.password) return null;
+    if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
     const host = url.hostname.toLowerCase();
     if (os ? host !== STORE_HOSTS[os] : !Object.values(STORE_HOSTS).includes(host)) return null;
     return `${host}${url.pathname.replace(/\/+$/, "")}${url.search}`;

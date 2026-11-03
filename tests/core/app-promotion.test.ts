@@ -42,6 +42,12 @@ describe("readRegisteredApps", () => {
     ]);
   });
 
+  it("is null (unreadable) when any row is malformed, so a bad row can't hide a second owner of the link", async () => {
+    const good = { id: "1", name: "A", object_store_urls: { itunes: "https://apps.apple.com/app/id1" } };
+    expect(await readRegisteredApps(graphReturning({ data: [good, { name: "B", object_store_urls: good.object_store_urls }] }), account)).toBeNull();
+    expect(await readRegisteredApps(graphReturning({ data: [good, null] }), account)).toBeNull();
+  });
+
   it("is null (unreadable), never an empty list, when Graph fails, answers oddly or has more pages", async () => {
     expect(await readRegisteredApps(graphReturning(null, true), account)).toBeNull();
     expect(await readRegisteredApps(graphReturning({}), account)).toBeNull();
@@ -84,6 +90,7 @@ describe("appBlocker", () => {
   it.each([
     "http://apps.apple.com/app/id1",
     "https://user:pw@apps.apple.com/app/id1",
+    "https://apps.apple.com:8443/app/id1",
     "https://apps.apple.com.evil.test/app/id1",
     "https://evil.test/apps.apple.com/app/id1",
     "javascript:alert(1)",
@@ -106,7 +113,7 @@ describe("recorded validate_only answers", () => {
     expect(campaign.body).toEqual({ success: true });
   });
 
-  it("refuses ad sets for a store link the app doesn't own (2490408) and for the canvas link (1885185)", () => {
+  it("refuses ad sets: 2490408 (goal conflicts with the parent campaign's objective; the parent was an engagement campaign, so this does not show a foreign-store rejection) and 1885185 (canvas link isn't a mobile app)", () => {
     expect(byName("adset-foreign-store").status).toBe(400);
     expect((byName("adset-foreign-store").body as Refusal).error.error_subcode).toBe(2490408);
     expect(byName("adset-own-store").status).toBe(400);

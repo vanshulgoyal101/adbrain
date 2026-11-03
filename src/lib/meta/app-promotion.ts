@@ -19,14 +19,17 @@ export async function readRegisteredApps(graph: MetaGraph, adAccountId: string):
       `${adAccountId}/advertisable_applications?fields=id,name,object_store_urls&limit=25`);
     // More than one page of apps means a partial list could miss the right one, so it can't be trusted.
     if (!Array.isArray(page.data) || page.paging?.next) return null;
-    return page.data.flatMap((raw) => {
-      if (typeof raw.id !== "string" || !/^\d+$/.test(raw.id)) return [];
+    const apps: RegisteredApp[] = [];
+    for (const raw of page.data) {
+      // A row we can't read could be the app that owns the link, so the whole list is untrustworthy.
+      if (!raw || typeof raw.id !== "string" || !/^\d+$/.test(raw.id)) return null;
       const storeUrls: StoreLink[] = Object.entries(STORE_PLATFORMS).flatMap(([key, os]) => {
         const url = raw.object_store_urls?.[key];
         return typeof url === "string" ? [{ os, url }] : [];
       });
-      return [{ id: raw.id, name: raw.name ?? "", storeUrls }];
-    });
+      apps.push({ id: raw.id, name: raw.name ?? "", storeUrls });
+    }
+    return apps;
   } catch {
     return null;
   }
