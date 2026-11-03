@@ -2,7 +2,6 @@ import "server-only";
 
 import { createHmac } from "node:crypto";
 import { GRAPH } from "@/lib/meta/graph-version";
-import { z } from "zod";
 import { FACEBOOK_FEED_POSITIONS, FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
 import type { CampaignDeliverySnapshot } from "./types";
@@ -21,6 +20,8 @@ import {
   fetchAdImage, findAdVideoByName, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoLookup, type AdVideoState,
 } from "./media";
 import { readTrackingStatus, type TrackingEvent, type TrackingStatus } from "./pixels";
+import { collectLeadPages, formPageSchema, leadPageSchema, parseLeadPage, type MetaLeadPage } from "./lead-pages";
+export type { MetaLeadPage } from "./lead-pages";
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
 import { destinationCTA, destinationPlan, hasPlacementCreative, isWebsiteLink, leavesAudienceNetworkOut, websiteUrlTags, type AdDestination } from "./destinations";
 export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, type DestinationPlan } from "./destinations";
@@ -49,47 +50,6 @@ export interface MetaLead {
   field_data: { name: string; values: string[] }[];
   /** The ad's campaign; absent for leads Meta didn't get from an ad (e.g. organic or test leads). */
   campaign_id?: string;
-}
-
-export interface MetaLeadPage<T> {
-  data: T[];
-  after: string | null;
-}
-
-const formPageSchema = z.object({ id: z.string().min(1).max(200), name: z.string().max(1000), status: z.string() });
-const leadPageSchema = z.object({
-  id: z.string().min(1).max(200),
-  created_time: z.string().refine(value => !value || Number.isFinite(Date.parse(value))).optional().default(""),
-  field_data: z.array(z.object({ name: z.string(), values: z.array(z.string()) })).default([]),
-  campaign_id: z.string().regex(/^\d{1,64}$/).optional().catch(undefined),
-});
-
-function parseLeadPage<T>(value: unknown, schema: z.ZodType<T>, previous?: string | null): MetaLeadPage<T> {
-  const page = z.object({
-    data: z.array(schema).max(200),
-    paging: z.object({ next: z.string().optional(), cursors: z.object({ after: z.string().min(1).max(4096) }).partial().optional() }).optional(),
-  }).safeParse(value);
-  if (!page.success) throw new MetaError("Malformed Meta lead page.");
-  const after = page.data.paging?.next ? page.data.paging.cursors?.after : null;
-  if (after === undefined || (after !== null && (after === previous || !/^[A-Za-z0-9_+/=-]+$/.test(after)))) {
-    throw new MetaError("Invalid Meta lead page cursor.");
-  }
-  return { data: page.data.data, after };
-}
-
-async function collectLeadPages<T>(read: (after: string | null) => Promise<MetaLeadPage<T>>): Promise<T[]> {
-  const values: T[] = [];
-  const seen = new Set<string>();
-  let after: string | null = null;
-  for (let count = 0; count < 100; count++) {
-    const page = await read(after);
-    values.push(...page.data);
-    if (!page.after) return values;
-    if (seen.has(page.after)) throw new MetaError("Repeated Meta lead page cursor.");
-    seen.add(page.after);
-    after = page.after;
-  }
-  throw new MetaError("Meta lead page limit exceeded; use resumable sync.");
 }
 
 export interface CreativeInput {
