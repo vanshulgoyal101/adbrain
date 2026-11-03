@@ -49,7 +49,7 @@ export function trackingBlockerWords(problem: TrackingBlocker, goal: ConversionG
 }
 
 /** #681: which chosen ad is wrong and what to do about it, not one sentence for every fault. */
-export function creativesBlockerMessage(draft: Pick<DraftInput, "businessId" | "creativeIds">, creatives: BlockedCreative[], say: ReviewSay): string | null {
+export function creativesBlockerMessage(draft: Pick<DraftInput, "businessId" | "creativeIds" | "destination">, creatives: BlockedCreative[], say: ReviewSay): string | null {
   if (draft.creativeIds.length === 0) return say("noAds");
   const unique = new Set(draft.creativeIds).size === draft.creativeIds.length;
   const found = creatives.filter((creative) => creative.businessId === draft.businessId && draft.creativeIds.includes(creative.id));
@@ -62,6 +62,7 @@ export function creativesBlockerMessage(draft: Pick<DraftInput, "businessId" | "
     const ad = { named: name ? "yes" : "no", name: name ?? "" };
     if (!creative.approved) return [say("adNotApproved", ad)];
     if (!creative.imageUrl) return [say("adNoPicture", ad)];
+    if (creative.video && draft.destination === "website") return [say("adVideoWebsite", ad)];
     if (creative.video?.state === "processing") return [say("adVideoProcessing", ad)];
     if (creative.video?.state === "error") return [say("adVideoError", { ...ad, reason: creative.video.reason ?? "" })];
     return [];

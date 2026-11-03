@@ -1462,6 +1462,7 @@
     "adNoPicture": "The ad {named, select, yes {{name}} other {you chose}} has no picture yet. Take it out of this campaign and choose another ad.",
     "adVideoProcessing": "Your video is still being prepared by Facebook. Try again in a few minutes.",
     "adVideoError": "The video {named, select, yes {in the ad {name}} other {you chose}} can't be used: {reason} Take it out of this campaign, or replace it.",
+    "adVideoWebsite": "Videos can't go to a website yet{named, select, yes { (ad {name})} other {}}. Take the video out of this campaign, or choose WhatsApp or an instant form.",
     "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
     "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
     "whatsappMessage": "Your WhatsApp message: {problem}",
