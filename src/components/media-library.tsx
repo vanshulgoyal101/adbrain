@@ -1,35 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, ImagePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Status } from "@/components/ui/status";
 import { AssetTile, downloadImage, slugify } from "@/components/assets-library";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MediaUploadSheet, useMediaUploads } from "@/components/media-upload";
+import { fitText, MediaUploadSheet, useMediaUploads, type MediaT } from "@/components/media-upload";
+import { mediaTranslator, type Words } from "@/i18n/words";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { UPLOAD_WORDS, type Codec, type UploadDeps } from "@/lib/media/client-upload";
+import type { Codec, UploadDeps } from "@/lib/media/client-upload";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 
-const TABS = [
-  { id: "all", label: "All" },
-  { id: "photos", label: "Photos" },
-  // CPO #1868 lists Videos too; it appears when video uploads ship (#744 phase 2).
-  { id: "made", label: "Made by AdBrain" },
-] as const;
-type Tab = (typeof TABS)[number]["id"];
+// CPO #1868 lists Videos too; it appears when video uploads ship (#744 phase 2).
+const TABS = ["all", "photos", "made"] as const;
+type Tab = (typeof TABS)[number];
 
 const UNDO_MS = 6_000;
 
 /** #778 slice 3c: one ⋯ menu (Rename · Download · Delete) on the owner's own photo (Designer, #1973 review 4). */
-function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
+function OwnPhotoControls({ t, asset, request, onRenamed, onDelete }: {
+  t: MediaT;
   asset: MediaView;
   request: typeof fetch;
   onRenamed: (asset: MediaView) => void;
   onDelete: (asset: MediaView) => void;
 }) {
-  const label = asset.name || "Photo";
+  const label = asset.name || t("library.photo");
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(asset.name ?? "");
   const [saving, setSaving] = useState(false);
@@ -48,7 +46,7 @@ function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
       onRenamed(body.asset);
       setEditing(false);
     } catch (caught) {
-      setError(caught instanceof Error && caught.message ? caught.message : "Couldn't save the change. Try again.");
+      setError(caught instanceof Error && caught.message ? caught.message : t("tile.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -57,11 +55,11 @@ function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
   if (editing) {
     return (
       <form className="flex flex-col gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <input aria-label="Name" value={name} maxLength={120} onChange={(event) => setName(event.target.value)} autoFocus
+        <input aria-label={t("tile.name")} value={name} maxLength={120} onChange={(event) => setName(event.target.value)} autoFocus
           className="min-h-11 rounded-md border border-slate-300 px-3 text-sm" />
         <div className="flex gap-2">
-          <button type="submit" disabled={saving} className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">Save</button>
-          <button type="button" onClick={() => { setEditing(false); setName(asset.name ?? ""); setError(null); }} className="inline-flex min-h-11 items-center rounded-md px-3 text-sm text-slate-700 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving} className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">{t("tile.save")}</button>
+          <button type="button" onClick={() => { setEditing(false); setName(asset.name ?? ""); setError(null); }} className="inline-flex min-h-11 items-center rounded-md px-3 text-sm text-slate-700 hover:bg-slate-100">{t("tile.cancel")}</button>
         </div>
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       </form>
@@ -71,22 +69,22 @@ function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
   return (
     <div className="-mx-2 flex items-center">
       <DropdownMenu>
-        <DropdownMenuTrigger aria-label={`More for ${label}`} disabled={downloading}
+        <DropdownMenuTrigger aria-label={t("tile.more", { name: label })} disabled={downloading}
           className="inline-flex size-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
           <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          <DropdownMenuItem onSelect={() => setEditing(true)}><Pencil className="h-4 w-4" aria-hidden="true" /> Rename</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setEditing(true)}><Pencil className="h-4 w-4" aria-hidden="true" /> {t("tile.rename")}</DropdownMenuItem>
           {url && (
             <DropdownMenuItem onSelect={async () => {
               setError(null);
               setDownloading(true);
               try { await downloadImage(url, `adbrain-${slugify(asset.name ?? "photo", asset.id.slice(0, 6))}.jpg`); }
-              catch { setError("Download failed. Try again."); }
+              catch { setError(t("tile.downloadFailed")); }
               finally { setDownloading(false); }
-            }}><Download className="h-4 w-4" aria-hidden="true" /> Download</DropdownMenuItem>
+            }}><Download className="h-4 w-4" aria-hidden="true" /> {t("tile.download")}</DropdownMenuItem>
           )}
-          <DropdownMenuItem variant="danger" onSelect={() => onDelete(asset)}><Trash2 className="h-4 w-4" aria-hidden="true" /> Delete</DropdownMenuItem>
+          <DropdownMenuItem variant="danger" onSelect={() => onDelete(asset)}><Trash2 className="h-4 w-4" aria-hidden="true" /> {t("tile.delete")}</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
@@ -94,7 +92,8 @@ function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
   );
 }
 
-const ASSET_TYPE_LABEL: Record<string, string> = { logo: "Logo", product_photo: "Product photo", past_ad: "Past ad" };
+const ASSET_TYPES = ["logo", "product_photo", "past_ad"] as const;
+const assetType = (t: MediaT, type: string) => (ASSET_TYPES as readonly string[]).includes(type) ? t(`library.assetType.${type as (typeof ASSET_TYPES)[number]}`) : null;
 const PAGE = 24;
 
 function Grid({ children }: { children: React.ReactNode }) {
@@ -105,7 +104,9 @@ function Grid({ children }: { children: React.ReactNode }) {
  * #778 slice 3a (#744 phase 1): "Photos & videos", the owner's own uploads beside the ads AdBrain made. Shown when
  * MEDIA_UPLOADS_ENABLED is on; the older Assets page stays otherwise. Words are the CPO's (#1868 on #744).
  */
-export function MediaLibrary({ business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, deps, codec }: {
+export function MediaLibrary({ words, business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, deps, codec }: {
+  /** The owner's language (`media`, #778 walk 1); English when none are passed. */
+  words?: Words<"media">;
   business: { id: string; vertical: string | null };
   media: MediaView[];
   creatives: CreativePreview[];
@@ -119,12 +120,13 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   deps?: UploadDeps;
   codec?: Codec;
 }) {
+  const t = useMemo(() => mediaTranslator(words), [words]);
   const [tab, setTab] = useState<Tab>("all");
   const [media, setMedia] = useState(initialMedia);
   const [sheetOpen, setSheetOpen] = useState(startOpen);
   const [rightsDone, setRightsDone] = useState(consented);
   const onAdded = useCallback((asset: MediaView) => setMedia((current) => [asset, ...current.filter((item) => item.id !== asset.id)]), []);
-  const uploads = useMediaUploads({ businessId: business.id, onAdded, deps, codec });
+  const uploads = useMediaUploads({ t, businessId: business.id, onAdded, deps, codec });
   const { request } = uploads;
   const onRenamed = useCallback((asset: MediaView) => setMedia((current) => current.map((item) => item.id === asset.id ? asset : item)), []);
 
@@ -146,12 +148,12 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
       const response = await request(`/api/media/${asset.id}`, { method: "DELETE", signal: AbortSignal.timeout(30_000) });
       if (response.ok) return;
       const body = await response.json().catch(() => ({})) as { error?: string };
-      setDeleteError(response.status < 500 && body.error ? body.error : "Couldn't delete the photo. Try again.");
+      setDeleteError(response.status < 500 && body.error ? body.error : t("tile.deleteFailed"));
     } catch {
-      setDeleteError("Couldn't delete the photo. Try again.");
+      setDeleteError(t("tile.deleteFailed"));
     }
     restore(asset, index);
-  }, [request, restore]);
+  }, [request, restore, t]);
   const onDelete = useCallback((asset: MediaView) => {
     // A second delete sends the first one now.
     if (timer.current) clearTimeout(timer.current);
@@ -188,7 +190,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   const addButton = (
     <button type="button" onClick={() => setSheetOpen(true)}
       className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
-      <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add photos
+      <ImagePlus className="h-4 w-4" aria-hidden="true" /> {t("library.add")}
     </button>
   );
   const [shown, setShown] = useState(PAGE);
@@ -198,43 +200,43 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   const own = ownCount === 0 ? (
     <Card>
       <CardContent className="flex flex-col items-start gap-4 p-6 text-sm text-slate-600">
-        <p>No photos yet. Add your own work: finished jobs, your shop, your team.</p>
+        <p>{t("library.empty")}</p>
         {addButton}
       </CardContent>
     </Card>
   ) : (
     <Grid>
       {media.map((m) => (
-        <AssetTile key={m.id} url={m.url} title={m.name || "Photo"} meta={m.fit?.message} actions={false}
+        <AssetTile key={m.id} url={m.url} title={m.name || t("library.photo")} meta={m.width && m.height ? fitText(t, m.width, m.height, m.kind) : undefined} actions={false}
           filename={`adbrain-${slugify(m.name ?? "photo", m.id.slice(0, 6))}.jpg`}>
-          <OwnPhotoControls key={m.name ?? ""} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} />
+          <OwnPhotoControls key={m.name ?? ""} t={t} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} />
         </AssetTile>
       ))}
       {brandAssets.map((a) => (
-        <AssetTile key={a.id} url={a.url} title={a.notes || ASSET_TYPE_LABEL[a.type] || "Asset"}
-          meta={a.notes ? ASSET_TYPE_LABEL[a.type] ?? a.type : undefined}
+        <AssetTile key={a.id} url={a.url} title={a.notes || assetType(t, a.type) || t("library.assetType.other")}
+          meta={a.notes ? assetType(t, a.type) ?? a.type : undefined}
           filename={`adbrain-${slugify(a.type, a.id.slice(0, 6))}.png`} />
       ))}
     </Grid>
   );
 
   const ads = made.length === 0 ? (
-    <Card><CardContent className="py-10 text-center text-sm text-slate-500">No ads yet. Every ad you create is saved here.</CardContent></Card>
+    <Card><CardContent className="py-10 text-center text-sm text-slate-500">{t("library.noAds")}</CardContent></Card>
   ) : (
     <>
       <Grid>
         {made.slice(0, shown).map((c) => (
           <AssetTile key={`${c.id}:${c.image_url}`} url={c.image_url as string} thumbnailUrl={creativeThumbnailUrl(c.image_url as string)}
-            title={c.headline ?? "Ad creative"}
+            title={c.headline ?? t("library.adFallback")}
             filename={`adbrain-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
-            meta={c.status === "approved" ? <Status tone="live">Approved</Status> : undefined}
+            meta={c.status === "approved" ? <Status tone="live">{t("library.approved")}</Status> : undefined}
             actions={!sample} />
         ))}
       </Grid>
       {made.length > shown && (
         <button type="button" onClick={() => setShown((count) => count + PAGE)}
           className="mt-4 inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50">
-          Show more ({made.length - shown} left)
+          {t("library.showMore", { n: made.length - shown })}
         </button>
       )}
     </>
@@ -249,41 +251,41 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
           {deleteError && (
             <p role="alert" className="flex items-center justify-between gap-2 rounded-lg bg-red-700 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
               <span className="min-w-0">{deleteError}</span>
-              <button type="button" onClick={() => setDeleteError(null)} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium hover:bg-white/10">OK</button>
+              <button type="button" onClick={() => setDeleteError(null)} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium hover:bg-white/10">{t("tile.ok")}</button>
             </p>
           )}
           {deleted && (
             <p role="status" className="flex items-center justify-between gap-2 rounded-lg bg-slate-900 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
-              <span className="min-w-0 truncate">Deleted ‘{deleted.asset.name || "Photo"}’</span>
-              <button type="button" onClick={undo} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium text-blue-200 hover:bg-white/10">Undo</button>
+              <span className="min-w-0 truncate">{t("tile.deleted", { name: deleted.asset.name || t("library.photo") })}</span>
+              <button type="button" onClick={undo} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium text-blue-200 hover:bg-white/10">{t("tile.undo")}</button>
             </p>
           )}
         </div>
       )}
       {uploads.progress && !sheetOpen && (
-        <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">{UPLOAD_WORDS.keepOpen}</span></p>
+        <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">{t("upload.keepOpen")}</span></p>
       )}
-      <MediaUploadSheet open={sheetOpen} onOpenChange={setSheetOpen} uploads={uploads} businessId={business.id} vertical={business.vertical}
+      <MediaUploadSheet t={t} open={sheetOpen} onOpenChange={setSheetOpen} uploads={uploads} businessId={business.id} vertical={business.vertical}
         consented={rightsDone} onConsented={() => setRightsDone(true)} />
-      <div role="tablist" aria-label="Show" className="flex gap-1 overflow-x-auto border-b border-slate-200">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" id={`media-tab-${t.id}`} aria-selected={tab === t.id} aria-controls="media-panel"
-            onClick={() => setTab(t.id)}
-            className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium ${tab === t.id ? "border-primary text-primary" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
-            {t.label}
+      <div role="tablist" aria-label={t("library.tabs.label")} className="flex gap-1 overflow-x-auto border-b border-slate-200">
+        {TABS.map((id) => (
+          <button key={id} type="button" role="tab" id={`media-tab-${id}`} aria-selected={tab === id} aria-controls="media-panel"
+            onClick={() => setTab(id)}
+            className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium ${tab === id ? "border-primary text-primary" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
+            {t(`library.tabs.${id}`)}
           </button>
         ))}
       </div>
       <div role="tabpanel" id="media-panel" aria-labelledby={`media-tab-${tab}`} className="flex flex-col gap-8">
         {tab !== "made" && (
           <section>
-            {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">Your photos <span className="text-sm font-normal text-slate-400">({ownCount})</span></h2>}
+            {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">{t("library.yours")} <span className="text-sm font-normal text-slate-400">({ownCount})</span></h2>}
             {own}
           </section>
         )}
         {tab !== "photos" && (
           <section>
-            {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">Made by AdBrain <span className="text-sm font-normal text-slate-400">({made.length})</span></h2>}
+            {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">{t("library.made")} <span className="text-sm font-normal text-slate-400">({made.length})</span></h2>}
             {ads}
           </section>
         )}
