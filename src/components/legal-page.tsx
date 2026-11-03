@@ -16,13 +16,13 @@ export function LegalPage({
   return (
     <div className="flex flex-1 flex-col">
       <header className="mx-auto flex w-full max-w-3xl items-center justify-between p-6">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex min-h-11 items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
             <Brain className="h-5 w-5" />
           </span>
           <span className="text-lg font-bold tracking-tight">AdBrain</span>
         </Link>
-        <Link href={SIGN_IN_HREF} className="text-sm font-medium text-blue-700 hover:underline">
+        <Link href={SIGN_IN_HREF} className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 hover:underline">
           Sign in
         </Link>
       </header>
@@ -40,10 +40,10 @@ export function LegalPage({
       <footer className="border-t border-slate-200 py-8">
         <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-between gap-3 px-6 text-sm text-slate-500 sm:flex-row">
           <span>© {new Date().getFullYear()} AdBrain. All rights reserved.</span>
-          <nav aria-label="Resources and legal" className="flex flex-wrap justify-center gap-4">
-            <Link href="/guides" className="hover:underline">Guides</Link>
+          <nav aria-label="Resources and legal" className="flex flex-wrap justify-center gap-x-5">
+            <Link href="/guides" className="inline-flex min-h-11 items-center hover:underline">Guides</Link>
             {LEGAL_LINKS.map((l) => (
-              <Link key={l.href} href={l.href} className="hover:underline">
+              <Link key={l.href} href={l.href} className="inline-flex min-h-11 items-center hover:underline">
                 {l.label}
               </Link>
             ))}

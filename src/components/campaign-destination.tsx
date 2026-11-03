@@ -3,6 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { campaignsTranslator, type Words } from "@/i18n/words";
 import type { LeadDestination } from "@/lib/types/campaign";
+import { websiteButton, type WebsiteButton } from "@/lib/campaign/website-button";
 
 /** #2595: the destinations the composer can choose (Call stays planner-only). */
 export type ComposerDestination = Exclude<LeadDestination, "call">;
@@ -106,24 +107,48 @@ export function WebsiteGoal({ words }: { words?: Words<"campaigns"> }) {
   return <>{t("destination.goalWebsite")}<span className="block text-xs text-slate-500">{t("destination.goalWebsiteHint")}</span></>;
 }
 
-/** Review's destination for a website ad: the link launch sends and an Open tap. */
-export function WebsiteReviewFact({ url, words }: { url?: string | null; words?: Words<"campaigns"> }) {
+/** A selected ad as Review names it: its headline and its own button words. */
+export type ReviewAd = { headline?: string | null; cta?: string | null };
+
+const BUTTON_KEYS = { shop_now: "destination.buttonShopNow", sign_up: "destination.buttonSignUp", learn_more: "destination.buttonLearnMore" } as const satisfies Record<WebsiteButton, string>;
+
+/** #2703: the button each website ad gets on Facebook (the rule launch sends), said once when every ad's matches. */
+function WebsiteButtons({ ads, words }: { ads: readonly ReviewAd[]; words?: Words<"campaigns"> }) {
+  const t = campaignsTranslator(words);
+  const buttons = ads.map((ad) => websiteButton(ad.cta));
+  if (!buttons.length) return null;
+  if (buttons.every((button) => button === buttons[0])) {
+    return <span className="block text-slate-600">{t("destination.button")}: <span className="font-medium text-slate-900">{t(BUTTON_KEYS[buttons[0]])}</span></span>;
+  }
+  return <span className="block text-slate-600">{t("destination.button")}:{ads.map((ad, index) => (
+    <span key={index} className="flex min-w-0 gap-1.5">
+      <span className="min-w-0 truncate">{ad.headline?.trim() || t("destination.adNumber", { n: index + 1 })}</span>
+      <span className="flex-none font-medium text-slate-900">{t(BUTTON_KEYS[buttons[index]])}</span>
+    </span>
+  ))}</span>;
+}
+
+/** Review's destination for a website ad: the link launch sends, an Open tap and each ad's button. */
+export function WebsiteReviewFact({ url, ads = [], words }: { url?: string | null; ads?: readonly ReviewAd[]; words?: Words<"campaigns"> }) {
   const t = campaignsTranslator(words);
   const href = websiteHref(url);
-  return <span className="flex min-w-0 items-start justify-between gap-3">
-    <span className="min-w-0">
-      {href ? <span className="block"><WebsiteLinkText href={href} /></span> : <span className="block font-medium text-amber-800">{t("destination.needsLink")}</span>}
+  return <>
+    <span className="flex min-w-0 items-start justify-between gap-3">
+      <span className="min-w-0">
+        {href ? <span className="block"><WebsiteLinkText href={href} /></span> : <span className="block font-medium text-amber-800">{t("destination.needsLink")}</span>}
+      </span>
+      {href && <OpenWebsite href={href} words={words} />}
     </span>
-    {href && <OpenWebsite href={href} words={words} />}
-  </span>;
+    <WebsiteButtons ads={ads} words={words} />
+  </>;
 }
 
 /** The server Review's first rows for a website ad (#2595: goal, then where people go). */
-export function WebsiteReviewFacts({ url, words }: { url?: string | null; words?: Words<"campaigns"> }) {
+export function WebsiteReviewFacts({ url, ads, words }: { url?: string | null; ads?: readonly ReviewAd[]; words?: Words<"campaigns"> }) {
   const t = campaignsTranslator(words);
   const row = "grid grid-cols-[5.75rem_1fr] gap-3 sm:grid-cols-[7.5rem_1fr] sm:gap-4";
   return <>
     <div className={row}><dt className="text-slate-500">{t("destination.goal")}</dt><dd className="min-w-0 text-slate-900"><WebsiteGoal words={words} /></dd></div>
-    <div className={row}><dt className="text-slate-500">{t("destination.reviewWebsite")}</dt><dd className="min-w-0 text-slate-900"><WebsiteReviewFact url={url} words={words} /><span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span></dd></div>
+    <div className={row}><dt className="text-slate-500">{t("destination.reviewWebsite")}</dt><dd className="min-w-0 text-slate-900"><WebsiteReviewFact url={url} ads={ads} words={words} /><span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span></dd></div>
   </>;
 }
