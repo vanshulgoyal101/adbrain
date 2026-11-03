@@ -8,7 +8,7 @@ import { activationConfirmationPayload } from "@/lib/campaign/activation";
 import type { DraftInput, OperationDTO, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 import { runPreflight } from "@/lib/campaign/preflight";
-import { GO_LIVE_STALE, goLive, goLiveStorageKey, type GoLiveDeps, type GoLiveInput, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
+import { GO_LIVE_META_BUSY, GO_LIVE_STALE, GO_LIVE_WHATSAPP_UNREADABLE, goLive, goLiveStorageKey, type GoLiveDeps, type GoLiveInput, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
 import { MetaClient, type CampaignDeliverySnapshot } from "@/lib/meta/client";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
@@ -101,6 +101,8 @@ type Options = {
   created?: OperationDTO["state"];
   patch?: { status: number; body: unknown };
   existing?: OperationDTO | null;
+  /** #2841: the WhatsApp status route's answer when it isn't the recorded number. */
+  whatsapp?: { status: number; body: unknown } | "throw";
   /** The plan route's own refusal instead of the recorded plan. */
   plan?: { status: number; body: unknown };
   /** The create route's own error envelope (`errorResponse` in campaigns/create/route.ts). */
@@ -126,7 +128,10 @@ async function api(options: Options = {}) {
     if (body !== undefined) bodies[`${method} ${url.pathname}`] = body;
     switch (`${method} ${url.pathname}`) {
       case "GET /api/meta/connections/status": return ok(connection);
-      case "GET /api/meta/whatsapp": return Response.json({ state: "ready", numbers: [{ masked: MASKED, source: "business" }] });
+      case "GET /api/meta/whatsapp":
+        if (options.whatsapp === "throw") throw new TypeError("network");
+        if (options.whatsapp) return Response.json(options.whatsapp.body, { status: options.whatsapp.status });
+        return Response.json({ state: "ready", numbers: [{ masked: MASKED, source: "business" }] });
       case "POST /api/campaign-drafts":
         draftInput = body;
         return ok({ draftId: DRAFT, version: 1, expiresAt: "2099-01-01T00:00:00.000Z", input: body });
@@ -294,6 +299,18 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     deps.client = { ...deps.client, status: async () => ({ ...connection, capabilities: { ...connection.capabilities, canActivate: { state: "blocked", blockers: [other] } } }) };
     await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [other.message] });
     expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ["route 500", { status: 500, body: { error: "x" } }, GO_LIVE_WHATSAPP_UNREADABLE],
+    ["route says unavailable", { status: 200, body: { state: "unavailable" } }, GO_LIVE_WHATSAPP_UNREADABLE],
+    ["route 429", { status: 429, body: { error: "slow down" } }, GO_LIVE_META_BUSY],
+    ["route throws", "throw" as const, GO_LIVE_WHATSAPP_UNREADABLE],
+  ])("%s: stops with a retry message and saves nothing (#2841)", async (_name, whatsapp, message) => {
+    const { deps, calls } = await api({ whatsapp });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message });
+    expect(writes(calls)).toEqual([]);
+    expect(calls).not.toContain("POST /api/campaign-drafts");
   });
 
   it("not connected: asks to connect and calls nothing else", async () => {

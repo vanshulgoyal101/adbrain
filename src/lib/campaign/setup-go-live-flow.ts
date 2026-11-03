@@ -76,6 +76,8 @@ const errorText = (reason: unknown, fallback: string) => reason instanceof Error
 
 /** #2046: Go live has no "Check my campaign" or "Refresh review" button; tapping Go live again checks it afresh. */
 export const GO_LIVE_STALE = "This campaign changed after it was checked. Nothing was spent. Tap Go live again.";
+export const GO_LIVE_META_BUSY = "Meta is busy. Nothing was spent. Try again in a minute.";
+export const GO_LIVE_WHATSAPP_UNREADABLE = "Couldn't check your WhatsApp number with Meta. Nothing was spent. Try again.";
 const isConflict = (reason: unknown) => typeof reason === "object" && reason !== null && (reason as { code?: unknown }).code === "CONFLICT";
 
 async function sha256Hex(payload: string): Promise<string> {
@@ -119,9 +121,12 @@ export async function goLive(deps: GoLiveDeps, input: GoLiveInput, onStep: (step
     // A reload or retry after the create was sent: find that request's operation instead of creating again.
     if (request) operation = await client.operationForRequest(input.businessId, request.idempotencyKey);
     if (!request) {
+      // #2841: an unreadable WhatsApp status must stop here; saving a draft with no number would send the owner to link one they have.
       const whatsapp = await deps.fetch(`/api/meta/whatsapp?businessId=${encodeURIComponent(input.businessId)}`, { cache: "no-store" })
-        .then(async (response) => parseWhatsAppStatus(response.ok ? await response.json() : null))
+        .then(async (response) => response.status === 429 ? ({ state: "busy" } as const) : parseWhatsAppStatus(response.ok ? await response.json() : null))
         .catch(() => parseWhatsAppStatus(null));
+      if (whatsapp.state === "busy") return { kind: "failed", message: GO_LIVE_META_BUSY };
+      if (whatsapp.state === "unavailable") return { kind: "failed", message: GO_LIVE_WHATSAPP_UNREADABLE };
       const name = defaultCampaignName({
         headline: input.ads[0]?.headline, businessName: input.businessName, destination: "whatsapp",
         date: campaignNameDate(deps.now?.() ?? new Date()),
