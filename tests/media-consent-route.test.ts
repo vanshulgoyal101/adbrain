@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // #778 slice 3b (#784): the upload sheet saves the owner's rights tick here before the first sign.
-const m = vi.hoisted(() => ({ record: vi.fn(), business: vi.fn() }));
+const m = vi.hoisted(() => ({ record: vi.fn(), business: vi.fn(), session: vi.fn() }));
 vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_r: string, _m: string, handler: unknown) => handler }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
 vi.mock("@/lib/media/consent", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/media/consent")>(), recordMediaConsent: m.record }));
 vi.mock("@/lib/media/route-helpers", () => ({
-  mediaSession: async () => ({ user: { id: "u1" }, client: { rls: true } }),
+  mediaSession: m.session,
   ownedBusiness: m.business,
 }));
 
@@ -16,13 +16,18 @@ const post = async (body: unknown) => {
   return POST(new Request("https://adbrain.vanshul.com/api/media/consent", { method: "POST", body: JSON.stringify(body) })) as Promise<Response>;
 };
 
-beforeEach(() => { vi.clearAllMocks(); m.business.mockResolvedValue({ id, vertical: "Salon" }); m.record.mockResolvedValue(undefined); });
+beforeEach(() => { vi.clearAllMocks(); m.session.mockResolvedValue({ user: { id: "u1" }, client: { rls: true } }); m.business.mockResolvedValue({ id, vertical: "Salon" }); m.record.mockResolvedValue(undefined); });
 
 describe("POST /api/media/consent (#778, #784)", () => {
   it("records the tick with the owner's own client (the RPC checks ownership again)", async () => {
     const response = await post({ businessId: id, rights: true, people: true });
     expect(response.status).toBe(200);
     expect(m.record).toHaveBeenCalledWith({ rls: true }, { id, vertical: "Salon" }, { rights: true, people: true });
+  });
+
+  it("works with uploads off: Review's confirm card saves a Brand-photo ad's rights", async () => {
+    expect((await post({ businessId: id, rights: true, people: false })).status).toBe(200);
+    expect(m.session).toHaveBeenCalledWith({ whenUploadsOff: true });
   });
 
   it("another owner's business: 404, nothing recorded", async () => {
