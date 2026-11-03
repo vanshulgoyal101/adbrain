@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App installs: Brand, Create, Review, Manage · #2595 phase 3</title>
+<style>
+  @font-face { font-family: "DM Sans"; src: url("dm-sans.woff2") format("woff2"); font-weight: 100 900; }
+  :root { --ink: #0f172a; --body: #334155; --muted: #64748b; --line: #e2e8f0; --soft: #f8fafc; --blue: #1d4ed8; --blue-bg: #eff6ff; --blue-line: #93c5fd; --amber: #92400e; --amber-bg: #fffbeb; --amber-line: #fcd34d; --green: #166534; --green-bg: #f0fdf4; --primary: #1d4ed8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9edf2; color: var(--ink); font: 14px/1.5 "DM Sans", "Noto Sans Devanagari", "Kohinoor Devanagari", sans-serif; }
+  html[lang="hi"] body { line-height: 1.6; }
+  p, h2, h3, dl, dd, fieldset { margin: 0; }
+  fieldset { border: 0; padding: 0; min-width: 0; }
+  .intro { padding: 24px 24px 0; max-width: 820px; }
+  .intro h1 { font-size: 20px; margin: 0 0 6px; }
+  .intro p { color: var(--body); }
+  .boards { display: grid; grid-template-columns: repeat(auto-fit, 390px); gap: 24px; padding: 24px; align-items: start; }
+  .frame { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .caption { padding: 10px 16px; background: var(--ink); color: white; font-size: 13px; line-height: 1.4; }
+  .caption b { font-weight: 600; }
+  .content { padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+  h2 { font-size: 17px; font-weight: 600; line-height: 1.35; }
+  h3 { font-size: 14px; font-weight: 600; }
+  .legend { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .card-head { display: flex; flex-direction: column; gap: 2px; }
+  .options { display: flex; flex-direction: column; gap: 8px; }
+  .option { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .option.on { border-color: var(--blue-line); background: var(--blue-bg); }
+  .dot { flex: none; width: 18px; height: 18px; margin-top: 2px; border: 1.5px solid #94a3b8; border-radius: 50%; }
+  .on .dot { border: 5px solid var(--blue); }
+  .option .body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .option b { font-weight: 600; overflow-wrap: anywhere; }
+  .ev { display: flex; gap: 6px; align-items: baseline; font-size: 13px; }
+  .ev i { font-style: normal; flex: none; width: 14px; text-align: center; }
+  .ok { color: var(--green); }
+  .warn { color: var(--amber); }
+  .pills { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .pill { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 52px; padding: 6px; line-height: 1.25; border: 1px solid var(--line); border-radius: 8px; font-weight: 500; }
+  .pill.on { border-color: var(--blue-line); background: var(--blue-bg); color: var(--blue); }
+  .pill.locked { color: var(--muted); background: var(--soft); border-style: dashed; }
+  .pill small { font-size: 12px; font-weight: 400; color: var(--amber); }
+  .hint { color: var(--body); font-size: 13px; margin-top: 8px; }
+  .btn { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font-weight: 500; text-decoration: none; white-space: nowrap; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: white; width: 100%; font-weight: 600; }
+  .btn.off { background: #e2e8f0; border-color: #e2e8f0; color: #64748b; }
+  .link { color: var(--blue); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; display: inline-flex; min-height: 44px; align-items: center; }
+  .actions { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+  .state { border: 1px solid var(--amber-line); background: var(--amber-bg); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px; color: var(--body); }
+  .state b { color: #78350f; font-weight: 600; }
+  .state .btn { border-color: var(--amber-line); color: #78350f; }
+  .state.info { border-color: var(--line); background: var(--soft); }
+  .state.info b { color: var(--ink); }
+  .state.info .btn { border-color: var(--line); color: var(--ink); }
+  .alt-label { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: -8px; }
+  .divider { border-top: 1px dashed var(--line); }
+  dl { display: flex; flex-direction: column; gap: 14px; }
+  dt { font-size: 12px; color: var(--muted); }
+  dd { margin-top: 2px; font-weight: 500; overflow-wrap: anywhere; }
+  dd.sub { margin-top: 2px; font-weight: 400; font-size: 13px; color: var(--muted); }
+  .url .host { font-weight: 600; }
+  .url .path { color: var(--muted); }
+  .pin { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #db2777; color: white; font-size: 12px; font-weight: 700; flex: none; }
+  .ann { outline: 2px dashed #db2777; outline-offset: 3px; border-radius: 8px; position: relative; }
+  .ann > .pin { position: absolute; top: -12px; right: -12px; }
+  .notes { margin: 0 24px 32px; max-width: 880px; background: white; border-radius: 12px; padding: 16px 20px; font-size: 13px; line-height: 1.55; }
+  .notes h3 { font-size: 15px; margin-bottom: 8px; }
+  .notes ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .notes li { display: flex; gap: 8px; }
+  @media (max-width: 437px) { .intro { padding: 16px 16px 0; } .boards { grid-template-columns: minmax(0, 1fr); padding: 16px 0; gap: 16px; } .frame { border-radius: 0; border-left: 0; border-right: 0; } .notes { margin: 0; border-radius: 0; } .ann > .pin { right: -4px; } }
+</style>
+<style>
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-weight: 600; font-size: 13px; }
+  .input { min-height: 44px; display: flex; align-items: center; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; overflow-wrap: anywhere; font-size: 13px; }
+  .input.empty { color: #94a3b8; }
+  .input.bad { border-color: #b91c1c; }
+  .err { color: #b91c1c; font-size: 13px; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pills.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .preview { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .preview .img { height: 120px; background: linear-gradient(135deg, #dbeafe, #e0e7ff); display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  .preview .bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--soft); font-size: 12px; }
+  .preview .cta { flex: none; padding: 6px 10px; border-radius: 6px; background: #e2e8f0; font-weight: 600; font-size: 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .tile .num { font-size: 22px; font-weight: 600; }
+  .tile .lbl { font-size: 12px; color: var(--muted); }
+</style>
+<body>
+<header class="intro">
+  <h1>App installs (#2595 phase 3): Brand, Create, Review, Manage</h1>
+  <p>Designer, from the CPO brief (#2595, 3 Nov 10:15Z) and the <code>appBlocker</code> contract in #2828 (6cb655be). Not enabled; nothing here calls Meta. Illustrative data. EN at 390; <code>?lang=hi</code> renders the HI draft.</p>
+</header>
+<div class="boards">
+
+  <!-- 1 · Brand: optional store links + the Meta app -->
+  <section class="frame">
+    <div class="caption"><b>1 · Brand → Your app (optional).</b> Store links save without WhatsApp or Meta. Once Meta is connected, the owner picks the app this ad account can advertise.</div>
+    <div class="content">
+      <div class="card ann"><span class="pin">1</span>
+        <div class="card-head"><h2 data-t="brandTitle"></h2><p class="muted" data-t="brandSub"></p></div>
+        <div class="field"><label data-t="playLabel"></label><div class="input">https://play.google.com/store/apps/details?id=in.cedarridge.book</div></div>
+        <div class="field"><label data-t="iosLabel"></label><div class="input empty" data-t="iosEmpty"></div></div>
+        <fieldset class="ann"><span class="pin">2</span>
+          <span class="legend" data-t="pickLegend"></span>
+          <div class="options">
+            <label class="option on"><i class="dot"></i><div class="body"><b>Cedar Ridge Booking</b>
+              <span class="ev ok"><i>✓</i><span data-t="androidListed"></span></span>
+              <span class="ev warn"><i>!</i><span data-t="iosNotListed"></span></span></div></label>
+            <label class="option"><i class="dot"></i><div class="body"><b>Cedar Ridge Staff</b>
+              <span class="ev warn"><i>!</i><span data-t="noLinkMatch"></span></span></div></label>
+          </div>
+        </fieldset>
+        <div class="actions"><span class="btn" data-t="checkAgain"></span><a class="link" data-t="metaAppSettings"></a></div>
+        <p class="muted" data-t="checkedAt"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · Brand: other states -->
+  <section class="frame">
+    <div class="caption"><b>2 · The other Brand states,</b> one at a time in the same card. Each says what's wrong and gives one fix. WhatsApp, forms and website ads aren't affected.</div>
+    <div class="content">
+      <p class="alt-label">not connected</p>
+      <div class="state info"><b data-t="notConnTitle"></b><span data-t="notConnBody"></span>
+        <div class="actions"><span class="btn" data-t="connectMeta"></span></div></div>
+      <p class="alt-label">unsafe_link (field error)</p>
+      <div class="field ann"><span class="pin">3</span><label data-t="playLabel"></label><div class="input bad">http://bit.ly/cedar-app</div><span class="err" data-t="unsafeErr"></span></div>
+      <p class="alt-label">no_app</p>
+      <div class="state"><b data-t="noAppTitle"></b><span data-t="noAppBody"></span>
+        <div class="actions"><span class="btn" data-t="checkAgain"></span><a class="link" data-t="howToAdd"></a></div></div>
+      <p class="alt-label">unreadable</p>
+      <div class="state"><b data-t="unreadTitle"></b><span data-t="unreadBody"></span>
+        <div class="actions"><span class="btn" data-t="checkAgain"></span></div></div>
+    </div>
+  </section>
+
+  <!-- 3 · Create: app installs chosen -->
+  <section class="frame">
+    <div class="caption"><b>3 · Create → App installs.</b> One phone type per campaign. The app, full store link and real button show before Make my ads.</div>
+    <div class="content">
+      <fieldset>
+        <span class="legend" data-t="whereLegend"></span>
+        <div class="options">
+          <label class="option"><i class="dot"></i><div class="body"><b data-t="optWhatsapp"></b><span class="muted" data-t="optWhatsappHint"></span></div></label>
+          <label class="option"><i class="dot"></i><div class="body"><b data-t="optWebsite"></b></div></label>
+          <label class="option on"><i class="dot"></i><div class="body"><b data-t="optApp"></b><span class="muted" data-t="optAppHint"></span></div></label>
+        </div>
+      </fieldset>
+      <fieldset class="ann"><span class="pin">4</span>
+        <span class="legend" data-t="osLegend"></span>
+        <div class="pills two">
+          <label class="pill on" data-t="android"></label>
+          <label class="pill locked" aria-disabled="true"><span data-t="iphone"></span><small data-t="notInBrand"></small></label>
+        </div>
+        <p class="hint" data-t="osHint"></p>
+      </fieldset>
+      <div class="ann"><span class="pin">5</span>
+        <span class="legend" data-t="opensLegend"></span>
+        <p><b>Cedar Ridge Booking</b> · <span data-t="android"></span></p>
+        <p class="url"><span class="host">play.google.com</span><span class="path">/store/apps/details?id=in.cedarridge.book</span></p>
+        <div class="actions"><a class="link" data-t="openStore"></a><a class="link" data-t="changeInBrand"></a></div>
+      </div>
+      <div class="ann"><span class="pin">6</span><div class="preview"><div class="img" data-t="adPicture"></div><div class="bar"><span>Cedar Ridge Booking</span><span class="cta" data-t="installNow"></span></div></div></div>
+      <span class="btn primary" data-t="makeAds"></span>
+    </div>
+  </section>
+
+  <!-- 4 · Review ready -->
+  <section class="frame">
+    <div class="caption"><b>4 · Review, ready.</b> Everything pinned in the review: app, phone type, store link and budget. Install counting shows what Meta reports, or says it isn't confirmed.</div>
+    <div class="content">
+      <div><h2 data-t="reviewReady"></h2><p class="muted" data-t="paused"></p></div>
+      <div class="card">
+        <dl>
+          <div><dt data-t="goal"></dt><dd data-t="goalApp"></dd><dd class="sub" data-t="goalAppSub"></dd></div>
+          <div><dt data-t="app"></dt><dd>Cedar Ridge Booking</dd><dd class="sub" data-t="appSub"></dd></div>
+          <div><dt data-t="storeLink"></dt><dd class="url"><span class="host">play.google.com</span><span class="path">/store/apps/details?id=in.cedarridge.book</span></dd><dd class="sub" data-t="buttonInstall"></dd></div>
+          <div><dt data-t="whoSees"></dt><dd data-t="whoSeesVal"></dd></div>
+          <div class="ann"><span class="pin">7</span><dt data-t="counting"></dt><dd data-t="countingVal"></dd><dd class="sub" data-t="countingSub"></dd></div>
+          <div><dt data-t="dates"></dt><dd data-t="datesVal"></dd></div>
+          <div><dt data-t="budget"></dt><dd data-t="budgetVal"></dd></div>
+        </dl>
+        <p class="muted" data-t="expectInstalls"></p>
+      </div>
+      <span class="btn primary" data-t="send"></span>
+    </div>
+  </section>
+
+  <!-- 5 · Review blocked -->
+  <section class="frame">
+    <div class="caption"><b>5 · Review, blocked.</b> The server re-checks the app against this ad account and phone type. Each blocker has one fix; nothing switches to WhatsApp or website by itself.</div>
+    <div class="content">
+      <div><h2 data-t="reviewBlocked"></h2><p class="muted" data-t="paused"></p></div>
+      <div class="state ann"><span class="pin">8</span><b data-t="linkNotRegTitle"></b><span data-t="linkNotRegBody"></span>
+        <div class="actions"><span class="btn" data-t="checkAgain"></span><a class="link" data-t="metaAppSettings"></a></div></div>
+      <div class="state ann"><span class="pin">9</span><b data-t="countingBlockTitle"></b><span data-t="countingBlockBody"></span>
+        <div class="actions"><span class="btn" data-t="checkAgain"></span><a class="link" data-t="howToCount"></a></div></div>
+      <div class="state info ann"><span class="pin">10</span><b data-t="changedTitle"></b><span data-t="changedBody"></span>
+        <div class="actions"><span class="btn" data-t="reviewAgain"></span></div></div>
+      <span class="btn primary off" aria-disabled="true" data-t="send"></span>
+    </div>
+  </section>
+
+  <!-- 6 · Manage -->
+  <section class="frame">
+    <div class="caption"><b>6 · Manage → results.</b> Installs and cost per install for the same dates. A measured zero, unavailable data and a late sync each look different.</div>
+    <div class="content">
+      <div><h2>Cedar Ridge Booking · <span data-t="android"></span></h2><p class="muted" data-t="manageRange"></p></div>
+      <div class="tiles ann"><span class="pin">11</span>
+        <div class="tile"><span class="num">38</span><span class="lbl" data-t="installs"></span></div>
+        <div class="tile"><span class="num">₹61</span><span class="lbl" data-t="perInstall"></span></div>
+      </div>
+      <p class="muted" data-t="spentLine"></p>
+      <p class="muted" data-t="notCustomers"></p>
+      <p class="alt-label">measured zero</p>
+      <div class="tiles"><div class="tile"><span class="num">0</span><span class="lbl" data-t="installs"></span></div><div class="tile"><span class="num">—</span><span class="lbl" data-t="perInstall"></span></div></div>
+      <p class="alt-label">unavailable</p>
+      <div class="state info ann"><span class="pin">12</span><b data-t="unavailTitle"></b><span data-t="unavailBody"></span></div>
+      <p class="alt-label">sync late</p>
+      <div class="state"><b data-t="lateTitle"></b><span data-t="lateBody"></span>
+        <div class="actions"><span class="btn" data-t="syncNow"></span></div></div>
+    </div>
+  </section>
+</div>
+
+<section class="notes" lang="en">
+  <h3>Notes for the phase-3 UI (after the evidence gate; owners per CTO's slices)</h3>
+  <ol>
+    <li><span class="pin">1</span><span><b>Brand "Your app"</b> card after Website. Two optional fields (Google Play, App Store), saved with no Meta or WhatsApp needed. Its own <code>brand-app-card.tsx</code>; <code>brand-form.tsx</code> is already too long.</span></li>
+    <li><span class="pin">2</span><span><b>Pick the Meta app</b> only when connected: one radio row per <code>RegisteredApp</code>, with a ✓/! line per OS saying whether that app lists the Brand link. Never pre-pick when there are two. Check again plus "Meta app settings ↗" (44 px) and the checked time.</span></li>
+    <li><span class="pin">3</span><span><code>unsafe_link</code> is a field error at save time: HTTPS, exactly <code>play.google.com</code> / <code>apps.apple.com</code>, no short links, no username or password. Same rule as <code>normalizeStoreUrl</code>.</span></li>
+    <li><span class="pin">4</span><span><b>Phone type</b> is a 2-column radio group. An OS with no Brand link stays visible as <code>aria-disabled</code> with "Not in Brand". The hint says another phone type needs its own reviewed campaign. No automatic second ad set or budget.</span></li>
+    <li><span class="pin">5</span><span>Show the full store link as host/path, with "Open ↗" and "Change in Brand", like website ads (#2600).</span></li>
+    <li><span class="pin">6</span><span>The preview shows the actual validated button (Install now), taken from the ad, never fixed copy.</span></li>
+    <li><span class="pin">7</span><span><b>Install counting</b> shows the campaign's attribution setting when Meta returns it, otherwise "Not confirmed". Never infer SDK/MMP readiness from a listing or past installs.</span></li>
+    <li><span class="pin">8</span><span>Blocker copy for the eight <code>AppBlocker</code> values (wording in the HI/EN table): <code>unreadable</code>, <code>no_app</code> → Check again + Meta app settings; <code>no_store_link</code>, <code>unsafe_link</code> → Change in Brand; <code>app_not_available</code>, <code>ambiguous</code> → Choose app (Brand); <code>os_mismatch</code>, <code>link_not_registered</code> → Meta app settings ↗ + Check again. Send stays off.</span></li>
+    <li><span class="pin">9</span><span><b>Open question → CTO:</b> the CPO asks Review to block on "unverified install measurement", but #2828 has no signal or blocker for it. I mocked it as a blocker; it needs a readable signal (e.g. the app's install events seen by Meta) before it can be built. Otherwise it should be the "Not confirmed" line in 7, not a block.</span></li>
+    <li><span class="pin">10</span><span>A change to the app, phone type, link or budget after Review invalidates the reviewed hash. Show this as information with one "Review again" button, not as an error.</span></li>
+    <li><span class="pin">11</span><span><b>Manage</b> shows installs and cost per install for the same date range, from Meta insights, with the attribution line. It never says customers or enquiries.</span></li>
+    <li><span class="pin">12</span><span>Measured zero is "0" and "—". Unavailable (Meta returned no install metric) is a grey info box with no numbers. A late sync is amber, with the last sync time and Sync now. These three never share copy.</span></li>
+    <li><span class="pin">✓</span><span>Rendered EN 390 and HI 360: no overflow, every target ≥ 44 px, buttons on one line. HI is a draft for the CPO's words check.</span></li>
+  </ol>
+</section>
+
+<script>
+const T = {
+  en: {
+    brandTitle: "Your app",
+    brandSub: "Optional. Add your official store links to run ads that get people to install your app.",
+    playLabel: "Google Play link", iosLabel: "App Store link", iosEmpty: "https://apps.apple.com/…",
+    pickLegend: "Which app on your Meta ad account?",
+    androidListed: "Android: lists your Google Play link",
+    iosNotListed: "iPhone: no App Store link in Brand",
+    noLinkMatch: "Doesn't list your Google Play link",
+    checkAgain: "Check again", metaAppSettings: "Meta app settings ↗",
+    checkedAt: "Checked at 14:05",
+    notConnTitle: "Links saved. Connect Meta to choose your app.",
+    notConnBody: "You can still make and save app ad drafts. Review checks the app once Meta is connected.",
+    connectMeta: "Connect Meta",
+    unsafeErr: "Use the official link from Google Play (https://play.google.com/…). Short links can't be checked.",
+    noAppTitle: "This ad account has no app Meta can advertise.",
+    noAppBody: "Add Android or iPhone to your app in Meta, with this same store link, and allow this ad account to use it.",
+    howToAdd: "How to add it ↗",
+    unreadTitle: "We couldn't check the apps on this ad account.",
+    unreadBody: "This is usually access. Check again in a minute; if it repeats, reconnect Meta.",
+    whereLegend: "Where should people go?",
+    optWhatsapp: "WhatsApp chat", optWhatsappHint: "Recommended for local businesses",
+    optWebsite: "Your website",
+    optApp: "Install your app", optAppHint: "From Google Play or the App Store",
+    osLegend: "Which phones?",
+    android: "Android", iphone: "iPhone", notInBrand: "Not in Brand",
+    osHint: "One phone type per campaign. For iPhone too, make a second campaign and review it on its own.",
+    opensLegend: "Your ads open",
+    openStore: "Open ↗", changeInBrand: "Change in Brand",
+    adPicture: "ad picture", installNow: "Install now",
+    makeAds: "Make my ads",
+    reviewReady: "Ready for campaign review",
+    reviewBlocked: "Review before creation",
+    paused: "AdBrain creates this campaign paused. Nothing spends until you activate it.",
+    goal: "Goal", goalApp: "App installs",
+    goalAppSub: "Meta shows these ads to people likely to install your app. Installs aren't customers or enquiries.",
+    app: "App", appSub: "Android · checked on this ad account at 14:05",
+    storeLink: "People will go to", buttonInstall: "Button: Install now",
+    whoSees: "Who sees it", whoSeesVal: "People on Android phones, 25 km around Indiranagar",
+    counting: "Install counting",
+    countingVal: "Not confirmed",
+    countingSub: "Meta counts an install only when your app reports it to Meta. AdBrain can't check your app's setup.",
+    dates: "Dates", datesVal: "From 4 Nov, no end date",
+    budget: "Budget", budgetVal: "₹500 a day · up to ₹3,500 a week",
+    expectInstalls: "AdBrain hasn't run enough app campaigns yet to quote a cost per install.",
+    send: "Send to Meta (paused)",
+    linkNotRegTitle: "Meta doesn't list this link for Cedar Ridge Booking",
+    linkNotRegBody: "In your Meta app settings, add Android with this Google Play link, then check again.",
+    countingBlockTitle: "Install counting isn't set up for this app",
+    countingBlockBody: "Meta hasn't seen your app report any activity, so installs wouldn't be counted. Set up Meta's SDK or your measurement partner, then check again.",
+    howToCount: "How to set it up ↗",
+    changedTitle: "The app link changed after Review",
+    changedBody: "Review again so you approve exactly what goes to Meta.",
+    reviewAgain: "Review again",
+    manageRange: "Last 7 days · 28 Oct – 3 Nov",
+    installs: "installs", perInstall: "per install",
+    spentLine: "₹2,310 spent · counted 7 days after a click",
+    notCustomers: "Installs Meta reports for these dates. They aren't customers or enquiries.",
+    unavailTitle: "Meta hasn't shared installs for this campaign.",
+    unavailBody: "Spend and clicks are still shown. Installs appear here once Meta reports them.",
+    lateTitle: "Results may be out of date",
+    lateBody: "Last synced 9 hours ago. Meta can take up to a day to report installs.",
+    syncNow: "Sync now",
+  },
+  hi: {
+    brandTitle: "आपका ऐप",
+    brandSub: "ज़रूरी नहीं। लोगों से अपना ऐप इंस्टॉल करवाने वाले विज्ञापनों के लिए स्टोर के आधिकारिक लिंक जोड़ें।",
+    playLabel: "Google Play लिंक", iosLabel: "App Store लिंक", iosEmpty: "https://apps.apple.com/…",
+    pickLegend: "आपके Meta विज्ञापन खाते का कौन-सा ऐप?",
+    androidListed: "Android: आपका Google Play लिंक दर्ज है",
+    iosNotListed: "iPhone: Brand में App Store लिंक नहीं है",
+    noLinkMatch: "इसमें आपका Google Play लिंक दर्ज नहीं है",
+    checkAgain: "फिर से जाँचें", metaAppSettings: "Meta ऐप सेटिंग ↗",
+    checkedAt: "14:05 पर जाँचा",
+    notConnTitle: "लिंक सेव हो गए। ऐप चुनने के लिए Meta जोड़ें।",
+    notConnBody: "आप अब भी ऐप विज्ञापन के ड्राफ़्ट बना और सेव कर सकते हैं। Meta जुड़ने पर रिव्यू ऐप की जाँच करेगा।",
+    connectMeta: "Meta जोड़ें",
+    unsafeErr: "Google Play का आधिकारिक लिंक डालें (https://play.google.com/…)। छोटे लिंक जाँचे नहीं जा सकते।",
+    noAppTitle: "इस विज्ञापन खाते में ऐसा कोई ऐप नहीं जिसका Meta विज्ञापन कर सके।",
+    noAppBody: "Meta में अपने ऐप में इसी स्टोर लिंक के साथ Android या iPhone जोड़ें, और इस विज्ञापन खाते को उसे इस्तेमाल करने दें।",
+    howToAdd: "कैसे जोड़ें ↗",
+    unreadTitle: "इस विज्ञापन खाते के ऐप हम जाँच नहीं पाए।",
+    unreadBody: "अक्सर यह ऐक्सेस की वजह से होता है। एक मिनट बाद फिर जाँचें; दोबारा हो तो Meta फिर से जोड़ें।",
+    whereLegend: "लोग कहाँ जाएँ?",
+    optWhatsapp: "WhatsApp चैट", optWhatsappHint: "लोकल बिज़नेस के लिए सुझाया गया",
+    optWebsite: "आपकी वेबसाइट",
+    optApp: "आपका ऐप इंस्टॉल करें", optAppHint: "Google Play या App Store से",
+    osLegend: "कौन-से फ़ोन?",
+    android: "Android", iphone: "iPhone", notInBrand: "Brand में नहीं",
+    osHint: "एक कैंपेन में एक ही तरह के फ़ोन। iPhone के लिए दूसरा कैंपेन बनाएँ और उसे अलग से रिव्यू करें।",
+    opensLegend: "आपके विज्ञापन यह खोलेंगे",
+    openStore: "खोलें ↗", changeInBrand: "Brand में बदलें",
+    adPicture: "विज्ञापन की तस्वीर", installNow: "अभी इंस्टॉल करें",
+    makeAds: "मेरे विज्ञापन बनाएँ",
+    reviewReady: "कैंपेन रिव्यू के लिए तैयार",
+    reviewBlocked: "बनाने से पहले रिव्यू करें",
+    paused: "AdBrain यह कैंपेन रुका हुआ बनाता है। जब तक आप चालू नहीं करते, कुछ खर्च नहीं होता।",
+    goal: "लक्ष्य", goalApp: "ऐप इंस्टॉल",
+    goalAppSub: "Meta ये विज्ञापन उन लोगों को दिखाता है जो आपका ऐप इंस्टॉल कर सकते हैं। इंस्टॉल ग्राहक या पूछताछ नहीं हैं।",
+    app: "ऐप", appSub: "Android · 14:05 पर इस विज्ञापन खाते पर जाँचा",
+    storeLink: "लोग यहाँ जाएँगे", buttonInstall: "बटन: अभी इंस्टॉल करें",
+    whoSees: "किसे दिखेगा", whoSeesVal: "इंदिरानगर के 25 किमी में Android फ़ोन वाले लोग",
+    counting: "इंस्टॉल की गिनती",
+    countingVal: "पक्का नहीं",
+    countingSub: "Meta इंस्टॉल तभी गिनता है जब आपका ऐप उसे Meta को बताता है। AdBrain आपके ऐप का सेटअप नहीं जाँच सकता।",
+    dates: "तारीख़ें", datesVal: "4 नवंबर से, कोई आख़िरी तारीख़ नहीं",
+    budget: "बजट", budgetVal: "₹500 रोज़ · हफ़्ते में ₹3,500 तक",
+    expectInstalls: "AdBrain ने अभी इतने ऐप कैंपेन नहीं चलाए हैं कि प्रति इंस्टॉल खर्च बता सके।",
+    send: "Meta को भेजें (रुका हुआ)",
+    linkNotRegTitle: "Meta में Cedar Ridge Booking के लिए यह लिंक दर्ज नहीं है",
+    linkNotRegBody: "अपनी Meta ऐप सेटिंग में इस Google Play लिंक के साथ Android जोड़ें, फिर दोबारा जाँचें।",
+    countingBlockTitle: "इस ऐप के लिए इंस्टॉल की गिनती सेट नहीं है",
+    countingBlockBody: "Meta को आपके ऐप से कोई गतिविधि नहीं मिली, इसलिए इंस्टॉल गिने नहीं जाएँगे। Meta का SDK या अपना मेज़रमेंट पार्टनर सेट करें, फिर दोबारा जाँचें।",
+    howToCount: "कैसे सेट करें ↗",
+    changedTitle: "रिव्यू के बाद ऐप का लिंक बदला",
+    changedBody: "फिर से रिव्यू करें, ताकि Meta को वही जाए जो आपने मंज़ूर किया।",
+    reviewAgain: "फिर से रिव्यू करें",
+    manageRange: "पिछले 7 दिन · 28 अक्टूबर – 3 नवंबर",
+    installs: "इंस्टॉल", perInstall: "प्रति इंस्टॉल",
+    spentLine: "₹2,310 खर्च · क्लिक के 7 दिन तक गिना गया",
+    notCustomers: "इन तारीख़ों के लिए Meta के बताए इंस्टॉल। ये ग्राहक या पूछताछ नहीं हैं।",
+    unavailTitle: "Meta ने इस कैंपेन के इंस्टॉल नहीं बताए हैं।",
+    unavailBody: "खर्च और क्लिक अब भी दिख रहे हैं। Meta के बताते ही इंस्टॉल यहाँ दिखेंगे।",
+    lateTitle: "नतीजे पुराने हो सकते हैं",
+    lateBody: "आख़िरी सिंक 9 घंटे पहले। Meta को इंस्टॉल बताने में एक दिन तक लग सकता है।",
+    syncNow: "अभी सिंक करें",
+  },
+};
+const lang = new URLSearchParams(location.search).get("lang") === "hi" ? "hi" : "en";
+document.documentElement.lang = lang;
+document.querySelectorAll("[data-t]").forEach((el) => {
+  const pin = el.querySelector(":scope > .pin");
+  el.textContent = T[lang][el.dataset.t];
+  if (pin) el.append(pin);
+});
+</script>
+</body>
+</html>
