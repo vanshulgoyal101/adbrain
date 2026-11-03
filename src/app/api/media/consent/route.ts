@@ -11,9 +11,9 @@ export const runtime = "nodejs";
 
 const body = z.object({ businessId: z.uuid(), rights: z.boolean(), people: z.boolean().default(false) }).strict();
 
-/** #778 slice 3b (#784): saves the owner's rights tick from the upload sheet; `/api/media/sign` checks it. */
+/** #778 slice 3b (#784): saves the owner's rights tick (upload sheet, or Review's confirm link); `/api/media/sign` and Review check it. Works with uploads off: Brand photos in an ad need it too. */
 export const POST = observeRoute("/api/media/consent", "POST", async (req: Request) => {
-  const session = await mediaSession();
+  const session = await mediaSession({ whenUploadsOff: true });
   if (session instanceof NextResponse) return session;
   const limited = await rateLimitResponse(`media-consent:${session.user.id}`, { limit: 20, windowMs: 10 * 60_000 });
   if (limited) return limited;

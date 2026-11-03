@@ -2,6 +2,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MediaRightsConsent, mediaConsentComplete } from "@/components/media-rights-consent";
+import en from "../messages/en.json";
+import hi from "../messages/hi.json";
+import { mediaTranslator } from "@/i18n/words";
 import { MEDIA_MUSIC_NOTE, MEDIA_PEOPLE_TEXT, MEDIA_RIGHTS_TEXT } from "@/lib/media/consent";
 
 describe("<MediaRightsConsent> (#784)", () => {
@@ -21,5 +24,16 @@ describe("<MediaRightsConsent> (#784)", () => {
     expect(screen.queryByText(MEDIA_MUSIC_NOTE)).toBeNull();
     expect(mediaConsentComplete({ rights: true, people: false }, "solar energy")).toBe(true);
     expect(mediaConsentComplete({ rights: true, people: false }, "dental clinic")).toBe(false);
+  });
+
+  it("keeps the English words equal to the versioned terms, and shows Hindi in the owner's language", () => {
+    expect(en.media.upload.rightsText).toBe(MEDIA_RIGHTS_TEXT);
+    expect(en.media.upload.peopleText).toBe(MEDIA_PEOPLE_TEXT);
+    expect(en.media.upload.musicNote).toBe(MEDIA_MUSIC_NOTE);
+    render(<MediaRightsConsent vertical="dental clinic" value={{ rights: false, people: false }} onChange={vi.fn()} hasVideo
+      t={mediaTranslator({ locale: "hi", messages: hi.media } as never)} />);
+    expect(screen.getByLabelText(hi.media.upload.rightsText)).toBeInTheDocument();
+    expect(screen.getByLabelText(hi.media.upload.peopleText)).toBeInTheDocument();
+    expect(screen.getByText(hi.media.upload.musicNote)).toBeInTheDocument();
   });
 });
