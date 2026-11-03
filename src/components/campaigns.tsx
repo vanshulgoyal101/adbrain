@@ -2330,7 +2330,7 @@ function BusinessCampaigns({
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                {tc(syncing ? "header.syncing" : "header.sync")}
+                <span className="grid text-left"><span aria-hidden={syncing || undefined} className={syncing ? "invisible col-start-1 row-start-1" : "col-start-1 row-start-1"}>{tc("header.sync")}</span><span aria-hidden={!syncing || undefined} className={syncing ? "col-start-1 row-start-1" : "invisible col-start-1 row-start-1"}>{tc("header.syncing")}</span></span>
               </Button>
             </div>
           )}
