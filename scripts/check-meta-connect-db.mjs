@@ -1658,8 +1658,10 @@ async function verifyMediaUploadQuota(db, database) {
     assert.equal((await db.query(`select count(*)::int as n from public.media_assets where business_id=$1 and kind='image' and created_at >= ${monthStart}`, [business])).rows[0].n, 50);
     await assert.rejects(db.query(insert, row()), { code: "P0001", message: "MEDIA_QUOTA" });
     await db.query(insert, row("image", "ai"));
-    for (let i = 0; i < 3; i++) await db.query(insert, row("video"));
-    await assert.rejects(db.query(insert, row("video")), { code: "P0001", message: "MEDIA_QUOTA" });
+    // Ready, tiny and old: this checks the monthly limit, not the global video budget (verifyMediaVideoBudget).
+    const video = () => { const [b, path, hash] = row("video"); return ["insert into public.media_assets(business_id,path,sha256,kind,source,status,bytes,updated_at) values ($1,$2,$3,'video','upload','ready',1000,now() - interval '3 hours')", [b, path, hash]]; };
+    for (let i = 0; i < 3; i++) await db.query(...video());
+    await assert.rejects(db.query(...video()), { code: "P0001", message: "MEDIA_QUOTA" });
   });
 }
 
@@ -1669,34 +1671,66 @@ async function verifyMediaVideoBudget(db, database) {
   await db.query("insert into auth.users(id) values ($1)", [owner]);
   for (const [i, id] of businesses.entries()) await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,$3)", [id, owner, `Budget ${i}`]);
   const sha = () => createHash("sha256").update(randomUUID()).digest("hex");
-  const insert = "insert into public.media_assets(business_id,path,sha256,kind,mime,bytes,duration_ms,source) values ($1::uuid,$2,$3,'video','video/mp4',$4,10000,'ai') returning id";
-  const args = (business, mb) => [business, `${business}/${randomUUID()}.mp4`, sha(), mb * MB];
-  const held = async () => Number((await db.query("select coalesce(sum(bytes),0) as n from public.media_assets where kind='video' and storage_reclaimed_at is null and deleted_at is null")).rows[0].n);
+  const cols = "business_id,path,sha256,kind,mime,bytes,duration_ms,source";
+  // 'ai' keeps the per-business monthly limit out of this check; the budget trigger doesn't look at source.
+  const pending = (business, mb) => [`insert into public.media_assets(${cols}) values ($1::uuid,$2,$3,'video','video/mp4',$4,10000,'ai') returning id`, [business, `${business}/${randomUUID()}.mp4`, sha(), mb * MB]];
+  const ready = (business, mb, age = "3 hours") => [`insert into public.media_assets(${cols},status,updated_at) values ($1::uuid,$2,$3,'video','video/mp4',$4,10000,'ai','ready',now() - interval '${age}') returning id`, [business, `${business}/${randomUUID()}.mp4`, sha(), mb * MB]];
+  const reserved = async () => Number((await db.query("select coalesce(sum(private.media_video_reserved_bytes(m)),0) as n from public.media_assets m where kind='video'")).rows[0].n);
+  const refused = (promise) => assert.rejects(promise, { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
   const asService = async (work) => { const c = client(database); await c.connect(); try { await c.query("begin"); await c.query("set local role service_role"); const r = await work(c); await c.query("commit"); return r; } catch (error) { await c.query("rollback").catch(() => undefined); throw error; } finally { await c.end(); } };
-  await check(`${database}: media video budget: 150 MB across all businesses holds under parallel inserts, reclaim and delete free room, a re-upload is checked again (#2653)`, async () => {
-    await db.query("delete from public.media_assets where kind='video'");
-    const results = await Promise.allSettled(Array.from({ length: 8 }, (_, i) => asService((c) => c.query(insert, args(businesses[i % 4], 40)))));
-    assert.equal(results.filter(r => r.status === "fulfilled").length, 3, "3 x 40 MB fit under 150 MB; the other five are refused");
+  const reset = () => db.query("delete from public.media_assets where kind='video'");
+  const parallel = async (inserts) => {
+    const results = await Promise.allSettled(inserts.map((insert) => asService((c) => c.query(...insert))));
     for (const r of results.filter(r => r.status === "rejected")) assert.equal(r.reason.message, "MEDIA_VIDEO_BUDGET");
-    assert.equal(await held(), 120 * MB);
-    await assert.rejects(db.query(insert, args(businesses[0], 31)), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
-    const small = (await db.query(insert, args(businesses[0], 30))).rows[0].id;
-    assert.equal(await held(), 150 * MB, "exactly at the budget is allowed");
-    await assert.rejects(db.query(insert, args(businesses[1], 1)), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
-    // More rows than any API page (1,000) of tiny videos still sum in SQL.
-    await db.query("update public.media_assets set storage_reclaimed_at = now() where kind='video'");
-    assert.equal(await held(), 0);
-    await db.query("insert into public.media_assets(business_id,path,sha256,kind,mime,bytes,duration_ms,source) select $1::uuid, $1::text||'/'||g||'.mp4', md5(g::text)||md5(g::text), 'video','video/mp4',150*1024, 5000, 'ai' from generate_series(1,1001) g", [businesses[2]]);
-    assert.equal(await held(), 1001 * 150 * 1024);
-    await assert.rejects(db.query(insert, args(businesses[3], 4)), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
-    await db.query("update public.media_assets set deleted_at = now() where business_id=$1 and kind='video'", [businesses[2]]);
-    assert.equal(await held(), 0);
-    // A reclaimed video re-uploaded (storage_reclaimed_at cleared) is checked like a new one, and so is an un-delete.
-    await db.query(insert, args(businesses[3], 140));
-    await assert.rejects(db.query("update public.media_assets set storage_reclaimed_at = null where id=$1", [small]), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
-    await assert.rejects(db.query("update public.media_assets set deleted_at = null where business_id=$1 and bytes=$2", [businesses[2], 150 * 1024]), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
-    await db.query("update public.media_assets set bytes = bytes - 1 where business_id=$1 and kind='video' and bytes = $2", [businesses[3], 140 * MB]);
-    await assert.rejects(db.query("update public.media_assets set bytes = bytes + 11 * 1024 * 1024 where business_id=$1 and kind='video' and storage_reclaimed_at is null", [businesses[3]]), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+    return results.filter(r => r.status === "fulfilled").length;
+  };
+  await check(`${database}: media video budget: parallel signs across businesses reserve upload object plus verified copy, so one pending row fills 100 of 150 MB (#2653)`, async () => {
+    await reset();
+    assert.equal(await parallel(Array.from({ length: 8 }, (_, i) => pending(businesses[i % 4], 5))), 1, "a declared 5 MB row still reserves 2 x 50 MB: a token takes up to the bucket cap");
+    assert.equal(await reserved(), 100 * MB);
+    await refused(db.query(...pending(businesses[1], 1)));
+    await db.query(...ready(businesses[1], 50));
+    await refused(db.query(...ready(businesses[1], 1)));
+  });
+  await check(`${database}: media video budget: ready rows hold their bytes; parallel ready inserts admit exactly what fits; exactly 150 MB is allowed (#2653)`, async () => {
+    await reset();
+    assert.equal(await parallel(Array.from({ length: 8 }, (_, i) => ready(businesses[i % 4], 40))), 3);
+    assert.equal(await reserved(), 120 * MB);
+    await refused(db.query(...ready(businesses[0], 31)));
+    await db.query(...ready(businesses[0], 30));
+    assert.equal(await reserved(), 150 * MB);
+    await refused(db.query(...ready(businesses[1], 1)));
+  });
+  await check(`${database}: media video budget: finalize never raises a row's reservation; a token window and a delete keep 50 MB for 2 hours (#2653)`, async () => {
+    await reset();
+    await db.query(...ready(businesses[0], 50));
+    const id = (await db.query(...pending(businesses[1], 50))).rows[0].id;
+    assert.equal(await reserved(), 150 * MB);
+    await db.query("update public.media_assets set status='ready', bytes=$2, updated_at=now() where id=$1", [id, 50 * MB]);
+    assert.equal(await reserved(), 150 * MB, "ready now = 50 MB + the 50 MB token window, no more than pending held");
+    await refused(db.query("update public.media_assets set bytes=$2 where id=$1", [id, 60 * MB]));
+    await db.query("update public.media_assets set updated_at = now() - interval '3 hours' where id=$1", [id]);
+    assert.equal(await reserved(), 100 * MB, "window over");
+    await db.query("update public.media_assets set deleted_at=now(), updated_at=now() where id=$1", [id]);
+    assert.equal(await reserved(), 100 * MB, "a delete keeps 50 MB for the token window");
+    await refused(db.query(...ready(businesses[2], 51)));
+    await db.query("update public.media_assets set deleted_at=now() - interval '3 hours', updated_at=now() - interval '3 hours' where id=$1", [id]);
+    assert.equal(await reserved(), 50 * MB);
+    await db.query(...ready(businesses[2], 100));
+    await refused(db.query("update public.media_assets set deleted_at=null where id=$1", [id]));
+  });
+  await check(`${database}: media video budget: reclaim frees room, clearing it is checked again, and thousands of rows sum in SQL (#2653)`, async () => {
+    await reset();
+    const big = (await db.query(...ready(businesses[0], 100))).rows[0].id;
+    await db.query(...ready(businesses[1], 50));
+    await db.query("update public.media_assets set storage_reclaimed_at=now() where id=$1", [big]);
+    assert.equal(await reserved(), 50 * MB);
+    await db.query(...ready(businesses[2], 100));
+    await refused(db.query("update public.media_assets set storage_reclaimed_at=null where id=$1", [big]));
+    await reset();
+    await db.query(`insert into public.media_assets(${cols},status,updated_at) select $1::uuid, $1::text||'/'||g||'.mp4', md5(g::text)||md5(g::text), 'video','video/mp4',150*1024,5000,'ai','ready', now() - interval '3 hours' from generate_series(1,1001) g`, [businesses[3]]);
+    assert.equal(await reserved(), 1001 * 150 * 1024);
+    await refused(db.query(...ready(businesses[0], 4)));
     await db.query("insert into public.media_assets(business_id,path,sha256,bytes) values ($1::uuid,$1::text||'/p.jpg',$2,200000000)", [businesses[0], sha()]);
   });
 }
