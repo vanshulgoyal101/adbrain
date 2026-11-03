@@ -8,7 +8,6 @@ import { resetTrackingStatusCache, type TrackingEvent, type TrackingStatus } fro
 import { reviewDtoSchema } from "@/lib/campaign/connect-contracts";
 import { buildCanonicalReviewPayload, runPreflight, type PreflightInput } from "@/lib/campaign/preflight";
 import { prepareCampaignReview, type PreflightLoaders } from "@/lib/campaign/preflight-service";
-import { REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
 import { websiteGoalOpen } from "@/lib/campaign/website-tracking";
 import type { DraftRecord } from "@/lib/campaign/draft-store";
 
@@ -132,13 +131,18 @@ describe("core: a website signup or sales goal needs its tracking to have report
     expect(runPreflight(value)).not.toHaveProperty("pixelId");
   });
 
-  it("warns honestly that a sales goal learns from about 50 sales a week, without touching the budget", async () => {
-    const review = runPreflight(input("sales", { pixelId, status: { ...(await statuses.leadReady()), counts: { Lead: 0, Purchase: 3 } } }));
+  it("warns that few purchases make sales results vary, in the owner's language, without a 50-sales bar or touching the budget", async () => {
+    const value = input("sales", { pixelId, status: { ...(await statuses.leadReady()), counts: { Lead: 0, Purchase: 3 } } });
+    const review = runPreflight(value);
     expect(review.blockers).toEqual([]);
-    expect(review.planWarnings).toContain(REVIEW_WARNINGS.sales);
-    expect(REVIEW_WARNINGS.sales.length).toBeLessThanOrEqual(200);
+    expect(review.planWarnings).toContain("With few recent purchases, results and spending can vary. We won't increase your budget or change your goal.");
+    expect(review.planWarnings?.join(" ")).not.toMatch(/50/);
     expect(review.perAdSetDailyBudgetRupees).toBe(200);
-    expect(runPreflight(input("leads", { pixelId, status: await statuses.leadReady() })).planWarnings ?? []).not.toContain(REVIEW_WARNINGS.sales);
+    expect(review.websiteGoal).toBe("sales");
+    const hindi = runPreflight({ ...value, locale: "hi" });
+    expect(hindi.planWarnings).toContain("हाल में कम खरीदारी हुई हो, तो नतीजों और खर्च में उतार-चढ़ाव आ सकता है। हम आपका बजट नहीं बढ़ाएँगे और लक्ष्य नहीं बदलेंगे।");
+    expect(reviewDtoSchema.parse(hindi).planWarnings).toEqual(hindi.planWarnings);
+    expect(runPreflight(input("leads", { pixelId, status: await statuses.leadReady() })).planWarnings ?? []).not.toContainEqual(expect.stringMatching(/purchases/));
   });
 });
 
