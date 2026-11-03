@@ -50,6 +50,11 @@ export function mediaTranslator(words?: Words<"media">) {
   return createTranslator({ locale: words?.locale ?? "en", messages: { media: words?.messages ?? en.media }, namespace: "media" });
 }
 
+/** #1438: the WhatsApp message card and preview (`whatsappMessage`); English when none are passed. */
+export function whatsappMessageTranslator(words?: Words<"whatsappMessage">) {
+  return createTranslator({ locale: words?.locale ?? "en", messages: { whatsappMessage: words?.messages ?? en.whatsappMessage }, namespace: "whatsappMessage" });
+}
+
 /** "3h ago" / "3 घंटे पहले" from the verdict words' age steps (#1438). */
 export function ageText(t: ReturnType<typeof verdictTranslator>, iso: string, now = new Date()): string {
   const age = ageParts(iso, now);

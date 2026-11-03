@@ -1662,6 +1662,48 @@
       "tooSmall": "Too small ({width} px wide). Use the original photo, not a screenshot or a WhatsApp copy."
     }
   },
+  "whatsappMessage": {
+    "languages": {
+      "auto": "Auto (follows each ad)",
+      "en": "English",
+      "hi": "Hindi",
+      "hinglish": "Hinglish",
+      "pa": "Punjabi"
+    },
+    "language": "Language",
+    "autoHint": "Each campaign writes its message in its ad's language. Saving keeps these words for every campaign.",
+    "welcome": "Welcome message",
+    "button": "Button",
+    "buttons": {
+      "none": "None",
+      "call": "Call now",
+      "questions": "Quick questions"
+    },
+    "callsGoToAds": "Calls go to the WhatsApp number on your ads.",
+    "callsGoTo": "Calls go to <b>{number}</b>, your Page's WhatsApp, unless a campaign picks another number.",
+    "pickUp": "Pick up during ad hours, or a missed call costs you the enquiry.",
+    "question": "Question {n}",
+    "example": "e.g. {example}",
+    "exampleFallback": "What's the price?",
+    "optional": "Optional",
+    "questionsHint": "Customers tap a question; there's no pre-typed message.",
+    "prefill": "Pre-typed message",
+    "prefillHint": "Short, in the customer's words. One question.",
+    "title": "WhatsApp message",
+    "unsaved": "Unsaved changes",
+    "yours": "Your message",
+    "suggested": "Suggested",
+    "description": "What customers see after tapping your ad. Your WhatsApp Business app greeting is separate.",
+    "saveFailed": "Couldn't save your WhatsApp message. Try again.",
+    "saveFailedShort": "Couldn't save.",
+    "saved": "Saved. New WhatsApp campaigns will use it.",
+    "reset": "Back to the suggested message.",
+    "save": "Save WhatsApp message",
+    "resetButton": "Reset to suggested",
+    "preview": "WhatsApp preview",
+    "questionsToTap": "Questions to tap",
+    "readyToSend": "Ready to send: "
+  },
   "create": {
     "title": "Create ads",
     "description": "Say who you want to reach. You check every ad before it runs.",
