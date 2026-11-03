@@ -76,6 +76,7 @@ describe("plan check (#419)", () => {
       story: "No 9:16 ad: Reels and Stories placements will crop or skip it",
       budget: "Budget is below what Meta needs to learn (about 50 results a week); results may be slow",
       websiteBudget: "Budget is below what Meta needs to learn (about 50 landing-page views a week); visits may be slow",
+      sales: "Meta learns a sales goal from about 50 sales a week. With fewer, results may be slow; your budget stays as you set it",
     });
     // #2599: a website ad learns from landing-page views, so its warning counts those, not chats.
     expect(reviewWarnings({ destination: "website", storyReady: true, perAdSetDailyBudgetRupees: 100, costPerResultRupees: 20 })).toEqual([REVIEW_WARNINGS.websiteBudget]);

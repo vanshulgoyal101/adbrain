@@ -38,12 +38,12 @@ const review = {
 const operation = { operationId: "o1", businessId: "b1", kind: "campaign_create", idempotencyKey: "k", requestHash: "h", connectionGeneration: 1,
   state: "running", phase: "campaign", leaseUntil: null, attemptCount: 1, campaignId: null, externalIds: [] as string[], sanitizedError: null } satisfies OperationRecord;
 
-function launch(website: string, reviewed: string | null = websiteAdLink(website)) {
+function launch(website: string, reviewed: string | null = websiteAdLink(website), websiteGoal?: ReviewDTO["websiteGoal"]) {
   const business = { name: "Cedar Ridge Chiropractic", website, locations: ["Austin, Texas"], offers: [], whatsapp_template: null };
   const businesses = { select: () => businesses, eq: () => businesses, maybeSingle: async () => ({ data: business, error: null }) };
   const creatives = { select: () => creatives, in: () => creatives, eq: () => creatives, then: (resolve: (value: unknown) => void) => resolve({ data: [creative], error: null }) };
   const database = { from: (table: string) => (table === "businesses" ? businesses : creatives) } as never;
-  return executeReviewedCampaign({ database, operationDatabase: database, actor: { businessId: "b1" } as never, draft, review: { ...review, websiteUrl: reviewed }, operation: { ...operation, externalIds: [] } });
+  return executeReviewedCampaign({ database, operationDatabase: database, actor: { businessId: "b1" } as never, draft, review: { ...review, websiteUrl: reviewed, ...(websiteGoal ? { websiteGoal } : {}) }, operation: { ...operation, externalIds: [] } });
 }
 
 beforeEach(() => {
@@ -82,5 +82,18 @@ describe("core: website launch (#2599)", () => {
     const result = await launch("https://cedarridgechiro.com", null);
     expect(result.kind).not.toBe("succeeded");
     expect(meta.createLeadCampaign).not.toHaveBeenCalled();
+  });
+
+  // #2714: Meta's signup and sales payload is B2's (#2713); until then a conversion review never launches as traffic.
+  it.each(["leads", "sales"] as const)("refuses a reviewed %s goal before Meta, and saves nothing", async (websiteGoal) => {
+    const result = await launch("https://cedarridgechiro.com", undefined, websiteGoal);
+    expect(result.kind).not.toBe("succeeded");
+    expect(meta.createLeadCampaign).not.toHaveBeenCalled();
+    expect(meta.saveCampaign).not.toHaveBeenCalled();
+  });
+
+  it("a reviewed visits goal still launches and saves as traffic", async () => {
+    expect((await launch("https://cedarridgechiro.com", undefined, "visits")).kind).toBe("succeeded");
+    expect(meta.saveCampaign.mock.calls[0][1]).toMatchObject({ objective: "traffic" });
   });
 });

@@ -1,6 +1,8 @@
 import type { DraftInput } from "@/lib/campaign/connect-contracts";
 import type { translator } from "@/i18n/locale";
 import type { WebsiteBlocker } from "@/lib/campaign/website-review";
+import type { AppLocale } from "@/i18n/locale";
+import type { ConversionGoal, TrackingBlocker } from "@/lib/campaign/website-tracking";
 
 /** #2333: Review's blocker sentences, in the owner's language. */
 export type ReviewSay = ReturnType<typeof translator<"review">>;
@@ -26,6 +28,23 @@ export function websiteBlockerWords(problem: WebsiteBlocker, say: ReviewSay): st
     case "websiteStatus": return say("websiteStatus", { host: problem.host, status: problem.status, coded: problem.status ? "yes" : "no" });
     case "websiteRedirect": return say("websiteRedirect", { host: problem.host, finalHost: problem.finalHost, known: problem.finalHost ? "yes" : "no" });
     default: return say(problem.key, { host: problem.host });
+  }
+}
+
+/** #2714: a date in the checked window, as the owner reads it (India time). */
+function day(iso: string, locale: AppLocale): string {
+  return new Intl.DateTimeFormat(locale === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(iso));
+}
+
+/** #2714: why the chosen tracking can't measure this goal yet, with the window it checked and when it last heard. */
+export function trackingBlockerWords(problem: TrackingBlocker, goal: ConversionGoal, say: ReviewSay, locale: AppLocale): string {
+  switch (problem.key) {
+    case "trackingNone": case "trackingChoose": return say(problem.key, { goal });
+    case "trackingUnreadable": return say("trackingUnreadable", { reconnect: problem.reconnect ? "yes" : "no" });
+    default: return say(problem.key, {
+      goal, since: day(problem.since, locale), until: day(problem.until, locale),
+      seen: problem.lastSeenAt ? "yes" : "no", lastSeen: problem.lastSeenAt ? day(problem.lastSeenAt, locale) : "",
+    });
   }
 }
 
