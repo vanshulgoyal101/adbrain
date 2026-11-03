@@ -19,7 +19,7 @@ const post = async () => {
   return POST(new Request("https://adbrain.vanshul.com/api/media/sign", { method: "POST", body: JSON.stringify(body) })) as Promise<Response>;
 };
 
-beforeEach(() => { vi.clearAllMocks(); m.sign.mockResolvedValue({ duplicate: false, id: "x", path: "p", token: "t", fit: { level: "ready" } }); });
+beforeEach(() => { vi.clearAllMocks(); m.sign.mockResolvedValue({ duplicate: false, id: "x", bucket: "media", path: "p", token: "t", fit: { level: "ready" } }); });
 
 describe("POST /api/media/sign (#1209, #784)", () => {
   it("without the owner's current confirmation: 409 MEDIA_RIGHTS_REQUIRED, nothing signed", async () => {

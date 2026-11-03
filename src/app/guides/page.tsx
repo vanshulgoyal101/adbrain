@@ -24,7 +24,7 @@ export default function GuidesPage() {
         {MARKETING_GUIDES.map((guide) => <li key={guide.slug} className="py-6">
           <h2 className="!mt-0"><Link href={`/guides/${guide.slug}`}>{guide.title}</Link></h2>
           <p>{guide.description}</p>
-          <Link href={`/guides/${guide.slug}`} className="mt-3 inline-flex items-center gap-2 text-sm">
+          <Link href={`/guides/${guide.slug}`} className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm">
             Read guide <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </li>)}

@@ -3,12 +3,11 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowDown, ArrowRight, Brain, Check, CirclePause, MapPin, MessageCircle, ShieldCheck } from "lucide-react";
+import { ArrowDown, ArrowRight, Check, CirclePause, MapPin, MessageCircle, ShieldCheck } from "lucide-react";
 import { MARKETING_FAQS } from "@/lib/seo/jsonLd";
 import { PRICING_FAQS, PRICING_POINTS } from "@/lib/pricing-words";
 import { IDEAS } from "@/lib/ideas";
-import { LEGAL_LINKS } from "@/lib/legal-links";
-import { SIGN_IN_HREF } from "@/lib/site";
+import { PublicFooter, PublicHeader } from "@/components/public-chrome";
 import styles from "./marketing-home.module.css";
 
 // Digits only, for wa.me; unset renders no support link (#289: the owner supplies the number).
@@ -26,14 +25,7 @@ export function MarketingHome() {
   return (
     <div className={styles.page}>
       <a href="#main-content" className={styles.skip}>Skip to content</a>
-      <header className={styles.header}>
-        <Link href="/" aria-label="AdBrain home" className={styles.logo}><Brain aria-hidden="true" size={26} /> AdBrain</Link>
-        <nav aria-label="Main navigation">
-          <Link href="/ideas" className={styles.exampleLink}>Campaign ideas</Link>
-          <a href="#cycle" className={styles.exampleLink}>How it works</a>
-          <Link href={SIGN_IN_HREF} className={styles.signIn}>Sign in <ArrowRight aria-hidden="true" size={16} /></Link>
-        </nav>
-      </header>
+      <PublicHeader nav={<><Link href="/ideas" className={styles.exampleLink}>Campaign ideas</Link><a href="#cycle" className={styles.exampleLink}>How it works</a></>} />
       <main id="main-content">
         <section className={styles.hero} aria-labelledby="hero-title">
           <div className={styles.heroMedia}>
@@ -106,7 +98,7 @@ export function MarketingHome() {
           <div>{MARKETING_FAQS.map((faq) => <details key={faq.question}><summary>{faq.question}</summary><p>{faq.answer}</p></details>)}</div>
         </section>
       </main>
-      <footer className={styles.footer}><span>AdBrain</span><nav aria-label="Resources and legal"><Link href="/guides">Guides</Link>{LEGAL_LINKS.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav></footer>
+      <PublicFooter />
     </div>
   );
 }

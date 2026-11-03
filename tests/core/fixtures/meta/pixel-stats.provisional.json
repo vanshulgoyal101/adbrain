@@ -1,0 +1,16 @@
+{
+  "source": "PROVISIONAL (#2712): the documented shape of `GET /{pixel}/stats?aggregation=event` (hourly buckets, each with per-event counts), not a recording. The test pixel has only test events, which Meta keeps out of stats. Replace with a real read once the pixel has real events (#2595).",
+  "leadOnly": {
+    "data": [
+      { "start_time": "2026-11-01T09:00:00+0000", "aggregation": "event", "data": [{ "value": "PageView", "count": 41 }, { "value": "Lead", "count": 2 }] },
+      { "start_time": "2026-11-01T14:00:00+0000", "aggregation": "event", "data": [{ "value": "PageView", "count": 17 }] }
+    ]
+  },
+  "pageViewsOnly": {
+    "data": [{ "start_time": "2026-10-31T11:00:00+0000", "aggregation": "event", "data": [{ "value": "PageView", "count": 9 }] }],
+    "paging": { "cursors": { "before": "CURSOR", "after": "PAGE2" }, "next": "https://graph.facebook.com/v26.0/next" }
+  },
+  "purchasePage2": {
+    "data": [{ "start_time": "2026-11-02T08:00:00+0000", "aggregation": "event", "data": [{ "value": "Purchase", "count": 1 }] }]
+  }
+}

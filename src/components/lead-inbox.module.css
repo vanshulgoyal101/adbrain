@@ -29,8 +29,9 @@
 .search button { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; }
 .toolbar select { border: 1px solid var(--color-slate-300); border-radius: 6px; background: white; height: 42px; padding: 0 28px 0 10px; font-size: var(--text-xs); max-width: 100%; }
 .resultCount { display: flex; align-items: center; gap: 12px; min-height: 36px; font-size: 13px; color: var(--color-slate-500); }
-/* Nothing to say (no filter, everything loaded): keep the live region, drop the empty row. */
-.resultCount:not(:has(button)):has(> span:empty) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+/* Nothing to say (no filter, everything loaded): keep the live region, drop the row, even while a background
+   refresh after a check says "Loading" (#2748: showing it moved the whole list down and back). */
+.resultCount[data-quiet] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .resultCount button { color: var(--color-blue-700); text-decoration: underline; }
 .table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; text-align: left; }
 .table th { font-size: 13px; font-weight: 500; background: var(--color-slate-50); color: var(--color-slate-500); padding: 11px 12px; border-block: 1px solid var(--color-slate-200); text-transform: none; letter-spacing: 0; }
@@ -49,9 +50,6 @@
 .name { font: inherit; text-align: left; }
 button.name { min-height: 44px; color: inherit; cursor: pointer; }
 button.name:hover { text-decoration: underline; }
-/* #1260 slice 4: 1280+ shows the list and the selected person side by side. */
-.panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); gap: 24px; align-items: start; }
-.panes tr[data-selected] { background: var(--color-slate-50); }
 .detail { position: sticky; top: 16px; display: grid; gap: 20px; padding: 20px; border: 1px solid var(--color-slate-200); border-radius: 10px; background: white; }
 .detailHead { display: flex; gap: 12px; align-items: center; }
 .detailHead h3 { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
@@ -119,6 +117,10 @@ button.name:hover { text-decoration: underline; }
 }
 /* #1260 slice 4: the left pane at 1280+ uses the same rows as a phone. */
 @media (min-width: 1280px) {
+  /* #1260 slice 4: the list and the selected person side by side. #2748: CSS decides this, not JS, so the server
+     paints the final layout and the detail fills its reserved column on hydration without moving the list. */
+  .panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); gap: 24px; align-items: start; }
+  .panes tr[data-selected] { background: var(--color-slate-50); }
   .panes .table, .panes .table tbody { display: block; }
   .panes .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .panes .table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 18px; padding: 18px 0; border-bottom: 1px solid var(--color-slate-200); }
@@ -132,7 +134,8 @@ button.name:hover { text-decoration: underline; }
   .panes .table td { grid-column: 2; }
   .panes .table .person { grid-column: 1 / -1; display: grid !important; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 12px; align-items: center; font-size: 15px; }
   .panes .avatar { display: grid; place-items: center; grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background: var(--color-slate-100); color: var(--color-slate-700); font-size: 14px; font-weight: 600; }
-  .panes .name { min-width: 0; overflow-wrap: anywhere; }
+  /* #2748: the server's name text and the hydrated name button take the same box. */
+  .panes .name { display: flex; align-items: center; min-width: 0; min-height: 44px; overflow-wrap: anywhere; }
   .panes .rowState { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--color-slate-600); white-space: nowrap; }
   .panes .rowState[data-state="new"] { color: var(--color-blue-700); }
   .panes .rowState[data-state="new"]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }

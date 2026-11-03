@@ -11,7 +11,8 @@ import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { translator, type AppLocale } from "@/i18n/locale";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
 import { isAdvertiserWebsite, websiteAdLink, websiteBlocker } from "@/lib/campaign/website-review";
-import { creativesBlockerMessage, named, websiteBlockerWords } from "@/lib/campaign/review-blocker-words";
+import { creativesBlockerMessage, named, trackingBlockerWords, websiteBlockerWords } from "@/lib/campaign/review-blocker-words";
+import { conversionGoal, goalWordsMismatch, trackingBlocker, type ReviewTracking } from "@/lib/campaign/website-tracking";
 
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
@@ -78,6 +79,8 @@ export interface PreflightInput {
   website?: string | null;
   /** #2599: whether a website ad's link opens the advertiser's own site; a website ad without it is blocked. */
   websiteReach?: WebsiteReach;
+  /** #2714: the Brand's chosen tracking and what Meta reported, for a signup or sales goal; absent = not read. */
+  tracking?: ReviewTracking;
   geo: PreflightGeo;
   hash: (payload: string) => string;
   /** The business's own cost per chat or lead for this kind of campaign (#419 2b); unknown when absent. */
@@ -120,6 +123,7 @@ export interface CanonicalReviewPayload {
   whatsappNumber: string | null;
   websiteUrl?: string | null;
   websiteGoal?: Exclude<DraftInput["websiteGoal"], "visits">;
+  pixelId?: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
   excludeFacebookReels?: true;
@@ -187,6 +191,8 @@ export function buildCanonicalReviewPayload(
     ...(reviewDestination(input.draft) === "website" ? { websiteUrl: websiteAdLink(input.website) } : {}),
     // #2710: visits keep the phase-1 hash; conversion goals must never review as traffic.
     ...(input.draft.destination === "website" && input.draft.websiteGoal && input.draft.websiteGoal !== "visits" ? { websiteGoal: input.draft.websiteGoal } : {}),
+    // #2714: the tracking launch will optimise for; choosing another one on the Brand after Review changes the plan.
+    ...(conversionGoal(input.draft.destination, input.draft.websiteGoal) ? { pixelId: input.tracking?.pixelId ?? null } : {}),
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
@@ -252,6 +258,16 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
       const reason = websiteProblem.missing ? "REVIEW_NO_WEBSITE" : "REVIEW_WEBSITE_UNREACHABLE";
       blockers.push(blocker("PREFLIGHT_BLOCKED", reason, websiteBlockerWords(websiteProblem, say), { kind: "open_brand" }));
     }
+    const goal = conversionGoal(draft.destination, draft.websiteGoal);
+    // #2714: a signup or sales goal is measured by the Brand's chosen tracking; a connection blocker is the one fix first.
+    const trackingProblem = goal && input.connection?.canCreatePaused ? trackingBlocker(goal, input.tracking) : null;
+    if (goal && trackingProblem) {
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_TRACKING", trackingBlockerWords(trackingProblem, goal, say, input.locale ?? "en"), { kind: "open_brand" }));
+    }
+    const wrongWords = goal ? goalWordsMismatch(goal, input.creatives) : null;
+    if (goal && wrongWords) {
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_GOAL_WORDS", say("goalWords", { goal, named: wrongWords.headline ? "yes" : "no", headline: wrongWords.headline ?? "" })));
+    }
   } else if (destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", say("noWebsite"), { kind: "open_brand" }));
   }
@@ -307,6 +323,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     destination,
     storyReady: input.creatives.length > 0 && input.creatives.every((creative) => creative.storyReady === true),
     perAdSetDailyBudgetRupees, costPerResultRupees: input.costPerResultRupees,
+    websiteGoal: payload.websiteGoal,
   });
   if (input.pictureNotice) planWarnings.unshift(input.pictureNotice);
   // #418 rule 7: an ad that tells customers what to send should match what WhatsApp pre-types. Never a blocker.
@@ -340,6 +357,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
     ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
     ...(payload.websiteGoal ? { websiteGoal: payload.websiteGoal } : {}),
+    ...(payload.pixelId ? { pixelId: payload.pixelId } : {}),
     currency: "INR",
     perAdSetDailyBudgetRupees,
     adSetCount,

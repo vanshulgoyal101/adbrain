@@ -45,6 +45,11 @@ export function noticesTranslator(words?: Words<"notices">) {
   return createTranslator({ locale: words?.locale ?? "en", messages: { notices: words?.messages ?? en.notices }, namespace: "notices" });
 }
 
+/** #778: the Photos page, upload sheet and Create choice (`media`, CPO #1868); English when none are passed. */
+export function mediaTranslator(words?: Words<"media">) {
+  return createTranslator({ locale: words?.locale ?? "en", messages: { media: words?.messages ?? en.media }, namespace: "media" });
+}
+
 /** "3h ago" / "3 घंटे पहले" from the verdict words' age steps (#1438). */
 export function ageText(t: ReturnType<typeof verdictTranslator>, iso: string, now = new Date()): string {
   const age = ageParts(iso, now);

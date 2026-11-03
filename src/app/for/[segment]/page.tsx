@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Brain, MessageCircle } from "lucide-react";
-import { LEGAL_LINKS } from "@/lib/legal-links";
-import { SIGN_IN_HREF } from "@/lib/site";
+import { MessageCircle } from "lucide-react";
+import { PublicFooter, PublicHeader } from "@/components/public-chrome";
 import { SEGMENTS, segmentBySlug, segmentWhatsAppHref, type Segment } from "@/lib/segments";
 import styles from "./segment.module.css";
 
@@ -65,10 +64,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
   const whatsapp = segmentWhatsAppHref(segment);
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <Link href="/" aria-label="AdBrain home" className={styles.logo}><Brain aria-hidden="true" size={24} /> AdBrain</Link>
-        <Link href={SIGN_IN_HREF} className={styles.signIn}>Sign in</Link>
-      </header>
+      <PublicHeader />
       <main>
         <section className={styles.hero} aria-labelledby="segment-title">
           <div className={styles.heroText}>
@@ -150,10 +146,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
           </section>
         )}
       </main>
-      <footer className={styles.footer}>
-        <span>AdBrain</span>
-        <nav aria-label="Legal">{LEGAL_LINKS.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

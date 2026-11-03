@@ -158,7 +158,8 @@ async function restoreAll(dir) {
     db.on("error", () => {});
     await db.connect();
     // The same Supabase stand-ins as `npm run test:meta-db`, plus room for the exported storage rows.
-    await db.query(`create role anon; create role authenticated; create role service_role bypassrls;
+    await db.query(`do $$ begin if not exists (select 1 from pg_roles where rolname = 'postgres') then create role postgres superuser; end if; end $$;
+create role anon; create role authenticated; create role service_role bypassrls;
 create schema auth; create table auth.users (id uuid primary key, email text);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 grant usage on schema auth, public to anon, authenticated, service_role;

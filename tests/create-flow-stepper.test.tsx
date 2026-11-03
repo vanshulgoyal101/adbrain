@@ -47,5 +47,15 @@ describe("<CreateFlow> stepper (#760)", () => {
     expect(screen.getByRole("radio", { name: "English" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "बनाना शुरू करें" })).toHaveAttribute("lang", "hi");
   });
+  it("says the brief review in Hindi, marked lang='hi' (#1438)", () => {
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Invite enquiries", started: true, turns: [], answers: [], phase: "review", prepared: { brief: "Use saved brand facts." },
+    }));
+    render(<CreateFlow business={business} opening={null} words={{ locale: "hi", messages: hi.create }}><aside>Brand context</aside></CreateFlow>);
+    expect(screen.getByRole("region", { name: "क्रिएटिव ब्रीफ़ जाँचें" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "क्रिएटिव ब्रीफ़" })).toHaveValue("Use saved brand facts.");
+    expect(screen.getByRole("button", { name: "लक्ष्य बदलें" })).toHaveAttribute("lang", "hi");
+    expect(screen.getByRole("button", { name: "3 विज्ञापन बनाएँ" })).toHaveAttribute("lang", "hi");
+    expect(screen.queryByText(/Generate 3 ads|Revise goal|Creative brief/)).toBeNull();
+  });
 });
-

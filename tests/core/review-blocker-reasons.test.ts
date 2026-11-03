@@ -48,7 +48,20 @@ const cases: [string, (value: PreflightInput) => void][] = [
   ["REVIEW_INTERESTS_UNRESOLVED", (v) => { v.geo.unresolvedInterests = ["Wellness"]; }],
   ["REVIEW_AD_POLICY", (v) => { v.vertical = "chiropractic clinic"; v.creatives[0].headline = "Cures back pain"; }],
   ["REVIEW_WEBSITE_UNREACHABLE", (v) => { v.draft.destination = "website"; v.websiteReach = { url: "https://cedarridgechiro.com", ok: false, problem: "status", status: 503 }; }],
+  ["REVIEW_TRACKING", (v) => { toSignups(v); v.tracking = undefined; }],
+  ["REVIEW_GOAL_WORDS", (v) => { toSignups(v); v.creatives[0].cta = "Buy now"; }],
 ];
+
+/** #2714: a website signup campaign whose chosen tracking has reported a Lead (shape: tests/core/meta-pixels.test.ts). */
+function toSignups(v: PreflightInput) {
+  v.draft.destination = "website";
+  v.draft.websiteGoal = "leads";
+  v.websiteReach = { url: "https://cedarridgechiro.com", ok: true, finalUrl: "https://cedarridgechiro.com/" };
+  v.tracking = { pixelId: "9000000000000003", status: {
+    state: "ready", unreadable: null, pixelId: "9000000000000003", pixels: [], window: { since: "2026-10-26T16:00:00+0000", until: "2026-11-02T16:00:00+0000" },
+    lastSeenAt: "2026-11-01T14:00:00+0000", counts: { Lead: 2, Purchase: 0 }, totalEvents: 60,
+  } };
+}
 
 describe("Review blockers carry their own reason (#688)", () => {
   it("a complete draft has no blockers", () => {

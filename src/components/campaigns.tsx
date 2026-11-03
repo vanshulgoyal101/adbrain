@@ -119,10 +119,11 @@ import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow }
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { ageText, campaignsTranslator, verdictTranslator, type Words } from "@/i18n/words";
 import { useNotices } from "@/i18n/notices";
+import { CampaignSyncNotice } from "@/components/campaign-sync-notice";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
-import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
+import { skippedCampaignLines, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
 import { activateTrustLine } from "@/lib/trust-lines";
 import type { AdReview, CampaignDeliverySnapshot, LeadForm } from "@/lib/meta/client";
@@ -407,6 +408,7 @@ function BusinessCampaigns({
   const [cardNotice, setCardNotice] = useState<{ id: string; message: string } | null>(null);
   const activationReviewRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [syncDetails, setSyncDetails] = useState<{ notice: string; lines: string[] } | null>(null);
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
@@ -934,10 +936,9 @@ function BusinessCampaigns({
           setLastSynced(completedAt);
           saveCampaignSyncTime(syncStorageKey, completedAt.getTime());
         }
-        const skippedNotice = syncSkippedRef.current.count
-          ? ` ${describeSkippedCampaigns(syncSkippedRef.current.named, syncSkippedRef.current.count, campaignWords)}` : "";
+        const { count: skippedCount, named } = syncSkippedRef.current;
         // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
-        if (!background || data.nextCursor || skippedNotice) setNotice(`${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedNotice}`);
+        if (!background || data.nextCursor) { const text = `${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : ""}`; setNotice(text); setSyncDetails(skippedCount ? { notice: text, lines: skippedCampaignLines(named, skippedCount, campaignWords) } : null); } else setSyncDetails(skippedCount ? { notice: tc("sync.unchangedCount", { n: skippedCount }), lines: [] } : null);
       } else {
         setSyncError(data.error ?? tc("sync.failed"));
       }
@@ -1593,8 +1594,7 @@ function BusinessCampaigns({
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
-      {/* #847: sync and save news is a quiet line, as on Enquiries, not a green box on every visit. */}
-      <p ref={noticeRef} aria-live="polite" className={notice ? "scroll-mt-20 text-sm text-slate-600" : "sr-only"}>{notice}</p>
+      <CampaignSyncNotice ref={noticeRef} notice={notice} details={syncDetails?.notice === notice ? syncDetails.lines : []} detailsLabel={tc("sync.details")} />
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
@@ -1746,7 +1746,7 @@ function BusinessCampaigns({
                 const interests = review.audienceInterests?.map((interest) => interest.name).join(", ");
                 const fact = (label: string, value: ReactNode) => <div key={label} className="grid grid-cols-[5.75rem_1fr] gap-3 sm:grid-cols-[7.5rem_1fr] sm:gap-4"><dt className="text-slate-500">{label}</dt><dd className="min-w-0 wrap-break-word text-slate-900">{value}</dd></div>;
                 const facts = <>
-                  <dl className="grid gap-2.5">{input.destination === "website" && <WebsiteReviewFacts url={reviewWebsiteUrl(review.websiteUrl, business.website)} words={campaignWords} />}
+                  <dl className="grid gap-2.5">{input.destination === "website" && <WebsiteReviewFacts url={reviewWebsiteUrl(review.websiteUrl, business.website)} ads={adsFor(input.creativeIds)} words={campaignWords} />}
                     {fact("Budget", <>{formatMoney(review.totalDailyBudgetRupees)} a day{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> ({formatMoney(review.perAdSetDailyBudgetRupees)} per ad set)</span>}</>)}
                     {fact("Where", <>{review.resolvedAreaLabel ?? "Needs review"}, {input.targeting.location?.cityScope === "city_only" ? "city only (no added radius)" : `${input.targeting.location?.radiusKm ?? 25} km radius`}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea)}</span>}</>)}
                     {fact("Who", <>Ages {age?.min ?? "unset"}–{age?.max === 65 ? "65+" : age?.max ?? "unset"}, {{ all: "all genders", men: "men", women: "women" }[input.targeting.gender ?? "all"]}{interests ? `, interested in ${interests}` : input.targeting.audience?.interestNames.length ? ", interests need resolving" : ", no interest narrowing"}</>)}
@@ -2256,7 +2256,7 @@ function BusinessCampaigns({
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
-                    website={business.website} words={campaignWords}
+                    website={business.website} websiteAds={destination === "website" ? adsFor(selected) : undefined} words={campaignWords}
                     weeklyCap={composerCap}
                     audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
@@ -2295,7 +2295,7 @@ function BusinessCampaigns({
       </div>
 
       <div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-3 flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold text-slate-900">
             {tc("header.title")}{" "}
             <span className="font-normal text-slate-400">
@@ -2320,7 +2320,7 @@ function BusinessCampaigns({
               <Button
                 size="sm"
                 variant="outline"
-                className="max-sm:h-11"
+                className="min-w-28 whitespace-nowrap max-sm:h-11"
                 onClick={() => syncFromMeta()}
                 data-product-event="campaign.sync"
                 disabled={syncing}
@@ -2330,14 +2330,14 @@ function BusinessCampaigns({
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                {tc(syncing ? "header.syncing" : "header.sync")}
+                <span className="grid text-left"><span aria-hidden={syncing || undefined} className={syncing ? "invisible col-start-1 row-start-1" : "col-start-1 row-start-1"}>{tc("header.sync")}</span><span aria-hidden={!syncing || undefined} className={syncing ? "col-start-1 row-start-1" : "invisible col-start-1 row-start-1"}>{tc("header.syncing")}</span></span>
               </Button>
             </div>
           )}
         </div>
         {/* #1286: one line, always there (two lines' room on a phone), for sync news: a late answer never moves the list. */}
         {metaReady && <p data-sync-status aria-live="polite" className="-mt-1 mb-3 min-h-10 text-xs text-slate-500 sm:min-h-5">
-          {syncError ? <span className="font-medium text-danger">{syncError}</span> : lastSynced && !syncing ? tc("header.synced", { age: ageText(verdictTranslator(verdictWords), lastSynced.toISOString()) }) : null}
+          {syncError ? <span className="font-medium text-danger">{syncError}</span> : lastSynced && !syncing ? `${tc("header.synced", { age: ageText(verdictTranslator(verdictWords), lastSynced.toISOString()) })}${syncDetails && syncDetails.notice !== notice ? ` · ${syncDetails.notice}` : ""}` : null}
         </p>}
         {(() => {
           const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => !goneInMeta(c) && campaignDestination(c, results[c.id]) === "whatsapp");
@@ -2362,7 +2362,7 @@ function BusinessCampaigns({
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
                 running={audienceEdit.status === "active"} prepared={preparedAudienceForm(audienceEdit.raw)}
                 onClose={() => { setAudienceEdit(null); loadWaiting(); }}
-                onSaved={(message, form) => { const id = audienceEdit.id; setCampaigns(list => list.map(item => item.id === id ? withPreparedAudienceForm(item, form ?? null) : item)); setCardNotice({ id, message }); setAudienceEdit(null); }}
+                onSaved={(message, form) => { const id = audienceEdit.id; setCampaigns(list => list.map(item => item.id === id ? withPreparedAudienceForm(item, form ?? null) : item)); setCardNotice({ id, message }); setAudienceEdit(null); }} words={campaignWords}
               />
             )}
             {budgetEdit && (

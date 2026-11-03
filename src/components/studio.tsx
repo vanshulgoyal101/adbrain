@@ -198,11 +198,11 @@ export function Studio({
 
   function adList(list: Creative[]) {
     return (
-      <ul className="flex gap-3 overflow-x-auto p-1 lg:grid lg:grid-cols-2">
+      <ul className="flex snap-x gap-3 overflow-x-auto p-1 lg:grid lg:grid-cols-2">
         {list.map((creative) => {
           const statusLabel = creative.status === "approved" ? "Approved" : "Needs review";
           return (
-            <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
+            <li key={creative.id} className="w-[calc(50%-0.375rem)] min-w-0 shrink-0 snap-start sm:w-40 lg:w-auto">
               <button
                 type="button"
                 aria-pressed={creative.id === selectedCreative?.id}
@@ -548,7 +548,7 @@ export function Studio({
 
       {items.length > 0 && (
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <fieldset className="flex min-w-0 flex-wrap gap-1">
+          <fieldset className="flex min-w-0 gap-1 overflow-x-auto">
             <legend className="sr-only">Ad status</legend>
             {(
               [
@@ -560,7 +560,7 @@ export function Studio({
               <label
                 key={value}
                 className={cn(
-                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
+                  "flex min-h-11 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
                   filter === value
                     ? "bg-slate-100 font-medium text-slate-900"
                     : "text-slate-600 hover:bg-slate-50",
@@ -618,9 +618,9 @@ export function Studio({
               const list = adList(batch.items);
               const label = `${batch.made ? `Made ${formatBatchDate(batch.made)}` : "Earlier ads"} · ${batch.items.length} ${batch.items.length === 1 ? "ad" : "ads"}`;
               return index === 0
-                ? <div key={batch.key}><p className="px-1 pb-1 text-xs font-medium text-slate-500">{label}</p>{list}</div>
+                ? <div key={batch.key}><p suppressHydrationWarning className="px-1 pb-1 text-xs font-medium text-slate-500">{label}</p>{list}</div>
                 : <details key={batch.key} open={batch.items.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                    <summary className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
+                    <summary suppressHydrationWarning className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
                     {list}
                   </details>;
             })}

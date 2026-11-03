@@ -773,6 +773,25 @@
       "reconnectBy": "Reconnect Facebook by {date} to keep managing your ads.",
       "savedDrafts": "Saved drafts"
     },
+    "launchReview": {
+      "readyTitle": "Ready for campaign review",
+      "reviewTitle": "Review before creation",
+      "readyBody": "AdBrain creates this campaign paused. Nothing spends until you activate it. Review these settings; Meta eligibility and audience checks still apply.",
+      "pausedBody": "AdBrain creates this campaign paused. Nothing spends until you activate it.",
+      "leadDestination": "Lead destination",
+      "whatsappChat": "WhatsApp chat {number}",
+      "whatsappPending": "WhatsApp chat (number verification pending)",
+      "chooseLeadForm": "Choose a lead form",
+      "shownOn": "Shown on Facebook, Instagram and Messenger",
+      "ad": "Ad",
+      "selected": "{n} selected",
+      "selectAd": "Select an ad",
+      "dailyBudget": "Total daily budget",
+      "perDay": "{money} a day",
+      "enterBudget": "Enter a budget",
+      "audience": "Audience",
+      "audienceNote": "Meta may reach people beyond your age range and interests; never outside your area."
+    },
     "filters": {
       "search": "Search campaigns",
       "status": "Campaign status",
@@ -802,6 +821,8 @@
       "offline": "Couldn't reach Meta. Check your connection, then try Sync from Meta again.",
       "named": "\"{name}\" was left unchanged: {reason}.",
       "unnamed": "A campaign was left unchanged: {reason}.",
+      "unchangedCount": "{n} left unchanged.",
+      "details": "Details",
       "rest": "{n, plural, one {# more campaign was left unchanged.} other {# more campaigns were left unchanged.}}",
       "reasons": {
         "not_running": "it's archived or deleted in Meta",
@@ -892,7 +913,9 @@
         "REVIEW_AD_POLICY": "Edit the ad's wording",
         "REVIEW_INTERESTS_UNRESOLVED": "Edit the interests",
         "REVIEW_WHATSAPP_MESSAGE": "Edit the WhatsApp message",
-        "REVIEW_MEDIA_RIGHTS": "Confirm your photo rights"
+        "REVIEW_MEDIA_RIGHTS": "Confirm your photo rights",
+        "REVIEW_TRACKING": "Check tracking in Your business",
+        "REVIEW_GOAL_WORDS": "Choose your ads"
       }
     },
     "destination": {
@@ -915,6 +938,11 @@
       "goalWebsiteHint": "Meta counts people who open your page",
       "reviewWebsite": "People will go to",
       "needsLink": "Needs a working link",
+      "button": "Button on Facebook",
+      "buttonLearnMore": "Learn more",
+      "buttonShopNow": "Shop now",
+      "buttonSignUp": "Sign up",
+      "adNumber": "Ad {n}",
       "expectWebsite": "What to expect: AdBrain hasn’t run enough website campaigns yet to quote a cost per visit. Meta reviews new ads first, usually within 24 hours, and nothing spends until you go live."
     },
     "editAd": {
@@ -945,6 +973,53 @@
       "switchedRunning": "New audience is on and the old one is stopped. Meta reviews the ads again and learning restarts.",
       "switchedPaused": "New audience is in place. The campaign stays paused until you resume it.",
       "cancelled": "New audience cancelled. The current one keeps running."
+    },
+    "audienceEdit": {
+      "title": "Edit audience",
+      "description": "{name}. Leave anything blank to keep it as it is.",
+      "close": "Close edit audience",
+      "newArea": "New area",
+      "newAreaHelp": "Replaces where the ads show. Places outside the new area are left out automatically.",
+      "searchArea": "Search a city or state",
+      "alsoLeaveOut": "Also leave out",
+      "alsoLeaveOutHelp": "Added to the places already left out. Nothing left out is ever put back.",
+      "searchLeaveOut": "Search a place to leave out",
+      "areaExclusions": "Leave out places outside the area",
+      "areaExclusionsHelp": "Adds the states and far-off cities outside where the ads show now, as new campaigns do. Needed before an older campaign can be turned on.",
+      "aroundCity": "Around each city",
+      "cityAndNearby": "City and nearby",
+      "cityOnly": "City only",
+      "radiusLabel": "Distance around each city in km",
+      "km": "km",
+      "youngest": "Youngest",
+      "oldest": "Oldest",
+      "keep": "Keep",
+      "who": "Who sees the ads",
+      "keepAsIs": "Keep as it is",
+      "everyone": "Everyone",
+      "women": "Women",
+      "men": "Men",
+      "language": "Language",
+      "anyLanguage": "Any language",
+      "onlyLanguages": "Only people who use…",
+      "languageHelp": "The language people use Facebook and Instagram in. Most people in India use English, so pick it too unless you mean otherwise.",
+      "nextRun": "This campaign is running, so we won't touch it in Meta and its learning carries on. Your change is saved for its next run.",
+      "savedNextRun": "Saved for your next run. The running campaign isn't changed, so its learning carries on.",
+      "accepted": "Meta accepted this change for {n, plural, one {1 ad set} other {# ad sets}}.",
+      "inPlace": "It updates in place, so learning carries on.",
+      "changed": "Audience changed. The campaign stays paused.",
+      "failed": "Couldn't change the audience. Nothing changed.",
+      "offline": "No connection. Nothing changed; try again.",
+      "cancel": "Cancel",
+      "saveNextRun": "Save for next run",
+      "save": "Save change",
+      "check": "Check with Meta",
+      "errors": {
+        "agesBoth": "Enter both ages, or leave both blank to keep them.",
+        "agesRange": "Ages go from 18 to 65, youngest first.",
+        "languages": "Pick at least one language, or choose Any language.",
+        "nothing": "Change the area, an exclusion, the ages, who sees the ads or the language."
+      }
     }
   },
   "errors": {
@@ -1406,7 +1481,85 @@
     "websiteUnreachable": "AdBrain couldn't open your website {host}. Check the address on the Your business page, or make sure the site is up, then review again.",
     "websiteStatus": "Your website {host} answered with an error{coded, select, yes { ({status})} other {}} when AdBrain opened it. Check the address on the Your business page, or make sure the site is up, then review again.",
     "websiteBlocked": "{host} isn't a public website address. Add your business's public site on the Your business page.",
-    "websiteRedirect": "Your website {host} sends visitors on to {known, select, yes {{finalHost}} other {another site}}. Add the address of your own site on the Your business page, so the ad opens your business."
+    "websiteRedirect": "Your website {host} sends visitors on to {known, select, yes {{finalHost}} other {another site}}. Add the address of your own site on the Your business page, so the ad opens your business.",
+    "trackingNone": "Your ad account has no website tracking (Meta pixel) yet, so Meta can't count {goal, select, leads {signups from this ad} other {sales from this ad}}. Add tracking to your site, or choose the visits goal.",
+    "trackingChoose": "Choose which website tracking counts {goal, select, leads {your signups} other {your sales}} on the Your business page, then review again.",
+    "trackingUnreadable": "AdBrain couldn't read your website tracking from Meta. {reconnect, select, yes {Connect Facebook again, then review again.} other {Try reviewing again in a few minutes.}}",
+    "trackingQuiet": "Your website tracking reported nothing from {since} to {until}{seen, select, yes { (last heard {lastSeen})} other {}}. Check that it is on your site, then review again, or choose the visits goal.",
+    "trackingEventMissing": "Your website tracking works but reported no {goal, select, leads {signup (Lead)} other {sale (Purchase)}} from {since} to {until}. Make sure your site sends it, then review again, or choose the visits goal.",
+    "goalWords": "The ad {named, select, yes {\"{headline}\"} other {you chose}} asks people {goal, select, leads {to buy, but this campaign looks for signups} other {to sign up, but this campaign looks for sales}}. Choose an ad that fits, or change the goal."
+  },
+  "media": {
+    "page": {
+      "title": "Photos",
+      "description": "Your own photos for {name}'s ads, and every ad AdBrain made."
+    },
+    "library": {
+      "tabs": {
+        "label": "Show",
+        "all": "All",
+        "photos": "Photos",
+        "made": "Made by AdBrain"
+      },
+      "yours": "Your photos",
+      "made": "Made by AdBrain",
+      "add": "Add photos",
+      "empty": "No photos yet. Add your own work: finished jobs, your shop, your team.",
+      "noAds": "No ads yet. Every ad you create is saved here.",
+      "photo": "Photo",
+      "adFallback": "Ad creative",
+      "approved": "Approved",
+      "showMore": "Show more ({n} left)",
+      "assetType": {
+        "logo": "Logo",
+        "product_photo": "Product photo",
+        "past_ad": "Past ad",
+        "other": "Asset"
+      }
+    },
+    "tile": {
+      "more": "More for {name}",
+      "rename": "Rename",
+      "download": "Download",
+      "delete": "Delete",
+      "name": "Name",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saveFailed": "Couldn't save the change. Try again.",
+      "downloadFailed": "Download failed. Try again.",
+      "deleted": "Deleted ‘{name}’",
+      "undo": "Undo",
+      "ok": "OK",
+      "deleteFailed": "Couldn't delete the photo. Try again."
+    },
+    "upload": {
+      "title": "Add photos",
+      "description": "Your own work: finished jobs, your shop, your team.",
+      "choose": "Choose photos",
+      "close": "Close",
+      "picks": "Your picks",
+      "checking": "Checking…",
+      "uploading": "Uploading…",
+      "added": "Added",
+      "tryAgain": "Try again",
+      "progress": "Uploading {n} of {total}…",
+      "keepOpen": "You can close this. Keep this page open until it finishes.",
+      "add": "{count, plural, =0 {Add photos} one {Add 1 photo} other {Add # photos}}",
+      "duplicate": "You already added this one; using the saved copy.",
+      "failed": "This didn't upload. Check your connection and tap Try again.",
+      "limitCount": "You can add up to {max} at a time. Add the rest after these finish.",
+      "rightsRequired": "Tick the box above to add your photos.",
+      "consentFailed": "Your confirmation couldn't be saved. Try again.",
+      "format": "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
+      "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again."
+    },
+    "fit": {
+      "ok": "Ready for Feed, Stories and Reels",
+      "square": "Square: fine for Feed.",
+      "wide": "Wide ({ratio}): Feed shows it; Stories and Reels need a tall picture.",
+      "landscape": "landscape",
+      "tooSmall": "Too small ({width} px wide). Use the original photo, not a screenshot or a WhatsApp copy."
+    }
   },
   "create": {
     "title": "Create ads",
@@ -1446,6 +1599,27 @@
     "editBrief": "Edit brief",
     "makeThree": "Make 3 ads",
     "start": "Start creating",
-    "aboutTwoMinutes": "About 2 minutes. Nothing is published."
+    "aboutTwoMinutes": "About 2 minutes. Nothing is published.",
+    "conversation": "Creative conversation",
+    "history": "Conversation history",
+    "whatIllWrite": "What I'll write about · Edit",
+    "editLater": "You can edit it once these ads are ready.",
+    "creating": "Creating images and copy…",
+    "preparing": "Preparing your brief…",
+    "stillMakingOne": "1 more ad is still being made. It's added here when it's ready.",
+    "stillMakingMany": "{count} more ads are still being made. They're added here when they're ready.",
+    "reviewBrief": "Review creative brief",
+    "creativeBrief": "Creative brief",
+    "reviseGoal": "Revise goal",
+    "generateThree": "Generate 3 ads",
+    "changeAnswer": "Change my answer",
+    "checkSaved": "Check saved results",
+    "tryAgain": "Try again",
+    "startOver": "Start over",
+    "reviewAds": "Review ads",
+    "makeAnother": "Make another",
+    "selected": "{count} selected",
+    "nextCampaign": "Next: set up campaign",
+    "moreIdeas": "Ideas for more ads"
   }
 }

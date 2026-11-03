@@ -2,7 +2,6 @@ import "server-only";
 
 import { createHmac } from "node:crypto";
 import { GRAPH } from "@/lib/meta/graph-version";
-import { z } from "zod";
 import { FACEBOOK_FEED_POSITIONS, FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
 import type { CampaignDeliverySnapshot } from "./types";
@@ -20,8 +19,11 @@ import { expandPlaceAliases } from "./geo-aliases";
 import {
   fetchAdImage, findAdVideoByName, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoLookup, type AdVideoState,
 } from "./media";
+import { readTrackingStatus, type TrackingEvent, type TrackingStatus } from "./pixels";
+import { collectLeadPages, formPageSchema, leadPageSchema, parseLeadPage, type MetaLeadPage } from "./lead-pages";
+export type { MetaLeadPage } from "./lead-pages";
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
-import { destinationCTA, destinationPlan, hasPlacementCreative, isWebsiteLink, leavesAudienceNetworkOut, websiteUrlTags, type AdDestination } from "./destinations";
+import { campaignObjective, destinationCTA, destinationPlan, destinationProblem, hasPlacementCreative, leavesAudienceNetworkOut, promotedObject, websiteUrlTags, type AdDestination, type WebsiteGoal } from "./destinations";
 export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, type DestinationPlan } from "./destinations";
 import { CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
 export { CREATIVE_FEATURES_OPT_OUT, CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
@@ -48,47 +50,6 @@ export interface MetaLead {
   field_data: { name: string; values: string[] }[];
   /** The ad's campaign; absent for leads Meta didn't get from an ad (e.g. organic or test leads). */
   campaign_id?: string;
-}
-
-export interface MetaLeadPage<T> {
-  data: T[];
-  after: string | null;
-}
-
-const formPageSchema = z.object({ id: z.string().min(1).max(200), name: z.string().max(1000), status: z.string() });
-const leadPageSchema = z.object({
-  id: z.string().min(1).max(200),
-  created_time: z.string().refine(value => !value || Number.isFinite(Date.parse(value))).optional().default(""),
-  field_data: z.array(z.object({ name: z.string(), values: z.array(z.string()) })).default([]),
-  campaign_id: z.string().regex(/^\d{1,64}$/).optional().catch(undefined),
-});
-
-function parseLeadPage<T>(value: unknown, schema: z.ZodType<T>, previous?: string | null): MetaLeadPage<T> {
-  const page = z.object({
-    data: z.array(schema).max(200),
-    paging: z.object({ next: z.string().optional(), cursors: z.object({ after: z.string().min(1).max(4096) }).partial().optional() }).optional(),
-  }).safeParse(value);
-  if (!page.success) throw new MetaError("Malformed Meta lead page.");
-  const after = page.data.paging?.next ? page.data.paging.cursors?.after : null;
-  if (after === undefined || (after !== null && (after === previous || !/^[A-Za-z0-9_+/=-]+$/.test(after)))) {
-    throw new MetaError("Invalid Meta lead page cursor.");
-  }
-  return { data: page.data.data, after };
-}
-
-async function collectLeadPages<T>(read: (after: string | null) => Promise<MetaLeadPage<T>>): Promise<T[]> {
-  const values: T[] = [];
-  const seen = new Set<string>();
-  let after: string | null = null;
-  for (let count = 0; count < 100; count++) {
-    const page = await read(after);
-    values.push(...page.data);
-    if (!page.after) return values;
-    if (seen.has(page.after)) throw new MetaError("Repeated Meta lead page cursor.");
-    seen.add(page.after);
-    after = page.after;
-  }
-  throw new MetaError("Meta lead page limit exceeded; use resumable sync.");
 }
 
 export interface CreativeInput {
@@ -1202,6 +1163,11 @@ export class MetaClient {
     return findAdVideoByName((path, opts) => this.graph(path, opts), this.creds.adAccountId, name);
   }
 
+  /** #2712: whether the ad account's pixel saw Lead/Purchase events in the last 7 days (read-only). */
+  trackingStatus(options: { pixelId?: string; need?: TrackingEvent; now?: Date } = {}): Promise<TrackingStatus> {
+    return readTrackingStatus((path, opts) => this.graph(path, opts), this.creds.adAccountId, options);
+  }
+
   /**
    * Create a PAUSED Advantage+ lead campaign: campaign → ad set → (creative →
    * ad) per creative. Nothing spends until you set it ACTIVE in Meta.
@@ -1241,6 +1207,7 @@ export class MetaClient {
     location?: GeoTargeting;
     excludedLocation?: GeoTargeting;
     destination?: AdDestination;
+    websiteGoal?: WebsiteGoal; pixelId?: string; // #2713: a website goal (absent: visits); leads/sales optimise for this pixel's Lead/Purchase
     whatsappNumber?: string;
     /** Numbers bound to this AdBrain business (#253); a non-Page number must be one of them. */
     boundWhatsAppNumbers?: readonly string[];
@@ -1281,10 +1248,9 @@ export class MetaClient {
       throw new MetaError("Choose a supported gender demographic before creating ads.");
     }
     const requested = params.destination ?? "instant_form";
-    if (requested === "instant_form" && !params.leadFormId) throw new MetaError("Choose an active lead form before creating ads.");
-    if (requested === "website" && !isWebsiteLink(params.link)) throw new MetaError("Add the business's own website (starting https://) before creating website ads.");
+    const problem = destinationProblem(requested, params);
+    if (problem) throw new MetaError(problem);
     if (requested === "whatsapp") {
-      if (!params.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(params.whatsappNumber)) throw new MetaError("Review the Page-linked WhatsApp Business number before creating ads.");
       if (await this.getWhatsAppNumber(params.whatsappNumber, params.boundWhatsAppNumbers ?? []) !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
     }
 
@@ -1311,7 +1277,7 @@ export class MetaClient {
       method: "POST",
       form: {
         name: params.name,
-        objective: requested === "whatsapp" ? "OUTCOME_ENGAGEMENT" : requested === "website" ? "OUTCOME_TRAFFIC" : "OUTCOME_LEADS",
+        objective: campaignObjective(requested, params.websiteGoal),
         status: "PAUSED",
         special_ad_categories: "[]",
         is_adset_budget_sharing_enabled: "false",
@@ -1395,7 +1361,7 @@ export class MetaClient {
     const plannedCreatives: Record<string, string>[] = [];
     const creativeForms = new Map<string, Record<string, string>>();
     const makeAdSet = async (dest: AdDestination, v: AdSetVariant, i: number) => {
-      const dp = destinationPlan(dest);
+      const dp = destinationPlan(dest, params.websiteGoal);
       const suffix =
         v.label ?? (variants.length > 1 ? `Ad set ${i + 1}` : "Ad set");
       const form = {
@@ -1407,7 +1373,7 @@ export class MetaClient {
         optimization_goal: dp.optimizationGoal,
         bid_strategy: "LOWEST_COST_WITHOUT_CAP",
         destination_type: dp.destinationType,
-        promoted_object: JSON.stringify({ page_id: this.creds.pageId, ...(dest === "whatsapp" ? { whatsapp_phone_number: params.whatsappNumber } : {}) }),
+        promoted_object: promotedObject(dest, { ...params, pageId: this.creds.pageId }),
         targeting: targetingFor(v, dest),
       };
       const created = await this.graph<{ id: string }>(`${acct}/adsets`, { method: "POST", form });
