@@ -45,6 +45,7 @@ const editAdCreativeMigration = await readFile(join(root, "db/migrations/2026102
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const mediaLibraryMigration = await readFile(join(root, "db/migrations/20261103_media_library.sql"), "utf8");
 const mediaUploadQuotaMigration = await readFile(join(root, "db/migrations/20261103_media_upload_quota.sql"), "utf8");
+const mediaVideoReclaimMigration = await readFile(join(root, "db/migrations/20261105_media_video_reclaim.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
@@ -1659,6 +1660,44 @@ async function verifyMediaUploadQuota(db, database) {
     await db.query(insert, row("image", "ai"));
     for (let i = 0; i < 3; i++) await db.query(insert, row("video"));
     await assert.rejects(db.query(insert, row("video")), { code: "P0001", message: "MEDIA_QUOTA" });
+  });
+}
+
+async function verifyMediaVideoBudget(db, database) {
+  const MB = 1024 * 1024;
+  const owner = randomUUID(), businesses = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  for (const [i, id] of businesses.entries()) await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,$3)", [id, owner, `Budget ${i}`]);
+  const sha = () => createHash("sha256").update(randomUUID()).digest("hex");
+  const insert = "insert into public.media_assets(business_id,path,sha256,kind,mime,bytes,duration_ms,source) values ($1::uuid,$2,$3,'video','video/mp4',$4,10000,'ai') returning id";
+  const args = (business, mb) => [business, `${business}/${randomUUID()}.mp4`, sha(), mb * MB];
+  const held = async () => Number((await db.query("select coalesce(sum(bytes),0) as n from public.media_assets where kind='video' and storage_reclaimed_at is null and deleted_at is null")).rows[0].n);
+  const asService = async (work) => { const c = client(database); await c.connect(); try { await c.query("begin"); await c.query("set local role service_role"); const r = await work(c); await c.query("commit"); return r; } catch (error) { await c.query("rollback").catch(() => undefined); throw error; } finally { await c.end(); } };
+  await check(`${database}: media video budget: 150 MB across all businesses holds under parallel inserts, reclaim and delete free room, a re-upload is checked again (#2653)`, async () => {
+    await db.query("delete from public.media_assets where kind='video'");
+    const results = await Promise.allSettled(Array.from({ length: 8 }, (_, i) => asService((c) => c.query(insert, args(businesses[i % 4], 40)))));
+    assert.equal(results.filter(r => r.status === "fulfilled").length, 3, "3 x 40 MB fit under 150 MB; the other five are refused");
+    for (const r of results.filter(r => r.status === "rejected")) assert.equal(r.reason.message, "MEDIA_VIDEO_BUDGET");
+    assert.equal(await held(), 120 * MB);
+    await assert.rejects(db.query(insert, args(businesses[0], 31)), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+    const small = (await db.query(insert, args(businesses[0], 30))).rows[0].id;
+    assert.equal(await held(), 150 * MB, "exactly at the budget is allowed");
+    await assert.rejects(db.query(insert, args(businesses[1], 1)), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+    // More rows than any API page (1,000) of tiny videos still sum in SQL.
+    await db.query("update public.media_assets set storage_reclaimed_at = now() where kind='video'");
+    assert.equal(await held(), 0);
+    await db.query("insert into public.media_assets(business_id,path,sha256,kind,mime,bytes,duration_ms,source) select $1::uuid, $1::text||'/'||g||'.mp4', md5(g::text)||md5(g::text), 'video','video/mp4',150*1024, 5000, 'ai' from generate_series(1,1001) g", [businesses[2]]);
+    assert.equal(await held(), 1001 * 150 * 1024);
+    await assert.rejects(db.query(insert, args(businesses[3], 4)), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+    await db.query("update public.media_assets set deleted_at = now() where business_id=$1 and kind='video'", [businesses[2]]);
+    assert.equal(await held(), 0);
+    // A reclaimed video re-uploaded (storage_reclaimed_at cleared) is checked like a new one, and so is an un-delete.
+    await db.query(insert, args(businesses[3], 140));
+    await assert.rejects(db.query("update public.media_assets set storage_reclaimed_at = null where id=$1", [small]), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+    await assert.rejects(db.query("update public.media_assets set deleted_at = null where business_id=$1 and bytes=$2", [businesses[2], 150 * 1024]), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+    await db.query("update public.media_assets set bytes = bytes - 1 where business_id=$1 and kind='video' and bytes = $2", [businesses[3], 140 * MB]);
+    await assert.rejects(db.query("update public.media_assets set bytes = bytes + 11 * 1024 * 1024 where business_id=$1 and kind='video' and storage_reclaimed_at is null", [businesses[3]]), { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+    await db.query("insert into public.media_assets(business_id,path,sha256,bytes) values ($1::uuid,$1::text||'/p.jpg',$2,200000000)", [businesses[0], sha()]);
   });
 }
 
@@ -3507,6 +3546,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(mediaUploadQuotaMigration);
       await db.query(mediaUploadQuotaMigration);
       await verifyMediaUploadQuota(db,database);
+      await db.query(mediaVideoReclaimMigration);
+      await db.query(mediaVideoReclaimMigration);
+      await verifyMediaVideoBudget(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);

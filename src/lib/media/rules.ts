@@ -31,8 +31,6 @@ export const MEDIA_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 /** Designer (#744): Stories' own cap; the words take `{max}`, so this one number changes it everywhere. */
 export const MEDIA_VIDEO_MAX_SECONDS = 60;
 export const MEDIA_MONTHLY_VIDEOS = 3;
-/** #2653 (CTO): the most video bytes our Storage holds at once, across all businesses (Free plan: 613 of 1,024 MB used, alert at 819 MB). */
-export const MEDIA_VIDEO_BUDGET_BYTES = 150 * 1024 * 1024;
 export const MEDIA_VIDEO_EXTENSION: Record<MediaVideoMime, string> = { "video/mp4": "mp4", "video/quicktime": "mov" };
 
 export function isMediaVideoMime(value: string): value is MediaVideoMime {
