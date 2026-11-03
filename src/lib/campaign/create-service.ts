@@ -194,10 +194,10 @@ export async function executeReviewedCampaign(input: {
         recordProductEvent({ kind: "workflow", name: "campaign.learning_snapshot", outcome: "failed", businessId: actor.businessId });
       }
       // #789: an unverified photo is never stored as "no photo"; the next results refresh links these ads instead.
-      if (adResultsEnabled() && (!launchSnapshot || launchSnapshot.mediaUnknown)) {
-        recordProductEvent({ kind: "workflow", name: "campaign.ad_attribution", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: "media_unverified" } });
-      } else if (adResultsEnabled()) {
-        try {
+      if (adResultsEnabled()) {
+        if (!launchSnapshot || launchSnapshot.mediaUnknown) {
+          recordProductEvent({ kind: "workflow", name: "campaign.ad_attribution", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: "media_unverified" } });
+        } else try {
           await recordAdAssetLinks(createAdminClient() as unknown as SupabaseClient, buildAdAssetLinks({
             businessId: actor.businessId, campaignId: campaign.id, creativeIds: draft.input.creativeIds,
             mediaByCreative: new Map(launchSnapshot.creatives.map(creative => [creative.id, creative.mediaAssetId])),
