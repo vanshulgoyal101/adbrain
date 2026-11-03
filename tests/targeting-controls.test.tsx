@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InfoHint } from "@/components/ui/info-hint";
+import hi from "../messages/hi.json";
 import {
   TargetingControls,
   defaultTargeting,
@@ -412,5 +413,28 @@ describe("<TargetingControls> age", () => {
     const [min] = screen.getAllByRole("spinbutton");
     fireEvent.change(min, { target: { value: "30" } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ ageMin: 30 }));
+  });
+});
+
+describe("<TargetingControls> in Hindi (#1438)", () => {
+  it("shows the audience step in the owner's language", () => {
+    render(
+      <TargetingControls
+        words={{ locale: "hi", messages: hi.campaigns }}
+        value={{ ...defaultTargeting, locationMode: "manual", ageMode: "manual", ageMin: 25, ageMax: 60, gender: "women" }}
+        onChange={vi.fn()}
+        brandAreas={[]}
+        plannedExclusions={["Ajmer"]}
+      />,
+    );
+    expect(screen.getByText("विज्ञापन कहाँ दिखें?")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "खुद चुनें" })).toHaveLength(2);
+    expect(screen.getByPlaceholderText("जैसे Mohali, Punjab…")).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "सबसे कम उम्र" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "महिलाएँ" })).toBeInTheDocument();
+    expect(screen.getByText(/यह किसे दिखेगा:/).parentElement).toHaveTextContent(
+      "यह किसे दिखेगा: अभी चुने जाने वाले इलाके के लोग, उम्र 25–60। महिलाएँ। Ajmer को छोड़कर।",
+    );
+    expect(screen.queryByText(/Who’ll see this|Choose myself|Let AdBrain decide/)).toBeNull();
   });
 });
