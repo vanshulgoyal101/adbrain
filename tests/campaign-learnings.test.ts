@@ -122,7 +122,9 @@ describe("learning ledger snapshot (#588)", () => {
     const stamped = { data: [{ id: "c1", media_asset_id: "m2", updated_at: "2026-11-03T10:00:05.000000+00:00" }], error: null };
     expect(await readCreativeMedia(database({ creatives: stamped, media_assets: assets }) as never, "b1", ["c1"], { readAt: new Map([["c1", "2026-11-03T10:00:00+00:00"]]) })).toBeNull();
     expect(await readCreativeMedia(database({ creatives: { data: [{ id: "c1", media_asset_id: "m1" }], error: null }, media_assets: assets }) as never, "b1", ["c1"], { readAt: new Map([["c1", "2026-11-03T10:00:00+00:00"]]) })).toBeNull();
-    const same = await readCreativeMedia(database({ creatives: stamped, media_assets: assets }) as never, "b1", ["c1"], { readAt: new Map([["c1", "2026-11-03T10:00:05Z"]]) });
+    // Same millisecond, a later microsecond: still a different update.
+    expect(await readCreativeMedia(database({ creatives: stamped, media_assets: assets }) as never, "b1", ["c1"], { readAt: new Map([["c1", "2026-11-03T10:00:05.000400+00:00"]]) })).toBeNull();
+    const same = await readCreativeMedia(database({ creatives: stamped, media_assets: assets }) as never, "b1", ["c1"], { readAt: new Map([["c1", "2026-11-03T10:00:05.000000+00:00"]]) });
     expect([...same!]).toEqual([["c1", { id: "m2", kind: "image", source: "brand" }]]);
 
     calls.length = 0;

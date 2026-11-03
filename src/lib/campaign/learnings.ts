@@ -143,7 +143,7 @@ async function lookupCreativeMedia(database: SupabaseClient, businessId: string,
     const rows = links as { id: string; media_asset_id: string | null; updated_at?: string | null }[];
     if (readAt && [...readAt].some(([id, at]) => {
       const row = rows.find(link => link.id === id);
-      return !row?.updated_at || Date.parse(row.updated_at) !== Date.parse(at);
+      return !row?.updated_at || row.updated_at !== at;
     })) return null;
     const linked = rows.filter(link => link.media_asset_id);
     if (!linked.length) return media;
