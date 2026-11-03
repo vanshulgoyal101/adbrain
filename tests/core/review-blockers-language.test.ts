@@ -3,7 +3,7 @@ import en from "../../messages/en.json";
 import hi from "../../messages/hi.json";
 import { runPreflight, type PreflightInput } from "@/lib/campaign/preflight";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
-import { reviewBlockerReasons } from "@/lib/meta/connect-contracts";
+import { blockerSchema, reviewBlockerReasons } from "@/lib/meta/connect-contracts";
 import type { AppLocale } from "@/i18n/locale";
 
 // #2333 slice 2: Review's blocker sentences and their fix buttons in the owner's language.
@@ -154,7 +154,7 @@ const ENGLISH: Record<string, string> = {
   "two interests": "Meta didn't recognise the interests \"Wellness\" and \"Yoga\". Edit or remove them.",
   "interests unnamed": "Meta didn't recognise some audience interests. Edit or remove them.",
   // #2714's website goal sentences.
-  "tracking none": "No website tracking source is available to this ad account, so Meta can't count website leads from this ad. If your site already uses a Meta pixel, check that this ad account can use it; if not, set one up in Events Manager. Until then, choose the visits goal.",
+  "tracking none": "No website tracking source is available to this ad account, so Meta can't count website leads from this ad. Check that this ad account can use your Meta pixel, or set one up in Events Manager. Until then, choose the visits goal.",
   "tracking choose": "Choose which website tracking counts your sales on the Your business page, then review again.",
   "tracking unread": "AdBrain couldn't read your website tracking from Meta. Try reviewing again in a few minutes.",
   "tracking reconnect": "AdBrain couldn't read your website tracking from Meta. Connect Facebook again, then review again.",
@@ -206,7 +206,7 @@ describe("Review blockers in the owner's language (#2333)", () => {
   // #2714 (CPO): website leads, never "signups"; an empty list may be missing access; Sign up only names the button.
   it("says website leads, the empty-list access check and the button in Hindi", () => {
     expect(message("hi", (v) => toGoal(v, "leads", { state: "none", pixelId: null, window: null, counts: null, totalEvents: null }), "REVIEW_TRACKING"))
-      .toBe("इस विज्ञापन खाते के लिए वेबसाइट ट्रैकिंग का कोई स्रोत उपलब्ध नहीं है, इसलिए Meta इस विज्ञापन से वेबसाइट लीड नहीं गिन सकता। अगर आपकी साइट पहले से Meta पिक्सेल इस्तेमाल करती है, तो देखें कि यह विज्ञापन खाता उसे इस्तेमाल कर सकता है; नहीं तो Events Manager में एक सेट करें। तब तक वेबसाइट विज़िट का लक्ष्य चुनें।");
+      .toBe("इस विज्ञापन खाते को वेबसाइट ट्रैकिंग का कोई स्रोत उपलब्ध नहीं है, इसलिए Meta वेबसाइट लीड नहीं गिन सकता। देखें कि यह खाता आपका Meta पिक्सेल इस्तेमाल कर सकता है, या Events Manager में एक सेट करें। तब तक वेबसाइट विज़िट का लक्ष्य चुनें।");
     expect(message("hi", (v) => toGoal(v, "leads", { state: "event_missing", counts: { Lead: 0, Purchase: 4 } }), "REVIEW_TRACKING"))
       // The month short name comes from Node's ICU and differs by version (अक्टू॰ / अक्तू॰).
       .toMatch(/^आपकी वेबसाइट ट्रैकिंग चल रही है, पर 26 \S+ से 2 \S+ तक कोई वेबसाइट लीड \(Lead\) नहीं बताई। पक्का करें कि आपकी साइट उसे भेजती है, फिर से रिव्यू करें, या वेबसाइट विज़िट का लक्ष्य चुनें।$/);
@@ -215,6 +215,17 @@ describe("Review blockers in the owner's language (#2333)", () => {
     for (const locale of ["en", "hi"] as const) {
       for (const [, change, reason] of variants.filter(([name]) => name.startsWith("tracking") || name.startsWith("goal words"))) {
         expect(message(locale, change, reason)).not.toMatch(/signup|साइनअप/i);
+      }
+    }
+  });
+
+  // A blocker over the contract's length makes the browser reject the whole Review response.
+  it.each(variants)("%s: every blocker fits the Review contract in both languages", (_name, change) => {
+    for (const locale of ["en", "hi"] as const) {
+      const value = input();
+      change(value);
+      for (const blocker of runPreflight({ ...value, locale }).blockers) {
+        expect(blockerSchema.safeParse(blocker).success, `${locale} ${blocker.reason}: ${blocker.message.length}`).toBe(true);
       }
     }
   });
