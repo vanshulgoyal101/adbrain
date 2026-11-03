@@ -1,10 +1,9 @@
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowLeft, Brain, MessageCircle, ShieldCheck, Timer } from "lucide-react";
+import { MessageCircle, ShieldCheck, Timer } from "lucide-react";
+import { PublicFooter, PublicHeader } from "@/components/public-chrome";
 import { LoginExperience } from "@/components/login-experience";
 import { SupportLinkProvider } from "@/components/support-link";
 import { supportWhatsAppUrl } from "@/lib/support";
-import { LEGAL_LINKS } from "@/lib/legal-links";
 import { safeAuthRedirect } from "@/lib/auth-redirect";
 import styles from "./login.module.css";
 
@@ -31,10 +30,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
   return (
     <div className={styles.page}>
       <a href="#sign-in" className={styles.skipLink}>Skip to sign in</a>
-      <header className={styles.header}>
-        <Link href="/" aria-label="AdBrain home" className={styles.logo}><Brain aria-hidden="true" size={26} /> AdBrain</Link>
-        <Link href="/" className={styles.home}><ArrowLeft size={16} aria-hidden="true" /> Home</Link>
-      </header>
+      <PublicHeader action="home" />
       <main className={styles.main}>
         <section id="sign-in" tabIndex={-1} aria-labelledby="sign-in-title" className={styles.formColumn}>
           <div className={styles.formInner}>
@@ -65,12 +61,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
         </aside>
         )}
       </main>
-      <footer className={styles.footer}>
-        <span>AdBrain</span>
-        <nav aria-label="Legal">
-          {LEGAL_LINKS.map(({ href, label }) => <Link key={href} href={href}>{label}</Link>)}
-        </nav>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

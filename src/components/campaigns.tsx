@@ -938,7 +938,7 @@ function BusinessCampaigns({
         }
         const { count: skippedCount, named } = syncSkippedRef.current;
         // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
-        if (!background || data.nextCursor) { const text = `${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : ""}`; setNotice(text); setSyncDetails(skippedCount ? { notice: text, lines: skippedCampaignLines(named, skippedCount, campaignWords) } : null); }
+        if (!background || data.nextCursor) { const text = `${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : ""}`; setNotice(text); setSyncDetails(skippedCount ? { notice: text, lines: skippedCampaignLines(named, skippedCount, campaignWords) } : null); } else setSyncDetails(skippedCount ? { notice: tc("sync.unchangedCount", { n: skippedCount }), lines: [] } : null);
       } else {
         setSyncError(data.error ?? tc("sync.failed"));
       }
@@ -2295,7 +2295,7 @@ function BusinessCampaigns({
       </div>
 
       <div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-3 flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold text-slate-900">
             {tc("header.title")}{" "}
             <span className="font-normal text-slate-400">
@@ -2337,7 +2337,7 @@ function BusinessCampaigns({
         </div>
         {/* #1286: one line, always there (two lines' room on a phone), for sync news: a late answer never moves the list. */}
         {metaReady && <p data-sync-status aria-live="polite" className="-mt-1 mb-3 min-h-10 text-xs text-slate-500 sm:min-h-5">
-          {syncError ? <span className="font-medium text-danger">{syncError}</span> : lastSynced && !syncing ? tc("header.synced", { age: ageText(verdictTranslator(verdictWords), lastSynced.toISOString()) }) : null}
+          {syncError ? <span className="font-medium text-danger">{syncError}</span> : lastSynced && !syncing ? `${tc("header.synced", { age: ageText(verdictTranslator(verdictWords), lastSynced.toISOString()) })}${syncDetails && syncDetails.notice !== notice ? ` · ${syncDetails.notice}` : ""}` : null}
         </p>}
         {(() => {
           const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => !goneInMeta(c) && campaignDestination(c, results[c.id]) === "whatsapp");
