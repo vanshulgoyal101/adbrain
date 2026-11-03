@@ -2329,7 +2329,7 @@ function BusinessCampaigns({
               <Button
                 size="sm"
                 variant="outline"
-                className="max-sm:h-11"
+                className="min-w-28 whitespace-nowrap max-sm:h-11"
                 onClick={() => syncFromMeta()}
                 data-product-event="campaign.sync"
                 disabled={syncing}
