@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { AssetsLibrary } from "@/components/assets-library";
 import { MediaLibrary } from "@/components/media-library";
+import { MediaRightsConfirm } from "@/components/media-rights-confirm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -19,8 +20,8 @@ import { requestWords } from "@/i18n/request-locale";
 
 export const metadata = { title: "Photos" };
 
-export default async function AssetsPage({ searchParams }: { searchParams?: Promise<{ add?: string | string[] }> } = {}) {
-  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { add?: string | string[] })]);
+export default async function AssetsPage({ searchParams }: { searchParams?: Promise<{ add?: string | string[]; confirm?: string | string[] }> } = {}) {
+  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { add?: string | string[]; confirm?: string | string[] })]);
 
   if (!business) {
     return (
@@ -64,6 +65,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
     return (
       <div>
         <PageHeader title={t(videoEnabled ? "page.videoTitle" : "page.title")} description={<p>{t(videoEnabled ? "page.videoDescription" : "page.description", { name: business.name })}</p>} />
+        {params.confirm === "rights" && !consented && <MediaRightsConfirm words={words} businessId={business.id} vertical={business.vertical ?? null} />}
         <div className="mt-6">
           <MediaLibrary words={words} business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
             brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} videoEnabled={videoEnabled} />
@@ -71,6 +73,10 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
       </div>
     );
   }
+
+  // Uploads are off, but an ad can still carry a Brand photo that needs the owner's rights confirmation (#784).
+  const confirmRights = params.confirm === "rights" && !await hasCurrentMediaConsent(await createClient(), business).catch(() => false);
+  const confirmWords = confirmRights ? await requestWords("media") : undefined;
 
   return (
     <div>
@@ -80,6 +86,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
           <p>Every ad and upload for {business.name}, {sample ? "kept here until the account is handed over (sample ads can\u2019t be downloaded)." : "ready to download or share."}</p>
         }
       />
+      {confirmRights && <MediaRightsConfirm words={confirmWords} businessId={business.id} vertical={business.vertical ?? null} />}
       <div className="mt-6">
         <AssetsLibrary creatives={creatives} brandAssets={brandAssets} sample={sample} />
       </div>

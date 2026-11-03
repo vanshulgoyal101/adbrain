@@ -17,7 +17,8 @@ import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
 import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
-import { mediaUploadsEnabled } from "@/lib/media/store";
+import { mediaUploadsEnabled, pickedMediaViews } from "@/lib/media/store";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "Create ads",
@@ -25,8 +26,8 @@ export const metadata = {
     "Start with your customer goal and create campaign images and copy for review.",
 };
 
-export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[]; again?: string | string[] }> } = {}) {
-  const [business, params, words] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[] }), requestWords("create")]);
+export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[]; again?: string | string[]; photos?: string | string[] }> } = {}) {
+  const [business, params, words] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[]; photos?: string | string[] }), requestWords("create")]);
   const t = createAdsTranslator(words), lang = words.locale === "en" ? undefined : words.locale;
   // #1934: a returning owner's "New campaign" runs step 2 again.
   const again = params.again === "1";
@@ -79,7 +80,10 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
     [business.phone || brandDestination(business) === "website", t("missingPhone")],
   ].filter(([present]) => !present).map(([, label]) => label);
   // #371: Create opens on what the business's own campaigns achieved; a failed read just skips the line.
-  const [assets, evidence] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => [])]);
+  // #780 slice 2a: "Make ads from these" in the library; an unreadable pick just makes ads without it.
+  const pickedIds = mediaUploadsEnabled() ? String(params.photos ?? "").split(",").filter(Boolean) : [];
+  const [assets, evidence, photos] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => []),
+    pickedIds.length ? createClient().then((client) => pickedMediaViews(client, business.id, pickedIds)).catch(() => []) : []]);
   const hasPhotos = assets.some((a) => a.type === "product_photo");
   const visualsMissing = [!business.logo_url && t("logo"), !hasPhotos && t("photos")].filter(Boolean);
 
@@ -94,7 +98,7 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         </nav>
       )}
       <div id="create-flow" className="scroll-mt-4">
-      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)} words={words}>
+      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)} words={words} photos={photos}>
         <aside aria-label={t("details")} className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
             <span lang={lang}>{t("using", { name: business.name })}</span>{" "}

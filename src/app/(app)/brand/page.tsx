@@ -1,5 +1,5 @@
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
-import { localeChosen, setupWords } from "@/i18n/request-locale";
+import { localeChosen, requestWords, setupWords } from "@/i18n/request-locale";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
 import { SetupBusinessStep } from "@/components/setup-business-step";
@@ -47,6 +47,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
 
   // #847: Meta and WhatsApp connection status live in Settings only; the message itself is business content.
   const showMessage = Boolean(business && connection?.ready);
+  const whatsappWords = showMessage ? await requestWords("whatsappMessage") : undefined;
 
   return (
     <div>
@@ -84,7 +85,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
             {showMessage && (
               <section id="brand-whatsapp" className="scroll-mt-6">
                 {/* #840: suggestions are today's generated text, per language, from the Brand's offers and areas. */}
-                <WhatsAppMessageCard businessId={business.id} businessName={business.name} saved={business.whatsapp_template}
+                <WhatsAppMessageCard businessId={business.id} businessName={business.name} saved={business.whatsapp_template} words={whatsappWords}
                   firstOffer={business.offers?.[0]}
                   suggestedQuestions={Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => [language, suggestedQuestions(business, language)])) as Record<"en" | "hi" | "hinglish" | "pa", string[]>}
                   callNumber={whatsappStatus?.then((status) => status.state === "ready" ? status.numbers.find((number) => number.source === "page")?.masked ?? null : null)}

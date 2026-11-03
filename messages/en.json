@@ -961,6 +961,7 @@
         "REVIEW_AD_POLICY": "Edit the ad's wording",
         "REVIEW_INTERESTS_UNRESOLVED": "Edit the interests",
         "REVIEW_WHATSAPP_MESSAGE": "Edit the WhatsApp message",
+        "REVIEW_MEDIA_RIGHTS": "Confirm your photo rights",
         "REVIEW_TRACKING": "Check tracking in Your business",
         "REVIEW_GOAL_WORDS": "Choose your ads"
       }
@@ -1256,6 +1257,11 @@
     "planFailed": "Could not prepare the campaign plan.",
     "signInRequired": "Sign in required.",
     "businessMissing": "Business not found.",
+    "whatsappSignIn": "Sign in again to save.",
+    "whatsappQuestions": "Use 1 to 3 different questions of up to 40 characters.",
+    "whatsappGreetingLength": "Write a welcome of up to 300 characters.",
+    "whatsappPrefillLength": "Write a pre-typed message of up to 300 characters.",
+    "whatsappSaveFailed": "Couldn't save your WhatsApp message. Try again.",
     "mediaRightsRequired": "Confirm you own these photos or have permission to use them.",
     "mediaPeopleRequired": "Confirm that everyone recognisable has agreed to appear in your ads.",
     "mediaConsentNotSaved": "Your confirmation couldn't be saved. Try again.",
@@ -1563,6 +1569,7 @@
     "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
     "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
     "whatsappMessage": "Your WhatsApp message: {problem}",
+    "mediaRights": "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta.",
     "noLeadForm": "Choose an active lead form from your Facebook Page in the Lead form field.",
     "noWebsite": "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.",
     "adPolicy": "\"{term}\" in the ad \"{named, select, yes {{headline}} other {without a headline}}\" is {kind, select, health {a health promise} other {a promise}} Meta rejects. Edit the ad to describe the service instead.",
@@ -1624,7 +1631,10 @@
         "product_photo": "Product photo",
         "past_ad": "Past ad",
         "other": "Asset"
-      }
+      },
+      "select": "Pick {name}",
+      "makeAds": "Make ads from these ({n})",
+      "maxPhotos": "Pick up to {n} photos at a time."
     },
     "tile": {
       "more": "More for {name}",
@@ -1669,6 +1679,13 @@
       "rightsRequired": "Tick the box above to add your photos.",
       "rightsRequiredMedia": "Tick the box above to add your photos or videos.",
       "consentFailed": "Your confirmation couldn't be saved. Try again.",
+      "confirmTitle": "Confirm your rights to the photos in your ads",
+      "confirmAction": "Confirm",
+      "confirmSaving": "Saving…",
+      "rightsLegend": "Your rights to these files",
+      "rightsText": "I own these photos and videos, or have permission to use them, including any music and the people shown.",
+      "peopleText": "Everyone recognisable has agreed to appear in your ads.",
+      "musicNote": "Music from films or popular songs can get your ad muted or rejected. Use your own audio or royalty-free music.",
       "format": "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
       "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again.",
       "videoLimits": "{used} of {limit} video uploads used this month. Each video can be up to {max} and {seconds} seconds.",
@@ -1677,7 +1694,6 @@
       "videoQuotaLoading": "Checking video limits…",
       "videoUnavailable": "Video uploads aren't available right now. You can still add photos.",
       "videoQuotaError": "Couldn't check video limits. Try again; you can still add photos.",
-      "videoMusic": "Music from films or popular songs can get your ad muted or rejected. Use your own audio or royalty-free music.",
       "videoFormat": "This video can't be used. Choose a readable MP4 or MOV video.",
       "videoTooBig": "This video is {size}; the limit is {max}. Save a smaller, lower-resolution copy and add it again.",
       "videoTooBigTrim": "This video is {size}; the limit is {max}. Try trimming it to about {seconds} seconds, or save a smaller, lower-resolution copy.",
@@ -1692,6 +1708,63 @@
       "wideVideo": "Wide video ({ratio}): Feed only. Reels needs a tall (9:16) video.",
       "landscape": "landscape",
       "tooSmall": "Too small ({width} px wide). Use the original photo, not a screenshot or a WhatsApp copy."
+    }
+  },
+  "whatsappMessage": {
+    "languages": {
+      "auto": "Auto (follows each ad)",
+      "en": "English",
+      "hi": "Hindi",
+      "hinglish": "Hinglish",
+      "pa": "Punjabi"
+    },
+    "language": "Language",
+    "autoHint": "Each campaign writes its message in its ad's language. Saving keeps these words for every campaign.",
+    "welcome": "Welcome message",
+    "button": "Button",
+    "buttons": {
+      "none": "None",
+      "call": "Call now",
+      "questions": "Quick questions"
+    },
+    "callsGoToAds": "Calls go to the WhatsApp number on your ads.",
+    "callsGoTo": "Calls go to <b>{number}</b>, your Page's WhatsApp, unless a campaign picks another number.",
+    "pickUp": "Pick up during ad hours, or a missed call costs you the enquiry.",
+    "question": "Question {n}",
+    "example": "e.g. {example}",
+    "exampleFallback": "What's the price?",
+    "optional": "Optional",
+    "questionsHint": "Customers tap a question; there's no pre-typed message.",
+    "prefill": "Pre-typed message",
+    "prefillHint": "Short, in the customer's words. One question.",
+    "title": "WhatsApp message",
+    "unsaved": "Unsaved changes",
+    "yours": "Your message",
+    "suggested": "Suggested",
+    "description": "What customers see after tapping your ad. Your WhatsApp Business app greeting is separate.",
+    "saveFailed": "Couldn't save your WhatsApp message. Try again.",
+    "saveFailedShort": "Couldn't save.",
+    "saved": "Saved. New WhatsApp campaigns will use it.",
+    "reset": "Back to the suggested message.",
+    "save": "Save WhatsApp message",
+    "resetButton": "Reset to suggested",
+    "preview": "WhatsApp preview",
+    "questionsToTap": "Questions to tap",
+    "readyToSend": "Ready to send: ",
+    "campaign": {
+      "title": "WhatsApp message for this campaign",
+      "description": "What customers see after tapping this campaign's ads.",
+      "alsoSave": "Also save as my message",
+      "alsoSaveNote": "New WhatsApp campaigns will start from it. Running campaigns don't change.",
+      "undo": "Undo my edit",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "use": "Use for this campaign",
+      "problems": {
+        "greeting": "Write a welcome of up to 300 characters.",
+        "prefill": "Write a pre-typed message of up to 300 characters.",
+        "questions": "Use 1 to 3 different questions of up to 40 characters."
+      }
     }
   },
   "create": {
@@ -1753,6 +1826,9 @@
     "makeAnother": "Make another",
     "selected": "{count} selected",
     "nextCampaign": "Next: set up campaign",
-    "moreIdeas": "Ideas for more ads"
+    "moreIdeas": "Ideas for more ads",
+    "yourPhotos": "Your photos ({n})",
+    "photosNote": "Each photo becomes one ad’s picture. The words come from your business details and what the photo shows.",
+    "removePhoto": "Remove photo {n}"
   }
 }

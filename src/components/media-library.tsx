@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { Download, ImagePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Status } from "@/components/ui/status";
@@ -10,6 +11,7 @@ import { fitText, MediaUploadSheet, useMediaUploads, type MediaT } from "@/compo
 import { mediaTranslator, type Words } from "@/i18n/words";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import type { Codec, UploadDeps, VideoReader } from "@/lib/media/client-upload";
+import { MAX_AD_PHOTOS } from "@/lib/media/rules";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 
@@ -19,8 +21,10 @@ type Tab = (typeof TABS)[number];
 const UNDO_MS = 6_000;
 
 /** #778 slice 3c: one ⋯ menu (Rename · Download · Delete) on the owner's own photo (Designer, #1973 review 4). */
-function OwnPhotoControls({ t, asset, request, onRenamed, onDelete }: {
+function OwnPhotoControls({ t, asset, request, onRenamed, onDelete, pick }: {
   t: MediaT;
+  /** #780 slice 2a: the tile's Pick box for "Make ads from these". */
+  pick?: ReactNode;
   asset: MediaView;
   request: typeof fetch;
   onRenamed: (asset: MediaView) => void;
@@ -67,6 +71,7 @@ function OwnPhotoControls({ t, asset, request, onRenamed, onDelete }: {
   const url = asset.url;
   return (
     <div className="-mx-2 flex items-center">
+      {pick}
       <DropdownMenu>
         <DropdownMenuTrigger aria-label={t("tile.more", { name: label })} disabled={downloading}
           className="inline-flex size-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
@@ -204,6 +209,19 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   const shownMedia = visibleMedia.filter((item) => tab === "all" || (tab === "photos" && item.kind === "image") || (tab === "videos" && item.kind === "video"));
   const shownBrandAssets = tab === "videos" ? [] : brandAssets;
   const ownCount = visibleMedia.length + brandAssets.length;
+  // #780 slice 2a: up to MAX_AD_PHOTOS own photos go to Create, one per ad; a deleted photo drops out.
+  const [picked, setPicked] = useState<string[]>([]);
+  const chosen = picked.filter((id) => media.some((m) => m.id === id && m.kind === "image"));
+  const pickBox = (m: MediaView) => {
+    if (sample || m.kind !== "image" || !m.url) return undefined;
+    const on = chosen.includes(m.id);
+    return (
+      <label className="inline-flex size-11 shrink-0 items-center justify-center">
+        <input type="checkbox" checked={on} disabled={!on && chosen.length >= MAX_AD_PHOTOS} aria-label={t("library.select", { name: m.name || t("library.photo") })}
+          onChange={() => setPicked(on ? chosen.filter((id) => id !== m.id) : [...chosen, m.id])} className="size-5 accent-primary disabled:opacity-40" />
+      </label>
+    );
+  };
 
   const own = shownMedia.length + shownBrandAssets.length === 0 ? (
     <Card>
@@ -222,7 +240,7 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
             {m.kind === "video" && m.durationMs && <span className="block">{Math.floor(m.durationMs / 60_000)}:{String(Math.floor(m.durationMs / 1000) % 60).padStart(2, "0")}</span>}
           </> : undefined} actions={false}
           filename={`adbrain-${slugify(m.name ?? (m.kind === "video" ? "video" : "photo"), m.id.slice(0, 6))}.${m.kind === "video" ? "mp4" : "jpg"}`}>
-          <OwnPhotoControls key={m.name ?? ""} t={t} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} />
+          <OwnPhotoControls key={m.name ?? ""} t={t} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} pick={pickBox(m)} />
         </AssetTile>
       ))}
       {shownBrandAssets.map((a) => (
@@ -294,6 +312,15 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
           <section>
             {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">{t(videoEnabled ? "library.yoursMedia" : "library.yours")} <span className="text-sm font-normal text-slate-400">({ownCount})</span></h2>}
             {own}
+            {tab !== "videos" && chosen.length > 0 && (
+              <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white p-2 shadow-md">
+                <Link href={`/create?all=1&photos=${chosen.join(",")}`}
+                  className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
+                  {t("library.makeAds", { n: chosen.length })}
+                </Link>
+                {chosen.length >= MAX_AD_PHOTOS && <p className="text-sm text-slate-600">{t("library.maxPhotos", { n: MAX_AD_PHOTOS })}</p>}
+              </div>
+            )}
           </section>
         )}
         {tab !== "photos" && tab !== "videos" && (

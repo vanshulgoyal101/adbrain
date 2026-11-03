@@ -149,6 +149,8 @@ describe("EditAudienceDialog", () => {
     const onSaved = vi.fn();
     render(<EditAudienceDialog campaignId="c-1" campaignName="Rooftop solar" onClose={vi.fn()} onSaved={onSaved} words={{ locale: "hi", messages: hi.campaigns }} />);
     expect(screen.getByRole("dialog", { name: "ऑडियंस बदलें" })).toBeInTheDocument();
+    expect(screen.getByLabelText("शामिल करने के लिए जगह खोजें")).toBeInTheDocument();
+    expect(screen.getByLabelText("हटाने के लिए जगह खोजें")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("सबसे कम उम्र"), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: /Meta से जाँचें/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("दोनों उम्र डालें, या वैसी ही रखने के लिए दोनों खाली छोड़ें।");

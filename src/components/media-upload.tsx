@@ -311,8 +311,8 @@ export function MediaUploadSheet({ t, open, onOpenChange, uploads, businessId, v
             <ImagePlus className="h-4 w-4" aria-hidden="true" /> {t(allowVideo ? "upload.chooseMedia" : "upload.choose")}
           </button>
           {uploads.limitNote && <p className="text-sm text-amber-800">{uploads.limitNote}</p>}
-          {!consented && <MediaRightsConsent vertical={vertical} value={consent} onChange={setConsent} />}
-          {hasVideo && <p className="text-xs text-slate-500">{t("upload.videoMusic")}</p>}
+          {!consented && <MediaRightsConsent t={t} vertical={vertical} value={consent} onChange={setConsent} hasVideo={hasVideo} />}
+          {consented && hasVideo && <p className="text-xs text-slate-500">{t("upload.musicNote")}</p>}
           {uploads.items.length > 0 && (
             <ul aria-label={t(videoEnabled ? "upload.picksMedia" : "upload.picks")} className="divide-y divide-slate-100">
               {uploads.items.map((item) => <ItemLine key={item.key} t={t} item={item} allowVideo={allowVideo}

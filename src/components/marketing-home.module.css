@@ -5,7 +5,7 @@
 .page a:focus-visible, .page summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 5px; }
 .skip { position: absolute; top: -100px; z-index: 20; padding: 12px; background: white; }
 .skip:focus { top: 8px; }
-.exampleLink { font-size: var(--t-sm); }
+.exampleLink { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--t-sm); }
 .primary, .heroSecondary, .textLink { display: inline-flex; align-items: center; justify-content: center; gap: 12px; font-weight: 600; }
 .hero { position: relative; isolation: isolate; color: var(--ink); background: #f6f7f4; }
 /* Wide screens show the 1440 composition centred, like the hero text, instead of scaling the ads past the fold. */

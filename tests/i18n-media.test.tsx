@@ -56,7 +56,22 @@ describe("Photos in Hindi (#778 walk 1)", () => {
     fireEvent.change(input, { target: { files: [new File(["video"], "tour.mp4", { type: "video/mp4" })] } });
     expect(await within(sheet).findByText("चौड़ा वीडियो (16:9): सिर्फ़ Feed में दिखेगा। Reels के लिए लंबा (9:16) वीडियो चाहिए।")).toBeTruthy();
     expect(within(sheet).getByRole("list", { name: "आपकी चुनी फ़ोटो और वीडियो" })).toBeTruthy();
-    expect(within(sheet).getByText(hi.media.upload.videoMusic)).toBeTruthy();
+    expect(within(sheet).getByText(hi.media.upload.musicNote)).toBeTruthy();
     expect(within(sheet).getByRole("button", { name: "1 वीडियो जोड़ें" })).toBeTruthy();
+  });
+
+  it("shows the shared Hindi rights and music copy once when consent is needed", async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({
+      ok: true, uploads: { videos: { enabled: true, used: 0, limit: 3, maxSeconds: 60, maxBytes: 50 * 1024 * 1024 } },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    render(<MediaLibrary words={words} business={{ id: "b1", vertical: null }} media={[]} creatives={[]} brandAssets={[]} startOpen videoEnabled
+      deps={{ fetch: request, uploadToSignedUrl: vi.fn() }} videoReader={async () => ({ width: 720, height: 1280, durationMs: 2000 })} />);
+    const sheet = screen.getByRole("dialog", { name: "फ़ोटो और वीडियो जोड़ें" });
+    fireEvent.change(await within(sheet).findByLabelText("फ़ोटो और वीडियो चुनें"), {
+      target: { files: [new File(["video"], "tour.mp4", { type: "video/mp4" })] },
+    });
+    expect(within(sheet).getByLabelText(hi.media.upload.rightsText)).toBeTruthy();
+    expect(await within(sheet).findByText(hi.media.upload.musicNote)).toBeTruthy();
+    expect(within(sheet).getAllByText(hi.media.upload.musicNote)).toHaveLength(1);
   });
 });

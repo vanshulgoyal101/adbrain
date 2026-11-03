@@ -10,6 +10,7 @@ vi.mock("@/lib/supabase/queries", () => ({
 vi.mock("@/lib/prospect-session", () => ({ isProspectSession: async () => false }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
+vi.mock("next/navigation", async (original) => ({ ...await original<typeof import("next/navigation")>(), useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/media/consent", async (original) => ({ ...await original<Record<string, unknown>>(), hasCurrentMediaConsent: async () => { throw new Error("down"); } }));
 const media = vi.hoisted(() => ({ on: false, video: false, list: vi.fn() }));
 vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => media.on, mediaVideoEnabled: () => media.on && media.video, listMedia: media.list }));
@@ -50,5 +51,16 @@ describe("Assets page (#778 slice 3a)", () => {
     render(await AssetsPage());
     expect(screen.getByRole("heading", { name: "Photos & videos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add photos & videos" })).toBeInTheDocument();
+  });
+
+  it("keeps the rights confirmation available when video is enabled", async () => {
+    media.on = true;
+    media.video = true;
+    media.list.mockResolvedValueOnce({ items: [], next: null });
+    const { default: AssetsPage } = await import("@/app/(app)/assets/page");
+    render(await AssetsPage({ searchParams: Promise.resolve({ confirm: "rights" }) }));
+    expect(screen.getByRole("heading", { name: "Photos & videos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Confirm your rights to the photos in your ads" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
   });
 });

@@ -54,6 +54,19 @@ describe("video library (#778)", () => {
     expect(screen.getByRole("img", { name: "Kitchen" })).toBeInTheDocument();
   });
 
+  it("preserves photo picks without offering videos for photo-based ads", () => {
+    library();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Kitchen" }));
+    expect(screen.getByRole("link", { name: "Make ads from these (1)" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Pick Studio tour" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Videos" }));
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Make ads from these/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Photos" }));
+    expect(screen.getByRole("checkbox", { name: "Pick Kitchen" })).toBeChecked();
+    expect(screen.getByRole("link", { name: "Make ads from these (1)" })).toBeInTheDocument();
+  });
+
   it.each([
     ["video/mp4", "mp4"],
     ["video/quicktime", "mov"],
