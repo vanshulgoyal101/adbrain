@@ -35,10 +35,10 @@ export function isMediaVideoMime(value: string): value is MediaVideoMime {
   return (MEDIA_VIDEO_MIME_TYPES as readonly string[]).includes(value);
 }
 
-/** Designer (#744): the length to trim a too-big video to, in 5-second steps (`floor(dur×50/size/5)×5`). */
-export function videoTrimSeconds(durationMs: number, bytes: number): number {
+/** Designer (#744): the length to trim a too-big video to, in 5-second steps (`floor(dur×50/size/5)×5`); null when even 5 seconds of it would still be over the limit, so a trim can't fix it. */
+export function videoTrimSeconds(durationMs: number, bytes: number): number | null {
   const fits = Math.floor((durationMs / 1000) * MEDIA_VIDEO_MAX_BYTES / bytes / 5) * 5;
-  return Math.max(5, Math.min(fits, MEDIA_VIDEO_MAX_SECONDS));
+  return fits < 5 ? null : Math.min(fits, MEDIA_VIDEO_MAX_SECONDS);
 }
 
 const MB = 1024 * 1024;
@@ -47,7 +47,9 @@ const MB = 1024 * 1024;
 export function videoRefusal(mime: string, bytes: number, durationMs: number): { status: number; code: string; message: string } | null {
   if (!isMediaVideoMime(mime)) return { status: 415, code: "MEDIA_TYPE", message: "Please choose an MP4 or MOV video." };
   if (bytes > MEDIA_VIDEO_MAX_BYTES) {
-    return { status: 413, code: "MEDIA_TOO_LARGE", message: `${Math.ceil(bytes / MB)} MB, limit ${MEDIA_VIDEO_MAX_BYTES / MB} MB. Trim it to about ${videoTrimSeconds(durationMs, bytes)} seconds in your Gallery.` };
+    const trim = videoTrimSeconds(durationMs, bytes);
+    const fix = trim === null ? "Trimming won't be enough: save a smaller, lower-resolution copy (for example 720p) in your Gallery." : `Trim it to about ${trim} seconds in your Gallery.`;
+    return { status: 413, code: "MEDIA_TOO_LARGE", message: `${Math.ceil(bytes / MB)} MB, limit ${MEDIA_VIDEO_MAX_BYTES / MB} MB. ${fix}` };
   }
   if (durationMs > MEDIA_VIDEO_MAX_SECONDS * 1000 + 500) {
     return { status: 422, code: "MEDIA_TOO_LONG", message: `${Math.round(durationMs / 1000)} seconds, limit ${MEDIA_VIDEO_MAX_SECONDS}. Trim it to ${MEDIA_VIDEO_MAX_SECONDS} seconds or less in your Gallery.` };
