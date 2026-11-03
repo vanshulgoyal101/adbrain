@@ -219,7 +219,7 @@ export function MediaUploadSheet({ t, open, onOpenChange, uploads, businessId, v
             <ImagePlus className="h-4 w-4" aria-hidden="true" /> {t("upload.choose")}
           </button>
           {uploads.limitNote && <p className="text-sm text-amber-800">{uploads.limitNote}</p>}
-          {!consented && <MediaRightsConsent vertical={vertical} value={consent} onChange={setConsent} />}
+          {!consented && <MediaRightsConsent t={t} vertical={vertical} value={consent} onChange={setConsent} />}
           {uploads.items.length > 0 && (
             <ul aria-label={t("upload.picks")} className="divide-y divide-slate-100">
               {uploads.items.map((item) => <ItemLine key={item.key} t={t} item={item} onRetry={() => void uploads.send([item])} />)}

@@ -58,6 +58,7 @@ const variants: [string, (v: PreflightInput) => void, string][] = [
   ["two more", (v) => unapproved(v, ["Exam", "Second", "Third"]), "REVIEW_CREATIVES"],
   ["whatsapp not linked", (v) => { v.draft.destination = "whatsapp"; v.whatsappNumber = null; }, "REVIEW_WHATSAPP_NOT_LINKED"],
   ["whatsapp message", (v) => { v.draft.destination = "whatsapp"; v.whatsappMessageProblem = "PROBLEM"; }, "REVIEW_WHATSAPP_MESSAGE"],
+  ["media rights", (v) => { v.creatives[0].ownMedia = true; v.mediaConsent = false; }, "REVIEW_MEDIA_RIGHTS"],
   ["lead form", (v) => { v.form = null; }, "REVIEW_NO_LEAD_FORM"],
   ["website", (v) => { v.website = null; }, "REVIEW_NO_WEBSITE"],
   ["policy", (v) => { v.vertical = "chiropractic clinic"; v.creatives[0].headline = "Cures back pain"; }, "REVIEW_AD_POLICY"],
@@ -115,6 +116,7 @@ function toWebsite(v: PreflightInput, reach?: unknown): void {
 
 /** The English each sentence said before #2333 slice 2: unchanged, byte for byte. */
 const ENGLISH: Record<string, string> = {
+  "media rights": "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta.",
   "no connection": "Connect Facebook and choose your Page and ad account.",
   "currency": "Choose an ad account that pays in Indian rupees (INR).",
   "meta access": "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for.",

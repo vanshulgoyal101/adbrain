@@ -1,5 +1,5 @@
 # जाँचें और लाइव करें
-<!-- mirrors ../review.md 0d6eaee72dde -->
+<!-- mirrors ../review.md 2c2c260da399 -->
 
 यह [Review and Go Live](../review.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -103,6 +103,7 @@ Button दबाएँ, वह एक चीज़ ठीक करें, फ�
 | `REVIEW_TRACKING` | सिर्फ़ website leads या sales लक्ष्य (#2714): "No website tracking source is available to this ad account" (देखें कि ad account आपका Meta pixel इस्तेमाल कर सकता है, नहीं तो Events Manager में एक सेट करें), "Choose which website tracking counts", "couldn't read your website tracking", "reported nothing from {since} to {until}" या "reported no {website lead (Lead)/sale (Purchase)} from {since} to {until}" | "Check tracking in Your business" (Brand खुलता है) | इस ad account को pixel की access दें, ऐसी tracking जोड़ें या चुनें जो लक्ष्य का event भेजे, Facebook फिर से जोड़ें, या visits का लक्ष्य चुनें। |
 | `REVIEW_GOAL_WORDS` | सिर्फ़ website leads या sales लक्ष्य (#2714): website leads लक्ष्य पर ad में Shop now बटन है, या sales लक्ष्य पर Sign up बटन | "Choose your ads" (ads पर ले जाता है) | ऐसा ad चुनें जिसका button लक्ष्य से मेल खाए, या लक्ष्य बदलें। |
 | `REVIEW_AD_POLICY` | ad में "{word}" is a health promise (clinics) या a promise (बाकी) "Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | लिखें कि सेवा क्या है, यह नहीं कि वह क्या ठीक करती है या किसकी गारंटी देती है। |
+| `REVIEW_MEDIA_RIGHTS` | "आपके विज्ञापनों में आपकी अपनी तस्वीरें हैं। Meta पर भेजने से पहले पुष्टि करें कि ये तस्वीरें आपकी हैं या आपको इन्हें इस्तेमाल करने की अनुमति है।" | "तस्वीरों के अधिकार की पुष्टि करें" (Assets खुलता है) | Assets पर अपनी photos के साथ rights वाला box tick करें (हैंडओवर के बाद सिर्फ़ मौजूदा मालिक की पुष्टि मान्य है), या AdBrain की pictures चुनें। |
 | `REVIEW_BUDGET` | "Set a daily budget above ₹0." या "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | रोज़ ₹300, ₹500 या ₹1,000 चुनें। |
 | `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | उम्र चुनें, या **Recommend audience** दबाएँ। |
 | `REVIEW_RADIUS` | "Set the city radius between 17 and 80 km; Meta allows nothing outside that range." | "Set the city radius" | 17 से 80 km के बीच radius चुनें। |

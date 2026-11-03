@@ -8,8 +8,8 @@ import { adPhotos, describeUsageEvent, pickedMedia, readAdPhotos, type AdPhoto, 
 import { MediaError, mediaUploadsEnabled } from "@/lib/media/store";
 
 /** #1209: the signed-in owner and an untyped client for the media tables (they aren't in lib/types yet), or the error response. */
-export async function mediaSession(): Promise<{ user: { id: string }; client: SupabaseClient } | NextResponse> {
-  if (!mediaUploadsEnabled()) return apiError("Not found", 404);
+export async function mediaSession(options: { whenUploadsOff?: boolean } = {}): Promise<{ user: { id: string }; client: SupabaseClient } | NextResponse> {
+  if (!options.whenUploadsOff && !mediaUploadsEnabled()) return apiError("Not found", 404);
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return apiError("Unauthorized", 401);
