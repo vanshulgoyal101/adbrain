@@ -18,6 +18,7 @@ import { saveCampaign } from "./trusted-write";
 import { campaignWhatsAppMessage } from "./campaign-whatsapp-message";
 import { draftAreaNames } from "./draft-targeting";
 import { normalizeWebsite } from "@/lib/brand/validation";
+import { websiteGoalObjective } from "./website-review";
 import { checkPlan, planCheckEvent } from "./plan-check";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildLaunchSnapshot, readCreativeMedia, saveLaunchSnapshot } from "./learnings";
@@ -26,10 +27,13 @@ import { adResultsEnabled } from "./ad-results-store";
 import { buildAdAssetLinks } from "./asset-results";
 import { recordAdAssetLinks } from "./asset-results-store";
 
-/** The stored objective label; website matches what sync maps OUTCOME_TRAFFIC to, so it never reads as a form campaign. */
-function campaignObjective(destination: string): string {
+/**
+ * The stored objective label; website visits match what sync maps OUTCOME_TRAFFIC to, so they never read as a form
+ * campaign. #2714: a website ad's signup or sales goal is the one Review hashed, never re-read from the draft.
+ */
+function campaignObjective(destination: string, review: Pick<ReviewDTO, "websiteGoal">): string {
   if (destination === "whatsapp") return "OUTCOME_ENGAGEMENT";
-  return destination === "website" ? "traffic" : "leads";
+  return destination === "website" ? websiteGoalObjective(review.websiteGoal ?? "visits") : "leads";
 }
 
 const STORY_RENDER_BUDGET_MS = 15_000;
@@ -107,6 +111,10 @@ export async function executeReviewedCampaign(input: {
           // #2599: a website ad sends the link Review opened and hashed, not a Brand read taken after it.
           const websiteLink = draft.input.destination === "website" ? review.websiteUrl : undefined;
           if (draft.input.destination === "website" && !websiteLink) throw new OperationPhaseError("Website link missing from review.", { transmitted: false });
+          // #2714: Meta's signup and sales payload is B2's (#2713); until it lands, a conversion review never reaches Meta as traffic.
+          if (draft.input.destination === "website" && review.websiteGoal && review.websiteGoal !== "visits") {
+            throw new OperationPhaseError("Website signup and sales goals can't launch yet.", { transmitted: false });
+          }
           // #789: for the ledger, read alongside Meta's create; never rejects.
           const mediaRead = readCreativeMedia(database as unknown as SupabaseClient, actor.businessId, creativeInputs.map(creative => creative.id));
           metaResult = await meta.createLeadCampaign({
@@ -144,7 +152,7 @@ export async function executeReviewedCampaign(input: {
           const media = await mediaRead;
           try {
             launchSnapshot = buildLaunchSnapshot({
-              destination: metaResult.destination, objective: campaignObjective(metaResult.destination),
+              destination: metaResult.destination, objective: campaignObjective(metaResult.destination, review),
               dailyBudgetRupees: draft.input.dailyBudgetRupees, adSetCount: metaResult.adSetIds.length || 1, abTest: Boolean(draft.input.abTest),
               areas, ageMin: targeting.age?.min, ageMax: targeting.age?.max, gender: targeting.gender ?? "all",
               interests: (review.audienceInterests ?? []).map(interest => interest.name),
@@ -172,7 +180,7 @@ export async function executeReviewedCampaign(input: {
       if (!metaResult) return null;
       const { data: campaign, error } = await saveCampaign(actor, {
         name: draft.input.name,
-        objective: campaignObjective(metaResult.destination),
+        objective: campaignObjective(metaResult.destination, review),
         destination: metaResult.destination,
         daily_budget: effectiveDailyBudget(draft.input.dailyBudgetRupees, metaResult.adSetIds.length || 1),
         status: "paused", meta_campaign_id: metaResult.campaignId,

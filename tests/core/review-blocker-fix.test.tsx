@@ -70,7 +70,19 @@ const breaks: Record<ReviewBlockerReason, (input: PreflightInput) => void> = {
   REVIEW_AD_POLICY: (input) => { input.vertical = "chiropractic clinic"; input.creatives[0].headline = "Cures back pain, guaranteed"; },
   REVIEW_WHATSAPP_MESSAGE: (input) => { input.draft.destination = "whatsapp"; input.whatsappMessageProblem = "\"guaranteed\" isn't in your business details. Reword it or add it there."; },
   REVIEW_WEBSITE_UNREACHABLE: (input) => { input.draft.destination = "website"; input.websiteReach = { url: "https://cedarridgechiro.com", ok: false, problem: "unreachable" }; },
+  REVIEW_TRACKING: (input) => { toSignups(input); input.tracking = { pixelId: null, status: null }; },
+  REVIEW_GOAL_WORDS: (input) => { toSignups(input); input.creatives[0].cta = "Shop now"; },
 };
+/** #2714: a website signup campaign whose chosen tracking has reported a Lead (shape: tests/core/meta-pixels.test.ts). */
+function toSignups(input: PreflightInput) {
+  input.draft.destination = "website";
+  input.draft.websiteGoal = "leads";
+  input.websiteReach = { url: "https://cedarridgechiro.com", ok: true, finalUrl: "https://cedarridgechiro.com/" };
+  input.tracking = { pixelId: "9000000000000003", status: {
+    state: "ready", unreadable: null, pixelId: "9000000000000003", pixels: [], window: { since: "2026-10-26T16:00:00+0000", until: "2026-11-02T16:00:00+0000" },
+    lastSeenAt: "2026-11-01T14:00:00+0000", counts: { Lead: 2, Purchase: 0 }, totalEvents: 60,
+  } };
+}
 function reviewBlockedOn(reason: ReviewBlockerReason) {
   const input = productionInput();
   breaks[reason](input);
@@ -138,6 +150,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
   const fields: [ReviewBlockerReason, () => HTMLElement][] = [
     ["REVIEW_CREATIVES", () => screen.getByRole("button", { name: creative.headline! })],
     ["REVIEW_AD_POLICY", () => screen.getByRole("button", { name: creative.headline! })],
+    ["REVIEW_GOAL_WORDS", () => screen.getByRole("button", { name: creative.headline! })],
     ["REVIEW_NO_LEAD_FORM", () => screen.getByLabelText("Lead form")],
     ["REVIEW_BUDGET", () => screen.getByLabelText("Daily budget (₹)")],
     ["REVIEW_NO_AGE_RANGE", () => screen.getByLabelText("Minimum age")],
@@ -181,6 +194,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
 
   it.each([
     ["REVIEW_NO_WEBSITE", "/brand"],
+    ["REVIEW_TRACKING", "/brand"],
     // #681 (#847): linking a WhatsApp number lives in Settings' WhatsApp card, not on Your business.
     ["REVIEW_WHATSAPP_NOT_LINKED", "/settings#whatsapp-status-title"],
   ] as const)("%s: the fix opens %s", async (reason, href) => {

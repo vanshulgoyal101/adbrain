@@ -122,6 +122,8 @@ export const reviewDtoSchema = z.object({
   creativeHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
   websiteGoal: websiteGoalSchema.optional(),
+  /** #2714: the Brand's tracking a signup or sales goal was reviewed with; launch optimises for this one only. */
+  pixelId: z.string().regex(/^\d{1,32}$/).optional(),
   whatsappNumber: z.string().regex(/^\+[1-9]\d{6,14}$/).nullable().optional(),
   /** #2599: a website ad's link exactly as Review opened and hashed it; launch sends this, never a fresh Brand read. */
   websiteUrl: z.string().url().max(2_000).nullable().optional(),

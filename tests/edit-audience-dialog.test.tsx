@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { audienceChangeFromForm, emptyAudienceEdit } from "@/lib/campaign/editor-targeting";
+import hi from "../messages/hi.json";
 
 // #773: Manage → Edit audience. Meta checks the change first (nothing written), the owner reads the
 // consequence, then saves with the same idempotency key.
@@ -27,8 +28,8 @@ describe("audienceChangeFromForm", () => {
 
   it("refuses an empty change and half or out-of-range ages", () => {
     expect(audienceChangeFromForm(emptyAudienceEdit)).toHaveProperty("error");
-    expect(audienceChangeFromForm({ ...emptyAudienceEdit, ageMin: 30 })).toEqual({ error: "Enter both ages, or leave both blank to keep them." });
-    expect(audienceChangeFromForm({ ...emptyAudienceEdit, ageMin: 40, ageMax: 30 })).toEqual({ error: "Ages go from 18 to 65, youngest first." });
+    expect(audienceChangeFromForm({ ...emptyAudienceEdit, ageMin: 30 })).toEqual({ error: "Enter both ages, or leave both blank to keep them.", code: "agesBoth" });
+    expect(audienceChangeFromForm({ ...emptyAudienceEdit, ageMin: 40, ageMax: 30 })).toEqual({ error: "Ages go from 18 to 65, youngest first.", code: "agesRange" });
     expect(audienceChangeFromForm({ ...emptyAudienceEdit, ageMin: 30, ageMax: 60 })).toEqual({ change: { age: { min: 30, max: 60 } } });
   });
 
@@ -41,7 +42,7 @@ describe("audienceChangeFromForm", () => {
   it("sends languages only when the owner changes them", () => {
     expect(audienceChangeFromForm({ ...emptyAudienceEdit, languageMode: "any" })).toEqual({ change: { languages: [] } });
     expect(audienceChangeFromForm({ ...emptyAudienceEdit, languageMode: "only", languages: [1001, 46, 46] })).toEqual({ change: { languages: [1001, 46] } });
-    expect(audienceChangeFromForm({ ...emptyAudienceEdit, languageMode: "only" })).toEqual({ error: "Pick at least one language, or choose Any language." });
+    expect(audienceChangeFromForm({ ...emptyAudienceEdit, languageMode: "only" })).toEqual({ error: "Pick at least one language, or choose Any language.", code: "languages" });
     expect(audienceChangeFromForm({ ...emptyAudienceEdit, languages: [46] })).toHaveProperty("error");
   });
 });
@@ -142,5 +143,21 @@ describe("EditAudienceDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
     await screen.findByRole("status");
     expect(sent(0)).toMatchObject({ change: { languages: [1001, 46] }, preview: true });
+  });
+  // #1438: a Hindi owner reads the dialog, its form errors and Meta's answer in Hindi; what is sent doesn't change.
+  it("speaks the owner's language", async () => {
+    const onSaved = vi.fn();
+    render(<EditAudienceDialog campaignId="c-1" campaignName="Rooftop solar" onClose={vi.fn()} onSaved={onSaved} words={{ locale: "hi", messages: hi.campaigns }} />);
+    expect(screen.getByRole("dialog", { name: "ऑडियंस बदलें" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("सबसे कम उम्र"), { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("button", { name: /Meta से जाँचें/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("दोनों उम्र डालें, या वैसी ही रखने के लिए दोनों खाली छोड़ें।");
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("सबसे ज़्यादा उम्र"), { target: { value: "60" } });
+    fireEvent.click(screen.getByRole("button", { name: /Meta से जाँचें/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent(`Meta ने यह बदलाव 1 ऐड सेट के लिए मान लिया। ${RESTARTS}`);
+    expect(sent(0)).toMatchObject({ change: { age: { min: 30, max: 60 } }, preview: true });
+    fireEvent.click(screen.getByRole("button", { name: /बदलाव सेव करें/ }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(`ऑडियंस बदल गई। कैंपेन रुका हुआ ही रहेगा। ${RESTARTS}`));
   });
 });

@@ -800,17 +800,45 @@ describe("campaign sync feedback", () => {
     vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
     view(true);
     fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
-    expect(await screen.findByText(/More campaigns are available/)).toHaveTextContent(
-      "\"Capped trial\" was left unchanged: it runs on a spend cap AdBrain manages, so sync leaves it as is. \"Old Page ads\" was left unchanged: it advertises a different Facebook Page.");
+    expect(await screen.findByText(/More campaigns are available/)).toHaveTextContent("More campaigns are available. Sync again to continue. 2 left unchanged.");
+    expect(screen.getByText("Details")).toBeInTheDocument();
+    expect(screen.getByText("\"Capped trial\" was left unchanged: it runs on a spend cap AdBrain manages, so sync leaves it as is.")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
     const done = await screen.findByText(/Campaign sync completed/);
-    expect(done).toHaveTextContent("\"Capped trial\" was left unchanged");
-    expect(done).toHaveTextContent("\"Diwali\" was left unchanged: it uses a lifetime budget set in Meta, which AdBrain doesn't manage.");
+    expect(done).toHaveTextContent("Campaign sync completed. 3 left unchanged.");
+    expect(screen.getByText(/"Capped trial" was left unchanged/)).toBeInTheDocument();
+    expect(screen.getByText("\"Diwali\" was left unchanged: it uses a lifetime budget set in Meta, which AdBrain doesn't manage.")).toBeInTheDocument();
     expect(sync).toHaveBeenNthCalledWith(2, "/api/campaigns/sync?after=next%2Fpage");
     expect(screen.queryByText(/More campaigns are available/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
     await waitFor(() => expect(screen.getByText("Campaign sync completed.")).toBeInTheDocument());
     expect(screen.queryByText(/left unchanged/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Details")).not.toBeInTheDocument();
+  });
+
+  it("drops the Details of an earlier sync when a later notice replaces it", async () => {
+    const sync = vi.fn()
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 1, skippedCampaigns: [{ name: "Diwali", reason: "lifetime_budget" }] }))
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: "p2", skipped: 0, skippedCampaigns: [] }));
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
+    expect(await screen.findByText(/"Diwali" was left unchanged/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
+    expect(await screen.findByText(/More campaigns are available/)).toBeInTheDocument();
+    expect(screen.queryByText("Details")).not.toBeInTheDocument();
+    expect(screen.queryByText(/"Diwali" was left unchanged/)).not.toBeInTheDocument();
+  });
+
+  it("keeps an automatic sync quiet when it only skipped campaigns, so the list never moves (#2748)", async () => {
+    localStorage.clear();
+    const sync = vi.fn().mockResolvedValue(Response.json({ campaigns: [], nextCursor: null, skipped: 1, skippedCampaigns: [{ name: "Diwali", reason: "lifetime_budget" }] }));
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    await waitFor(() => expect(sync).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(/left unchanged/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Details")).not.toBeInTheDocument();
   });
 
   // #1286: a sync that fails reports beside Sync from Meta in a line that's always there, so nothing above the list moves.

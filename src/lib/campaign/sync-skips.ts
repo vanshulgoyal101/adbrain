@@ -14,7 +14,7 @@ export type CampaignSkipReason =
 export type SkippedCampaign = { name: string | null; reason: CampaignSkipReason };
 
 /** One sentence per skipped campaign, up to three, then a count of the rest; reasons are `campaigns.sync.reasons` (#1438). */
-export function describeSkippedCampaigns(skipped: readonly SkippedCampaign[], total = skipped.length, words?: Words<"campaigns">): string {
+export function skippedCampaignLines(skipped: readonly SkippedCampaign[], total = skipped.length, words?: Words<"campaigns">): string[] {
   const t = campaignsTranslator(words);
   const named = skipped.slice(0, 3).map(({ name, reason }) => {
     const why = t(`sync.reasons.${reason}`);
@@ -22,5 +22,9 @@ export function describeSkippedCampaigns(skipped: readonly SkippedCampaign[], to
   });
   const rest = total - named.length;
   if (rest > 0) named.push(t("sync.rest", { n: rest }));
-  return named.join(" ");
+  return named;
+}
+
+export function describeSkippedCampaigns(skipped: readonly SkippedCampaign[], total = skipped.length, words?: Words<"campaigns">): string {
+  return skippedCampaignLines(skipped, total, words).join(" ");
 }
