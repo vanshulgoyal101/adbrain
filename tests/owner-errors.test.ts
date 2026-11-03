@@ -164,6 +164,12 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   // #2327: Enquiries and the Facebook connect path (the leads 404 reuses #2312's campaignNotFound).
   signInRequired: "Sign in required.",
   businessMissing: "Business not found.",
+  // #1438: the WhatsApp message save action's own refusals.
+  whatsappSignIn: "Sign in again to save.",
+  whatsappQuestions: "Use 1 to 3 different questions of up to 40 characters.",
+  whatsappGreetingLength: "Write a welcome of up to 300 characters.",
+  whatsappPrefillLength: "Write a pre-typed message of up to 300 characters.",
+  whatsappSaveFailed: "Couldn't save your WhatsApp message. Try again.",
   // #1209: the upload rights gate (/api/media/sign).
   mediaRightsRequired: "Confirm you own these photos or have permission to use them.",
   mediaPeopleRequired: "Confirm that everyone recognisable has agreed to appear in your ads.",
