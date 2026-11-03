@@ -84,6 +84,37 @@ describe("#2600 website destination", () => {
     expect(draftInputSchema.safeParse({ ...input, websiteCta: "shop_now" }).success).toBe(false);
   });
 
+  it("#2703 says the button once when every ad's matches, per ad when they differ", () => {
+    const { container, rerender } = render(<WebsiteReviewFact url="https://example.com/" ads={[{ headline: "Sale", cta: "Shop Now" }, { headline: "New", cta: "Buy now" }]} />);
+    expect(container.textContent).toContain("Button on Facebook: Shop now");
+    rerender(<WebsiteReviewFact url="https://example.com/" ads={[{ headline: "Spring sale", cta: "Shop Now" }, { headline: " ", cta: "Register" }, { cta: "Book Now" }]} />);
+    expect(container.textContent).toContain("Button on Facebook:");
+    expect(container.textContent).toContain("Spring saleShop now");
+    expect(container.textContent).toContain("Ad 2Sign up");
+    expect(container.textContent).toContain("Ad 3Learn more");
+    rerender(<WebsiteReviewFact url="https://example.com/" ads={[{ headline: "Sale", cta: "Sign up" }, { headline: "Free", cta: "Get Quote" }]} words={{ locale: "hi", messages: hi.campaigns }} />);
+    expect(container.textContent).toContain("Facebook पर बटन:");
+    expect(container.textContent).toContain("साइन अप करें");
+    expect(container.textContent).toContain("और जानें");
+    rerender(<WebsiteReviewFact url="https://example.com/" ads={[]} />);
+    expect(container.textContent).not.toContain("Button on Facebook");
+  });
+
+  it("#2703 leaves WhatsApp and form Review exactly as they were", () => {
+    const base = { selectedCount: 1, budget: 300, audience: "Mohali", website: "example.com" };
+    for (const props of [{ ...base, destination: "whatsapp" as const, whatsappNumber: "+91 98xxxx3210" }, { ...base, destination: "instant_form" as const, leadFormName: "Quote form" }]) {
+      const before = render(<CampaignLaunchReview {...props} />).container.innerHTML;
+      const after = render(<CampaignLaunchReview {...props} websiteAds={[{ headline: "Sale", cta: "Shop Now" }]} />).container.innerHTML;
+      expect(after).toBe(before);
+      expect(after).not.toContain("Button on Facebook");
+    }
+  });
+
+  it("#2703 server Review shows the buttons under the link", () => {
+    const { container } = render(<dl><WebsiteReviewFacts url="https://example.com/" ads={[{ headline: "Sale", cta: "Sign up" }]} /></dl>);
+    expect(container.textContent).toContain("Button on Facebook: Sign up");
+  });
+
   it("has every destination word in Hindi", () => {
     expect(keys(hi.campaigns.destination).sort()).toEqual(keys(en.campaigns.destination).sort());
   });
