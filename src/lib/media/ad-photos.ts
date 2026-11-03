@@ -2,10 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProviderAttempt } from "@/lib/llm";
 import type { LLMUsageEvent } from "@/lib/llm/persist";
 import { DESCRIBE_PROMPT_VERSION, describePhoto, type PhotoNotes } from "@/lib/media/describe";
+import { MAX_AD_PHOTOS } from "@/lib/media/rules";
 import { MediaError, mediaViews, ownMedia, readVerifiedMedia, type MediaRow } from "@/lib/media/store";
 
-/** #780: photos an owner picked from the library for a Create batch, each one ad's picture (ads 1-3). */
-export const MAX_AD_PHOTOS = 3;
+export { MAX_AD_PHOTOS } from "@/lib/media/rules";
 /** The whole describe step's budget; a photo still undescribed by then is used with Brand-only words. */
 export const DESCRIBE_BUDGET_MS = 25_000;
 

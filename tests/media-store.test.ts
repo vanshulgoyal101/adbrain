@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MEDIA_MONTHLY_UPLOADS, mediaFit } from "@/lib/media/rules";
 const CONFIRMED = "2026-10-28T10:00:00.000Z";
-import { deleteMedia, finalizeUpload, listMedia, mediaViews, monthlyUploads, monthStartIst, ownMedia, readVerifiedMedia, signUpload, updateMedia, type MediaRow } from "@/lib/media/store";
+import { deleteMedia, finalizeUpload, listMedia, mediaViews, pickedMediaViews, monthlyUploads, monthStartIst, ownMedia, readVerifiedMedia, signUpload, updateMedia, type MediaRow } from "@/lib/media/store";
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ MEDIA_UPLOADS_ENABLED: true }) }));
 import { fakeSupabase } from "./helpers/media-fake";
@@ -129,6 +129,16 @@ describe("finalizeUpload (#1209)", () => {
     expect(asset.url).toMatch(/^https:\/\/storage\.test\/sign\//);
     expect(db.tables.media_assets[0]).toMatchObject({ status: "ready", mime: "image/jpeg" });
     expect((await listMedia(db.client, BUSINESS)).items.map((item) => item.id)).toEqual([asset.id]);
+  });
+
+  it("#780 slice 2a: reads the library's pick for Create in the owner's order, dropping bad, unready, deleted and other businesses' ids", async () => {
+    const [first, second] = [await finalizeUpload(db.client, await pending(await photo(1080, 1350))), await finalizeUpload(db.client, await pending(await photo(1080, 1080)))];
+    const unready = await pending(await photo(1200, 1200));
+    db.tables.media_assets.push({ ...db.tables.media_assets.find((row) => row.id === first.id)!, id: "33333333-3333-4333-8333-333333333333", business_id: "44444444-4444-4444-8444-444444444444" });
+    const picked = await pickedMediaViews(db.client, BUSINESS, [second.id, "not-a-uuid", unready.id, "33333333-3333-4333-8333-333333333333", first.id, second.id]);
+    expect(picked.map((item) => item.id)).toEqual([second.id, first.id]);
+    expect(picked.every((item) => item.url)).toBe(true);
+    expect(await pickedMediaViews(db.client, BUSINESS, ["nope"])).toEqual([]);
   });
 
   // Dev 7 (#1245 attack): a refused upload still counts toward the month, so a reused token can't dodge the limit.

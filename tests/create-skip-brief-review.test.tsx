@@ -80,6 +80,24 @@ describe("<AdAssistant> skips the brief review when the Brand has the facts (#85
     expect(second).not.toBe(first);
   });
 
+  it("#780 slice 2a: the library's photos go to Create as mediaIds; none are sent without a pick", async () => {
+    const ids = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"];
+    const fetchMock = mockApi(() => ({ ready: true, brief: BRIEF }));
+    const { unmount } = render(<AdAssistant business={complete} mediaIds={ids} />);
+    fireEvent.change(await screen.findByLabelText("Campaign goal"), { target: { value: "Rooftop solar for homes" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Make 3 ads" })); });
+    await waitFor(() => expect(generatePosts(fetchMock)).toHaveLength(1));
+    expect(JSON.parse(String(generatePosts(fetchMock)[0][1]?.body))).toMatchObject({ count: 3, mediaIds: ids });
+    unmount();
+    sessionStorage.clear();
+    fetchMock.mockClear();
+    render(<AdAssistant business={complete} />);
+    fireEvent.change(await screen.findByLabelText("Campaign goal"), { target: { value: "Rooftop solar for homes" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Make 3 ads" })); });
+    await waitFor(() => expect(generatePosts(fetchMock)).toHaveLength(1));
+    expect(JSON.parse(String(generatePosts(fetchMock)[0][1]?.body))).not.toHaveProperty("mediaIds");
+  });
+
   it("#1004: a typed goal on a complete Brand says what it will use, and 'Make 3 ads' generates at once", async () => {
     const fetchMock = mockApi(() => ({ ready: true, brief: BRIEF }));
     render(<AdAssistant business={complete} />);
