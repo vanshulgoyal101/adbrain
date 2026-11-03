@@ -79,9 +79,10 @@ export async function executeReviewedCampaign(input: {
           const byId = new Map((creatives ?? []).map(creative => [creative.id, creative]));
           const creativeInputs = draft.input.creativeIds.map(id => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));
           if (creativeInputs.length !== draft.input.creativeIds.length) throw new OperationPhaseError("Selected creative changed before execution.", { transmitted: false });
-          // TODO(#781): launch sends every ad as a picture until the video hunk in MetaClient lands; refuse rather than send a video's poster.
-          if ((await loadCreativeVideos(database, actor.businessId, draft.input.creativeIds, async () => review.selected!.adAccountId)).size > 0) {
-            throw new OperationPhaseError("Videos can't be launched yet.", { transmitted: false });
+          // #781: Review blocks videos still processing at Meta; refuse here if one slipped through, and a website can't take a video yet.
+          const videos = await loadCreativeVideos(database, actor.businessId, draft.input.creativeIds, async () => review.selected!.adAccountId);
+          if ([...videos.values()].some(video => video.state !== "ready" || !video.videoId) || (videos.size > 0 && draft.input.destination === "website")) {
+            throw new OperationPhaseError("A video isn't ready to launch.", { transmitted: false });
           }
           const creativeHash = createHash("sha256").update(JSON.stringify(buildCreativeReviewPayload(creativeInputs.map(creative => ({
             id: creative.id, businessId: actor.businessId, approved: true, imageUrl: creative.image_url,
@@ -126,7 +127,7 @@ export async function executeReviewedCampaign(input: {
             ...(prefill ? { whatsappGreeting: prefill } : {}),
             // Brands saved before #470 may hold a bare domain; Meta needs a full link.
             link: websiteLink ?? normalizeWebsite(business.website) ?? "https://facebook.com",
-            creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index] })),
+            creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index], videoId: videos.get(creative.id)?.videoId ?? null })),
             location, excludedLocation, ageMin: targeting.age?.min, ageMax: targeting.age?.max,
             gender: targeting.gender ?? "all", interests: review.audienceInterests,
             variants: draft.input.abTest ? splitAgeRange(targeting.age?.min ?? 25, targeting.age?.max ?? 60).map(band => ({
