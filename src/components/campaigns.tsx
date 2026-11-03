@@ -122,7 +122,7 @@ import { useNotices } from "@/i18n/notices";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
-import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
+import { skippedCampaignLines, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
 import { activateTrustLine } from "@/lib/trust-lines";
 import type { AdReview, CampaignDeliverySnapshot, LeadForm } from "@/lib/meta/client";
@@ -407,6 +407,8 @@ function BusinessCampaigns({
   const [cardNotice, setCardNotice] = useState<{ id: string; message: string } | null>(null);
   const activationReviewRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // #2775: the per-campaign "left unchanged" sentences, behind a Details disclosure.
+  const [syncDetails, setSyncDetails] = useState<string[]>([]);
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
@@ -934,8 +936,9 @@ function BusinessCampaigns({
           setLastSynced(completedAt);
           saveCampaignSyncTime(syncStorageKey, completedAt.getTime());
         }
-        const skippedNotice = syncSkippedRef.current.count
-          ? ` ${describeSkippedCampaigns(syncSkippedRef.current.named, syncSkippedRef.current.count, campaignWords)}` : "";
+        const skippedCount = syncSkippedRef.current.count;
+        const skippedNotice = skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : "";
+        setSyncDetails(skippedCount ? skippedCampaignLines(syncSkippedRef.current.named, skippedCount, campaignWords) : []);
         // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
         if (!background || data.nextCursor || skippedNotice) setNotice(`${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedNotice}`);
       } else {
@@ -1595,6 +1598,12 @@ function BusinessCampaigns({
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
       {/* #847: sync and save news is a quiet line, as on Enquiries, not a green box on every visit. */}
       <p ref={noticeRef} aria-live="polite" className={notice ? "scroll-mt-20 text-sm text-slate-600" : "sr-only"}>{notice}</p>
+      {notice && syncDetails.length > 0 && (
+        <details className="-mt-2 text-sm text-slate-600">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center font-medium text-slate-700">{tc("sync.details")}</summary>
+          <ul className="list-disc space-y-1 pb-2 pl-5">{syncDetails.map((line) => <li key={line}>{line}</li>)}</ul>
+        </details>
+      )}
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
