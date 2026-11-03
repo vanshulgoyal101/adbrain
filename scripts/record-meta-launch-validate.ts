@@ -15,12 +15,18 @@
  * #2598: `--website` records a website-visits launch (traffic campaign, WEBSITE ad set, link ad with UTM tags)
  * into launch-validate-website.json, plus validate_only creatives for the Shop now and Sign up buttons.
  *
- *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-launch-validate.ts [--no-facebook-reels | --website]
+ * #2713: `--website-conversions` records website leads and sales launches (OUTCOME_LEADS/OUTCOME_SALES, OFFSITE_CONVERSIONS
+ * ad sets promoting the account's test pixel with LEAD/PURCHASE) into launch-validate-website-conversions.json, plus each
+ * ad set's promoted_object as Meta stored it (the Page must survive for sync, pause and edit ownership checks).
+ *
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-launch-validate.ts [--no-facebook-reels | --website | --website-conversions]
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MetaClient, type AdDestination } from "@/lib/meta/client";
+import type { WebsiteGoal } from "@/lib/types/campaign";
+import { adSetReadbackLine } from "./meta-readback-log";
 
 const GRAPH = "https://graph.facebook.com/v26.0/";
 const VALIDATE = JSON.stringify(["validate_only"]);
@@ -47,9 +53,10 @@ const PLACEHOLDER_PHONE = "+910000000000";
 
 const NO_FACEBOOK_REELS = process.argv.includes("--no-facebook-reels");
 const WEBSITE = process.argv.includes("--website");
-if (NO_FACEBOOK_REELS && WEBSITE) throw new Error("Record one tape at a time.");
+const CONVERSIONS = process.argv.includes("--website-conversions");
+if ([NO_FACEBOOK_REELS, WEBSITE, CONVERSIONS].filter(Boolean).length > 1) throw new Error("Record one tape at a time.");
 
-type Exchange = { destination: AdDestination; kind: string; form: Record<string, string>; status: number; body: unknown };
+type Exchange = { destination: AdDestination; goal?: WebsiteGoal; kind: string; form: Record<string, string>; status: number; body: unknown };
 const tape: Exchange[] = [];
 const scrubs: [string, string][] = [[account, "act_ACCOUNT"], [pageId, "PAGE"]];
 const scrub = <T>(value: T): T => JSON.parse(scrubs.reduce((text, [real, label]) => text.split(real).join(label), JSON.stringify(value)));
@@ -58,6 +65,9 @@ const created: { kind: string; id: string }[] = [];
 let geoMeta: { path: string; status: number; body: unknown } | null = null;
 /** #1932: each real creative's enhancement settings as Meta stored them, read before it is deleted. */
 const creativeReadbacks: { destination: AdDestination; status: number; body: unknown }[] = [];
+/** #2713: each conversion ad set as Meta stored it, read before it is deleted. */
+const adSetReadbacks: { goal: WebsiteGoal; status: number; body: unknown }[] = [];
+let goal: WebsiteGoal | undefined;
 
 const realFetch = globalThis.fetch;
 let destination: AdDestination = "instant_form";
@@ -97,7 +107,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     throw new Error(`Refusing a ${kind} POST that isn't PAUSED.`);
   }
   const validated = await graphPost(path, { ...form, execution_options: VALIDATE });
-  tape.push({ destination, kind, form, status: validated.status, body: validated.body });
+  tape.push({ destination, ...(goal ? { goal } : {}), kind, form, status: validated.status, body: validated.body });
   console.log(destination, kind, validated.status, JSON.stringify(validated.body).slice(0, 240));
   if (validated.status !== 200) return Response.json(validated.body, { status: validated.status });
   // Ads stop at validation. Parents are created briefly so the next object can be validated.
@@ -109,6 +119,11 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const res = await realFetch(`${GRAPH}${real.body.id}?fields=degrees_of_freedom_spec&access_token=${encodeURIComponent(token)}`);
     creativeReadbacks.push({ destination, status: res.status, body: await res.json() });
     console.log(destination, "creative read-back", res.status);
+  }
+  if (kind === "adsets" && goal) {
+    const res = await realFetch(`${GRAPH}${real.body.id}?fields=promoted_object,optimization_goal,destination_type,billing_event&access_token=${encodeURIComponent(token)}`);
+    adSetReadbacks.push({ goal, status: res.status, body: await res.json() });
+    console.log(adSetReadbackLine(goal, res.status, adSetReadbacks.at(-1)!.body));
   }
   scrubs.push([real.body.id, { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE" }[kind]!]);
   return Response.json({ id: real.body.id });
@@ -158,6 +173,17 @@ async function main() {
       const validated = await graphPost(`${account}/ads`, { ...form, execution_options: VALIDATE });
       tape.push({ destination, kind: "control-ads-story-rule-with-facebook-reels", form, status: validated.status, body: validated.body });
       console.log("control", validated.status, JSON.stringify(validated.body).slice(0, 400));
+    } else if (CONVERSIONS) {
+      const pixels = await realFetch(`${GRAPH}${account}/adspixels?fields=id&limit=2&access_token=${encodeURIComponent(token)}`).then(r => r.json()) as { data?: { id: string }[] };
+      if (pixels.data?.length !== 1) throw new Error("The test account needs exactly one pixel (#2717).");
+      const pixelId = pixels.data[0].id;
+      scrubs.push([pixelId, "PIXEL"]);
+      destination = "website";
+      for (const g of ["leads", "sales"] as const) {
+        goal = g;
+        imageUploads = 0;
+        await meta.createLeadCampaign({ ...base, name: "AdBrain #2713 validate (PAUSED, deleted after)", destination, websiteGoal: g, pixelId });
+      }
     } else if (WEBSITE) {
       destination = "website";
       imageUploads = 0;
@@ -190,9 +216,9 @@ async function main() {
     const instagram = exchange.form.object_story_spec ? (JSON.parse(exchange.form.object_story_spec) as { instagram_user_id?: string }).instagram_user_id : undefined;
     if (instagram) scrubs.push([instagram, "INSTAGRAM"]);
   }
-  const file = join(process.cwd(), `tests/core/fixtures/meta/${NO_FACEBOOK_REELS ? "no-facebook-reels-validate" : WEBSITE ? "launch-validate-website" : "launch-validate"}.json`);
-  const name = NO_FACEBOOK_REELS ? { name: noReels.name } : WEBSITE ? { name: "AdBrain #2598 validate (PAUSED, deleted after)" } : {};
-  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, ...name, phone: PLACEHOLDER_PHONE }, geoMeta, creativeReadbacks, tape }), null, 2)}\n`);
+  const file = join(process.cwd(), `tests/core/fixtures/meta/${NO_FACEBOOK_REELS ? "no-facebook-reels-validate" : CONVERSIONS ? "launch-validate-website-conversions" : WEBSITE ? "launch-validate-website" : "launch-validate"}.json`);
+  const name = NO_FACEBOOK_REELS ? { name: noReels.name } : CONVERSIONS ? { name: "AdBrain #2713 validate (PAUSED, deleted after)" } : WEBSITE ? { name: "AdBrain #2598 validate (PAUSED, deleted after)" } : {};
+  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, ...name, phone: PLACEHOLDER_PHONE }, geoMeta, creativeReadbacks, ...(CONVERSIONS ? { adSetReadbacks } : {}), tape }), null, 2)}\n`);
   console.log(`launch-validate: ${tape.length} validated objects`);
 }
 
