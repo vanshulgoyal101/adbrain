@@ -74,6 +74,7 @@ import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFacts, review
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
+import { PickerAdTile } from "@/components/picker-ad-tile";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
@@ -96,7 +97,6 @@ import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectatio
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
-import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { preparedAudienceForm, targetingFromEditor, withPreparedAudienceForm, targetingToEditor } from "@/lib/campaign/editor-targeting";
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
@@ -1964,69 +1964,20 @@ function BusinessCampaigns({
                   {/* #724: above the grid, so it shows where focus lands on the first ad. */}
                   {placedError?.at === "ads" && <p id="ads-error" role="alert" className="mt-1 text-sm font-medium text-red-800">{placedError.message}</p>}
                   <div id="campaign-ad-picker" className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
-                    {pickerAds.map((c, index) => {
-                      const isSel = selected.has(c.id);
-                      return (
-                        // #305: on a phone, ads after the first two rows wait behind "Show all" unless selected.
-                        <div key={c.id} className={cn("relative flex min-w-0 flex-col gap-1.5", !showAllAds && index >= PHONE_PICKER_ADS && !isSel && "max-sm:hidden")}>
-                        <button
-                          type="button"
-                          onClick={() => toggle(c.id)}
-                          aria-pressed={isSel}
-                          aria-describedby={placedError?.at === "ads" ? "ads-error" : undefined}
-                          aria-label={c.headline || "Select ad"}
-                          className={cn(
-                            "group relative min-w-0 overflow-hidden rounded-md border-2 text-left transition-colors",
-                            isSel
-                              ? "border-slate-950 shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
-                              : "border-slate-200 hover:border-slate-300",
-                          )}
-                        >
-                          <div className="relative aspect-square bg-slate-100">
-                            {c.id === editingAdId && adPicture && (
-                              <div className="absolute inset-0 z-[1] bg-slate-100">
-                                <LivePicture preview={adPicture} />
-                              </div>
-                            )}
-                            {c.image_url && (
-                              <img
-                                src={creativeThumbnailUrl(c.image_url)}
-                                alt={c.headline || "Ad preview"}
-                                className="h-full w-full object-contain"
-                                loading="lazy"
-                                onError={(event) => {
-                                  if (c.image_url && event.currentTarget.src !== c.image_url) event.currentTarget.src = c.image_url;
-                                }}
-                              />
-                            )}
-                          </div>
-                          {isSel && (
-                            <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950 text-white">
-                              <CheckCircle2 className="h-4 w-4" />
-                            </span>
-                          )}
-                          <p className="truncate px-2 py-1.5 text-xs font-medium text-slate-700 max-sm:hidden">
-                            {c.headline}
-                          </p>
-                        </button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          aria-label={`Edit ${c.headline || "ad"}`}
-                          aria-expanded={editingAdId === c.id}
-                          onClick={() => {
-                            setAdEditNotes(null);
-                            setEditingAdId(c.id);
-                          }}
-                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:min-h-0 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0 max-sm:after:absolute max-sm:after:-inset-1 max-sm:after:content-['']"
-                        >
-                          {/* #847 T6: on a phone, Edit is a corner icon so a row of ads isn't followed by a row of buttons. */}
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" /><span className="max-sm:sr-only">Edit</span>
-                        </Button>
-                        </div>
-                      );
-                    })}
+                    {pickerAds.map((c, index) => (
+                      <PickerAdTile
+                        key={c.id}
+                        ad={c}
+                        selected={selected.has(c.id)}
+                        hidden={!showAllAds && index >= PHONE_PICKER_ADS && !selected.has(c.id)}
+                        editing={editingAdId === c.id}
+                        describedBy={placedError?.at === "ads" ? "ads-error" : undefined}
+                        yoursLabel={tc("picker.yourPhoto")}
+                        livePicture={c.id === editingAdId && adPicture ? <LivePicture preview={adPicture} /> : null}
+                        onToggle={() => toggle(c.id)}
+                        onEdit={() => { setAdEditNotes(null); setEditingAdId(c.id); }}
+                      />
+                    ))}
                   </div>
                   {!showAllAds && pickerAds.some((c, index) => index >= PHONE_PICKER_ADS && !selected.has(c.id)) && (
                     <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 h-11 w-full sm:hidden">

@@ -809,6 +809,9 @@
       "drafts": "{n, plural, one {Your # saved draft is below.} other {Your # saved drafts are below.}}",
       "start": "Pick your approved ads and a daily budget. Nothing spends until you go live."
     },
+    "picker": {
+      "yourPhoto": "Your photo"
+    },
     "list": {
       "deleted": "Deleted ({n})",
       "loading": "Loading campaigns...",
