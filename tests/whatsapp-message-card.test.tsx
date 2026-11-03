@@ -194,7 +194,7 @@ describe("WhatsApp message card in Hindi (#1438)", () => {
     expect(screen.getByLabelText("सवाल 2")).toHaveAttribute("placeholder", "ज़रूरी नहीं");
     fireEvent.click(screen.getByRole("button", { name: "WhatsApp मैसेज सेव करें" }));
     expect(await screen.findByText("सेव हो गया। नए WhatsApp कैंपेन इसी का इस्तेमाल करेंगे।")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "सुझाए गए पर वापस जाएँ" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "सुझाया गया मैसेज वापस लाएँ" })).toBeInTheDocument();
   });
 
   it("keeps the English words in the English messages", () => {
