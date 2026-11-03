@@ -139,7 +139,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
   }, [business.id, returnedBatch, initialAds, sample]);
 
   /**
-   * The batch's ads once it has finished: `complete`, `failed`, or `unresolved` (finished short). `processing`
+   * The batch's ads once it has finished: `complete`, `failed`, `unresolved` or `ended` (finished short). `processing`
    * and `partial` (some saved, still running) keep waiting (#1402). Null when it's still running after ~4 minutes.
    */
   async function savedBatch(generationId: string, expected: number): Promise<Creative[] | null> {
@@ -154,7 +154,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
         if (res.status === 429) wait = Math.min(Math.max(POLL_MS, (Number(res.headers.get("Retry-After")) || 0) * 1000), RATE_LIMIT_WAIT_MS);
         if (res.ok) {
           const data = (await res.json()) as { status?: string; creatives?: Creative[] };
-          if (data.status === "complete" || data.status === "failed" || data.status === "unresolved") {
+          if (data.status === "complete" || data.status === "failed" || data.status === "unresolved" || data.status === "ended") {
             publish(business.id, generationId, data.creatives ?? []);
             return data.creatives ?? [];
           }
