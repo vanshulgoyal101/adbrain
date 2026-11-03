@@ -961,6 +961,7 @@
         "REVIEW_AD_POLICY": "Edit the ad's wording",
         "REVIEW_INTERESTS_UNRESOLVED": "Edit the interests",
         "REVIEW_WHATSAPP_MESSAGE": "Edit the WhatsApp message",
+        "REVIEW_MEDIA_RIGHTS": "Confirm your photo rights",
         "REVIEW_TRACKING": "Check tracking in Your business",
         "REVIEW_GOAL_WORDS": "Choose your ads"
       }
@@ -1568,6 +1569,7 @@
     "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
     "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
     "whatsappMessage": "Your WhatsApp message: {problem}",
+    "mediaRights": "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta.",
     "noLeadForm": "Choose an active lead form from your Facebook Page in the Lead form field.",
     "noWebsite": "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.",
     "adPolicy": "\"{term}\" in the ad \"{named, select, yes {{headline}} other {without a headline}}\" is {kind, select, health {a health promise} other {a promise}} Meta rejects. Edit the ad to describe the service instead.",
@@ -1659,6 +1661,13 @@
       "limitCount": "You can add up to {max} at a time. Add the rest after these finish.",
       "rightsRequired": "Tick the box above to add your photos.",
       "consentFailed": "Your confirmation couldn't be saved. Try again.",
+      "confirmTitle": "Confirm your rights to the photos in your ads",
+      "confirmAction": "Confirm",
+      "confirmSaving": "Saving…",
+      "rightsLegend": "Your rights to these files",
+      "rightsText": "I own these photos and videos, or have permission to use them, including any music and the people shown.",
+      "peopleText": "Everyone recognisable has agreed to appear in your ads.",
+      "musicNote": "Music from films or popular songs can get your ad muted or rejected. Use your own audio or royalty-free music.",
       "format": "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
       "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again."
     },
@@ -1710,7 +1719,22 @@
     "resetButton": "Reset to suggested",
     "preview": "WhatsApp preview",
     "questionsToTap": "Questions to tap",
-    "readyToSend": "Ready to send: "
+    "readyToSend": "Ready to send: ",
+    "campaign": {
+      "title": "WhatsApp message for this campaign",
+      "description": "What customers see after tapping this campaign's ads.",
+      "alsoSave": "Also save as my message",
+      "alsoSaveNote": "New WhatsApp campaigns will start from it. Running campaigns don't change.",
+      "undo": "Undo my edit",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "use": "Use for this campaign",
+      "problems": {
+        "greeting": "Write a welcome of up to 300 characters.",
+        "prefill": "Write a pre-typed message of up to 300 characters.",
+        "questions": "Use 1 to 3 different questions of up to 40 characters."
+      }
+    }
   },
   "create": {
     "title": "Create ads",

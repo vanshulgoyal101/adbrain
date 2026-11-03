@@ -67,6 +67,19 @@ describe("campaign preflight orchestration", () => {
     expect(result.kind === "review" && result.review.blockers.map((item) => item.reason)).toContain("REVIEW_AD_POLICY");
   });
 
+  it("blocks an ad with the owner's own photo until they confirm their rights, and asks only then (#784)", async () => {
+    const now = "2026-09-08T10:00:00.000Z";
+    const own = async () => [{ ...(await loaders().findCreatives(actor.businessId, draft.input.creativeIds))[0], ownMedia: true }];
+    const reasons = (result: Awaited<ReturnType<typeof prepareCampaignReview>>) => result.kind === "review" ? result.review.blockers.map((item) => item.reason) : [];
+    const asked = vi.fn(async () => false);
+    expect(reasons(await prepareCampaignReview(loaders({ findCreatives: own, findMediaConsent: asked }), { actor, draftId: draft.id, requestedDraftVersion: draft.version, now }))).toContain("REVIEW_MEDIA_RIGHTS");
+    expect(reasons(await prepareCampaignReview(loaders({ findCreatives: own, findMediaConsent: async () => true }), { actor, draftId: draft.id, requestedDraftVersion: draft.version, now }))).not.toContain("REVIEW_MEDIA_RIGHTS");
+    await expect(prepareCampaignReview(loaders({ findCreatives: own, findMediaConsent: async () => { throw new Error("Media consent could not be checked."); } }), { actor, draftId: draft.id, requestedDraftVersion: draft.version, now })).rejects.toThrow("could not be checked");
+    asked.mockClear();
+    expect(reasons(await prepareCampaignReview(loaders({ findMediaConsent: asked }), { actor, draftId: draft.id, requestedDraftVersion: draft.version, now }))).not.toContain("REVIEW_MEDIA_RIGHTS");
+    expect(asked).not.toHaveBeenCalled();
+  });
+
   it("gives Review the business's own cost per result for this kind of campaign (#419 2b)", async () => {
     const asked: string[] = [];
     const result = await prepareCampaignReview(loaders({

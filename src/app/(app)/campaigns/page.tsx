@@ -169,6 +169,7 @@ export default async function CampaignsPage({
           weeklyCap={weeklyCap}
           verdictWords={await requestWords("verdict")}
           campaignWords={campaignWords}
+          whatsappWords={await requestWords("whatsappMessage")}
           metaWaitUntil={campaigns.some((campaign) => campaign.meta_campaign_id) ? await metaWaitFor(business.id) : null}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
           internal={await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => isInternalUser(data.user)).catch(() => false)}
