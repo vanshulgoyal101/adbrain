@@ -917,7 +917,7 @@
     },
     "targeting": {
       "decide": "AdBrain तय करे",
-      "chooseMyself": "मैं खुद चुनूँगा",
+      "chooseMyself": "खुद चुनें",
       "searchInclude": "शामिल करने के लिए जगह खोजें",
       "searchExclude": "हटाने के लिए जगह खोजें",
       "listInclude": "शामिल करने वाली जगहें",
@@ -963,7 +963,7 @@
       "summaryWomen": "महिलाएँ।",
       "summaryAll": "सभी लिंग।",
       "summaryExcluding": "{places} को छोड़कर।",
-      "areaPending": "जो इलाका अभी चुनना बाकी है",
+      "areaPending": "अभी चुने जाने वाले इलाके",
       "people": "{area} के लोग",
       "peopleExcluding": "{places} को छोड़कर",
       "ages": "उम्र {min}–{max}",
