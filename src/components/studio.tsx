@@ -548,7 +548,7 @@ export function Studio({
 
       {items.length > 0 && (
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <fieldset className="flex min-w-0 flex-wrap gap-1">
+          <fieldset className="flex min-w-0 gap-1 overflow-x-auto">
             <legend className="sr-only">Ad status</legend>
             {(
               [
@@ -560,7 +560,7 @@ export function Studio({
               <label
                 key={value}
                 className={cn(
-                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
+                  "flex min-h-11 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
                   filter === value
                     ? "bg-slate-100 font-medium text-slate-900"
                     : "text-slate-600 hover:bg-slate-50",
