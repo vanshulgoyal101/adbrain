@@ -421,7 +421,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({
-          businessId: business.id, brief, count, language, generationId: newGenerationId, ...(mediaIds.length ? { mediaIds } : {}),
+          businessId: business.id, brief, count, language, generationId: newGenerationId, ...(mediaIds.length && count === FULL_BATCH ? { mediaIds } : {}), // #780: a refill can't aim photos at its missing ads yet, so it uses Brand photos
           sourceFacts: [goal.trim().slice(0, 500), ...answers
             .filter((answer) => !(answer.options ?? []).includes(answer.answer) && answer.answer !== AI_ANSWER && answer.answer !== RANDOM_ANSWER)
             .map((answer) => answer.answer.trim().slice(0, 500))].filter(Boolean).slice(0, 12),
