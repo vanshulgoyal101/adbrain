@@ -16,14 +16,20 @@ const ASSET_TYPE_LABEL: Record<string, string> = {
   past_ad: "Past ad",
 };
 
-export async function downloadImage(url: string, filename: string) {
+const IMAGE_EXTENSIONS: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+const VIDEO_EXTENSIONS: Record<string, string> = { "video/mp4": "mp4", "video/quicktime": "mov" };
+
+async function downloadFile(url: string, filename: string, extensions: Record<string, string>) {
   const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-  if (!res.ok) throw new Error("Image download failed.");
+  if (!res.ok) throw new Error("Download failed.");
   const blob = await res.blob();
-  const extension = ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as Record<string, string>)[blob.type.split(";")[0]];
-  if (!extension || !blob.size) throw new Error("The response was not a supported image.");
+  const extension = extensions[blob.type.split(";")[0]];
+  if (!extension || !blob.size) throw new Error("The response was not a supported file.");
   downloadBlob(blob, filename.replace(/\.[^.]+$/, `.${extension}`));
 }
+
+export const downloadImage = (url: string, filename: string) => downloadFile(url, filename, IMAGE_EXTENSIONS);
+export const downloadVideo = (url: string, filename: string) => downloadFile(url, filename, VIDEO_EXTENSIONS);
 
 export function slugify(s: string, fallback: string): string {
   const base = s
@@ -40,6 +46,7 @@ export function AssetTile({
   title,
   meta,
   filename,
+  kind = "image",
   actions = true,
   children,
 }: {
@@ -49,6 +56,7 @@ export function AssetTile({
   title: string;
   meta?: React.ReactNode;
   filename: string;
+  kind?: "image" | "video";
   actions?: boolean;
   /** #778: extra controls under the standard actions (own photos: Rename, Delete). */
   children?: React.ReactNode;
@@ -62,7 +70,10 @@ export function AssetTile({
   return (
     <Card className="flex min-w-0 flex-col overflow-hidden">
       <div className="relative aspect-square bg-slate-100">
-        {!broken ? (
+        {!broken && kind === "video" ? (
+          <video src={url ?? undefined} aria-label={title} muted playsInline preload="metadata" controls
+            className="h-full w-full object-contain" onError={() => setBroken(true)} />
+        ) : !broken ? (
           <img
             src={(originalFallback ? url : thumbnailUrl ?? url) ?? undefined}
             alt={title}
@@ -92,8 +103,8 @@ export function AssetTile({
             onClick={async () => {
               setError(null);
               setDownloading(true);
-              try { await downloadImage(url, filename); }
-              catch { setError("Download failed. Retry or use Open to view the original image."); }
+              try { await (kind === "video" ? downloadVideo(url, filename) : downloadImage(url, filename)); }
+              catch { setError(kind === "video" ? "Download failed. Retry or use Open to view the original video." : "Download failed. Retry or use Open to view the original image."); }
               finally { setDownloading(false); }
             }}
             aria-label={downloading ? "Downloading" : "Download"}

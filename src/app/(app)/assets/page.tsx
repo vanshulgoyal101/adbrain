@@ -12,7 +12,7 @@ import {
 } from "@/lib/supabase/queries";
 import { isProspectSession } from "@/lib/prospect-session";
 import { hasCurrentMediaConsent } from "@/lib/media/consent";
-import { listMedia, mediaUploadsEnabled } from "@/lib/media/store";
+import { listMedia, mediaUploadsEnabled, mediaVideoEnabled } from "@/lib/media/store";
 import { createClient } from "@/lib/supabase/server";
 import { mediaTranslator } from "@/i18n/words";
 import { requestWords } from "@/i18n/request-locale";
@@ -60,12 +60,13 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
       requestWords("media"),
     ]);
     const t = mediaTranslator(words);
+    const videoEnabled = mediaVideoEnabled();
     return (
       <div>
-        <PageHeader title={t("page.title")} description={<p>{t("page.description", { name: business.name })}</p>} />
+        <PageHeader title={t(videoEnabled ? "page.videoTitle" : "page.title")} description={<p>{t(videoEnabled ? "page.videoDescription" : "page.description", { name: business.name })}</p>} />
         <div className="mt-6">
           <MediaLibrary words={words} business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
-            brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} />
+            brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} videoEnabled={videoEnabled} />
         </div>
       </div>
     );

@@ -11,8 +11,8 @@ vi.mock("@/lib/prospect-session", () => ({ isProspectSession: async () => false 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 vi.mock("@/lib/media/consent", async (original) => ({ ...await original<Record<string, unknown>>(), hasCurrentMediaConsent: async () => { throw new Error("down"); } }));
-const media = vi.hoisted(() => ({ on: false, list: vi.fn() }));
-vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => media.on, listMedia: media.list }));
+const media = vi.hoisted(() => ({ on: false, video: false, list: vi.fn() }));
+vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => media.on, mediaVideoEnabled: () => media.on && media.video, listMedia: media.list }));
 
 describe("Assets page (#778 slice 3a)", () => {
   it("is the old Assets page while uploads are off, and never reads media", async () => {
@@ -40,5 +40,15 @@ describe("Assets page (#778 slice 3a)", () => {
     const { default: AssetsPage } = await import("@/app/(app)/assets/page");
     render(await AssetsPage({ searchParams: Promise.resolve({ add: "1" }) }));
     expect(screen.getByRole("dialog", { name: "Add photos" })).toBeInTheDocument();
+  });
+
+  it("uses the combined heading and upload entry when the server enables video", async () => {
+    media.on = true;
+    media.video = true;
+    media.list.mockResolvedValueOnce({ items: [], next: null });
+    const { default: AssetsPage } = await import("@/app/(app)/assets/page");
+    render(await AssetsPage());
+    expect(screen.getByRole("heading", { name: "Photos & videos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add photos & videos" })).toBeInTheDocument();
   });
 });

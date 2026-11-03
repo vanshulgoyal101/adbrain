@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { downloadBlob } from "@/lib/download";
-import { AssetsLibrary } from "@/components/assets-library";
+import { AssetsLibrary, downloadImage, downloadVideo } from "@/components/assets-library";
 import type { BrandAsset, Creative } from "@/lib/types";
 
 vi.mock("@/lib/download", () => ({ downloadBlob: vi.fn() }));
@@ -69,6 +69,16 @@ describe("<AssetsLibrary>", () => {
     render(<AssetsLibrary creatives={[creative({})]} brandAssets={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Download" }));
     await screen.findByRole("alert");
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+
+  it("keeps image and video download MIME allowlists separate", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["video"], { type: "video/mp4" }) }));
+    await expect(downloadImage("https://example.com/file", "file.jpg")).rejects.toThrow();
+    expect(downloadBlob).not.toHaveBeenCalled();
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["image"], { type: "image/png" }) }));
+    await expect(downloadVideo("https://example.com/file", "file.mp4")).rejects.toThrow();
     expect(downloadBlob).not.toHaveBeenCalled();
   });
 
