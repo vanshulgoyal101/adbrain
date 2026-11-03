@@ -296,12 +296,12 @@ export function WorkspaceHome({
               {creatives.slice(0, 4).map((creative) => (
                 <li key={creative.id} className="min-w-0">
                   <Link href={`/studio?creative=${encodeURIComponent(creative.id)}`} aria-label={`${creative.headline || "Untitled ad"}: ${reviewLabel(creative).toLowerCase()}`} className="group block">
-                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md bg-slate-100">
+                    <div className="flex aspect-[4/5] items-center justify-center overflow-hidden rounded-md bg-slate-100">
                       {creative.image_url ? (
                         <img
                           src={creativeThumbnailUrl(creative.image_url)}
                           alt={creative.headline || "Ad"}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain"
                           loading="lazy"
                         />
                       ) : (
