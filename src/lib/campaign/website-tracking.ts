@@ -1,4 +1,6 @@
 import type { TrackingEvent, TrackingStatus } from "@/lib/meta/pixels";
+import type { ReviewDTO } from "@/lib/campaign/connect-contracts";
+import type { Database } from "@/lib/types";
 import type { WebsiteGoal } from "@/lib/types/campaign";
 import { websiteButton } from "@/lib/campaign/website-button";
 
@@ -53,4 +55,17 @@ export function trackingBlocker(goal: ConversionGoal, tracking: ReviewTracking |
 export function goalWordsMismatch<T extends { headline: string | null; cta?: string | null }>(goal: ConversionGoal, creatives: T[]): T | null {
   const wrong = goal === "leads" ? "shop_now" : "sign_up";
   return creatives.find((creative) => websiteButton(creative.cta) === wrong) ?? null;
+}
+
+/**
+ * #2711 (M2): the pixel a website leads or sales campaign was bought with, the one Review checked, so results read
+ * the same tracking. Other campaigns leave the column out. Throws when a conversion review has no pixel: call it
+ * before Meta's create, so the refusal never leaves a Meta campaign without its row.
+ */
+export function reviewedPixelColumn(
+  review: Pick<ReviewDTO, "destination" | "websiteGoal" | "pixelId">,
+): Pick<Database["public"]["Tables"]["campaigns"]["Insert"], "meta_pixel_id"> {
+  if (!conversionGoal(review.destination, review.websiteGoal)) return {};
+  if (!review.pixelId) throw new Error("Website leads or sales review has no tracking pixel.");
+  return { meta_pixel_id: review.pixelId };
 }
