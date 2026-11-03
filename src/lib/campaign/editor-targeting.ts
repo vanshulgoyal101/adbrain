@@ -147,7 +147,10 @@ function geoSpec(places: GeoPick[], form: AudienceEditForm): GeoSpec | undefined
 }
 
 /** The change to send, or why it can't be sent yet. */
-export function audienceChangeFromForm(form: AudienceEditForm): { change: AudienceChangeBody } | { error: string } {
+/** #1438: the form check's reason, so the dialog can say it in the owner's language; `error` stays English for the server. */
+export type AudienceFormError = "agesBoth" | "agesRange" | "languages" | "nothing";
+
+export function audienceChangeFromForm(form: AudienceEditForm): { change: AudienceChangeBody } | { error: string; code: AudienceFormError } {
   const change: AudienceChangeBody = {};
   const location = geoSpec(form.included, form);
   const excludedLocation = geoSpec(form.excluded, form);
@@ -155,8 +158,8 @@ export function audienceChangeFromForm(form: AudienceEditForm): { change: Audien
   if (excludedLocation) change.excludedLocation = excludedLocation;
   if (form.ageMin !== null || form.ageMax !== null) {
     const { ageMin: min, ageMax: max } = form;
-    if (min === null || max === null) return { error: "Enter both ages, or leave both blank to keep them." };
-    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 18 || max > 65 || min > max) return { error: "Ages go from 18 to 65, youngest first." };
+    if (min === null || max === null) return { error: "Enter both ages, or leave both blank to keep them.", code: "agesBoth" };
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 18 || max > 65 || min > max) return { error: "Ages go from 18 to 65, youngest first.", code: "agesRange" };
     change.age = { min, max };
   }
   if (form.gender !== "keep") change.gender = form.gender;
@@ -164,8 +167,8 @@ export function audienceChangeFromForm(form: AudienceEditForm): { change: Audien
   if (form.areaExclusions && !location) change.areaExclusions = true;
   if (form.languageMode === "any") change.languages = [];
   if (form.languageMode === "only") {
-    if (!form.languages.length) return { error: "Pick at least one language, or choose Any language." };
+    if (!form.languages.length) return { error: "Pick at least one language, or choose Any language.", code: "languages" };
     change.languages = [...new Set(form.languages)];
   }
-  return Object.keys(change).length ? { change } : { error: "Change the area, an exclusion, the ages, who sees the ads or the language." };
+  return Object.keys(change).length ? { change } : { error: "Change the area, an exclusion, the ages, who sees the ads or the language.", code: "nothing" };
 }
