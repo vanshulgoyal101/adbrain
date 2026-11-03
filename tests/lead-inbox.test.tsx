@@ -616,6 +616,26 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     expect(screen.queryByText("Asha Verma")).toBeNull();
   });
 
+  it("#2748: the background refresh after a check keeps the empty count row collapsed, so the list doesn't move", async () => {
+    let resolveRead!: (value: unknown) => void;
+    vi.stubGlobal("fetch", vi.fn((url: string) => url === "/api/leads/sync"
+      ? Promise.resolve({ ok: true, json: async () => ({ leads: [], imported: 0, sync: { id: "done", state: "complete", hasMore: false } }) })
+      : new Promise(resolve => { resolveRead = resolve; })));
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} initialTotal={1} metaReady />);
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    const status = await screen.findByText("Loading enquiries...");
+    expect(status).toHaveAttribute("role", "status");
+    expect(status.parentElement).toHaveAttribute("data-quiet");
+    await act(async () => resolveRead({ ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
+    await waitFor(() => expect(screen.queryByText("Loading enquiries...")).toBeNull());
+    expect(screen.getByRole("status", { name: "" }).parentElement).toHaveAttribute("data-quiet");
+  });
+
+  it("#2748: the count row shows (and stays) when not everything is listed", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} initialTotal={5} initialNextCursor="c" metaReady={false} />);
+    expect(screen.getByText("1 of 5 enquiries").parentElement).not.toHaveAttribute("data-quiet");
+  });
+
   it("does not infer complete sync from a legacy response", async () => {
     setFetch({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
     render(<LeadInbox businessName="Fixture" initialLeads={[]} metaReady />);
@@ -840,6 +860,12 @@ describe("<LeadInbox> two panes from 1280 px (#1260)", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady={false} />);
     expect(screen.queryByRole("complementary")).toBeNull();
     expect(screen.queryByRole("button", { name: "Asha Verma" })).toBeNull();
+  });
+
+  it("#2748: the server's first paint already has the two-pane layout, so hydration doesn't move the list", () => {
+    // No matchMedia stub: this is the server snapshot (one pane in JS). The CSS media query still lays out two panes.
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady={false} />);
+    expect(screen.getByRole("table").closest("[class*=panes]")).not.toBeNull();
   });
 });
 

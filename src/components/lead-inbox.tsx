@@ -444,7 +444,7 @@ export function LeadInbox({
           </select>
           </div>
         </div>
-        <div className={styles.resultCount}><span role="status">{page.loading ? t("list.loading") : hasFilters || realShown < page.total ? t("list.count", { shown: realShown, total: page.total }) : ""}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>{t("list.clearFilters")}</button>}</div>
+        <div className={styles.resultCount} data-quiet={hasFilters || realShown < page.total ? undefined : true}><span role="status">{page.loading ? t("list.loading") : hasFilters || realShown < page.total ? t("list.count", { shown: realShown, total: page.total }) : ""}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>{t("list.clearFilters")}</button>}</div>
       </div>}
 
       {selected && <form className={styles.editor} aria-label={t("editor.label")} onSubmit={saveFollowUp}>
@@ -480,7 +480,7 @@ export function LeadInbox({
       ) : leads.length === 0 ? (
         <div className={styles.empty}><h3>{t("empty.noMatch")}</h3><Button variant="outline" onClick={clearFilters}>{t("list.clearFilters")}</Button></div>
       ) : (
-        <div className={detail ? styles.panes : undefined}>
+        <div className={styles.panes}>
         <div className={styles.listPane}>
           <table role="table" aria-label={t("list.table")} className={styles.table}>
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
