@@ -7,7 +7,8 @@ import { pathToFileURL } from "node:url";
 export function accessRequestAction(at, matches) {
   if (!Array.isArray(matches) || matches.length === 0) return "open";
   if (matches.some((issue) => String(issue.state).toUpperCase() === "OPEN")) return "skip";
-  const newest = matches.reduce((a, b) => (b.number > a.number ? b : a));
+  // The latest close decides, so a duplicate closed later than a lower-numbered one cannot loop.
+  const newest = matches.reduce((a, b) => (Date.parse(b.closedAt) > Date.parse(a.closedAt) ? b : a));
   const requested = Date.parse(at);
   const closed = Date.parse(newest.closedAt);
   // Without exact times (older deploy) keep the old rule: one issue per key; an old request never reopens a closed issue.

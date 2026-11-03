@@ -9,6 +9,8 @@ describe("accessRequestAction (#2806)", () => {
     expect(accessRequestAction("2026-11-03T00:00:00Z", [closed, { number: 12, state: "OPEN", closedAt: null }])).toBe("skip"));
   it("reopens the newest closed issue when the request is newer than its close", () =>
     expect(accessRequestAction("2026-11-02T18:22:00Z", [{ number: 3, state: "CLOSED", closedAt: "2026-10-29T00:00:00Z" }, closed])).toBe("reopen:9"));
+  it("compares against the latest close, not the highest number", () =>
+    expect(accessRequestAction("2026-11-02T13:00:00Z", [{ number: 3, state: "CLOSED", closedAt: "2026-11-02T14:00:00Z" }, closed])).toBe("skip"));
   it("skips an older or equal request, so a re-close cannot loop", () => {
     expect(accessRequestAction("2026-11-02T12:00:00Z", [closed])).toBe("skip");
     expect(accessRequestAction("2026-11-02T12:55:00Z", [closed])).toBe("skip");
