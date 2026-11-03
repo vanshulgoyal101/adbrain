@@ -119,10 +119,11 @@ import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow }
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { ageText, campaignsTranslator, verdictTranslator, type Words } from "@/i18n/words";
 import { useNotices } from "@/i18n/notices";
+import { CampaignSyncNotice } from "@/components/campaign-sync-notice";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
-import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
+import { skippedCampaignLines, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
 import { activateTrustLine } from "@/lib/trust-lines";
 import type { AdReview, CampaignDeliverySnapshot, LeadForm } from "@/lib/meta/client";
@@ -407,6 +408,7 @@ function BusinessCampaigns({
   const [cardNotice, setCardNotice] = useState<{ id: string; message: string } | null>(null);
   const activationReviewRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [syncDetails, setSyncDetails] = useState<{ notice: string; lines: string[] } | null>(null);
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
@@ -934,10 +936,9 @@ function BusinessCampaigns({
           setLastSynced(completedAt);
           saveCampaignSyncTime(syncStorageKey, completedAt.getTime());
         }
-        const skippedNotice = syncSkippedRef.current.count
-          ? ` ${describeSkippedCampaigns(syncSkippedRef.current.named, syncSkippedRef.current.count, campaignWords)}` : "";
+        const { count: skippedCount, named } = syncSkippedRef.current;
         // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
-        if (!background || data.nextCursor || skippedNotice) setNotice(`${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedNotice}`);
+        if (!background || data.nextCursor || skippedCount) { const text = `${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : ""}`; setNotice(text); setSyncDetails(skippedCount ? { notice: text, lines: skippedCampaignLines(named, skippedCount, campaignWords) } : null); }
       } else {
         setSyncError(data.error ?? tc("sync.failed"));
       }
@@ -1593,8 +1594,7 @@ function BusinessCampaigns({
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
-      {/* #847: sync and save news is a quiet line, as on Enquiries, not a green box on every visit. */}
-      <p ref={noticeRef} aria-live="polite" className={notice ? "scroll-mt-20 text-sm text-slate-600" : "sr-only"}>{notice}</p>
+      <CampaignSyncNotice ref={noticeRef} notice={notice} details={syncDetails?.notice === notice ? syncDetails.lines : []} detailsLabel={tc("sync.details")} />
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
@@ -2330,7 +2330,7 @@ function BusinessCampaigns({
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                {tc(syncing ? "header.syncing" : "header.sync")}
+                <span className="grid text-left"><span aria-hidden={syncing || undefined} className={syncing ? "invisible col-start-1 row-start-1" : "col-start-1 row-start-1"}>{tc("header.sync")}</span><span aria-hidden={!syncing || undefined} className={syncing ? "col-start-1 row-start-1" : "invisible col-start-1 row-start-1"}>{tc("header.syncing")}</span></span>
               </Button>
             </div>
           )}
@@ -2362,7 +2362,7 @@ function BusinessCampaigns({
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
                 running={audienceEdit.status === "active"} prepared={preparedAudienceForm(audienceEdit.raw)}
                 onClose={() => { setAudienceEdit(null); loadWaiting(); }}
-                onSaved={(message, form) => { const id = audienceEdit.id; setCampaigns(list => list.map(item => item.id === id ? withPreparedAudienceForm(item, form ?? null) : item)); setCardNotice({ id, message }); setAudienceEdit(null); }}
+                onSaved={(message, form) => { const id = audienceEdit.id; setCampaigns(list => list.map(item => item.id === id ? withPreparedAudienceForm(item, form ?? null) : item)); setCardNotice({ id, message }); setAudienceEdit(null); }} words={campaignWords}
               />
             )}
             {budgetEdit && (
