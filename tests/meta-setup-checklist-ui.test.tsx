@@ -43,4 +43,16 @@ describe("Meta setup checklist (#1016)", () => {
     expect(screen.getByText(/couldn't read your Meta setup/)).toBeInTheDocument();
     expect(screen.queryByRole("link")).toBeNull();
   });
+  it("says its frame in Hindi, marked lang='hi', and keeps the English row labels marked lang='en' (#1438)", () => {
+    const { container, unmount } = render(<MetaSetupChecklist rows={setupChecklist(reads, { adAccountId: "act_42" })} locale="hi" />);
+    expect(screen.getByRole("heading", { name: "Meta पर लॉन्च के लिए तैयार" })).toBeInTheDocument();
+    expect(container.querySelector("section")).toHaveAttribute("lang", "hi");
+    expect(screen.getByText(/^लॉन्च से पहले Meta में 1 चीज़ ठीक करनी है/)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "पहले से तैयार" })).toBeInTheDocument();
+    expect(screen.getAllByText(": हो गया", { selector: "span" })).toHaveLength(4);
+    expect(screen.getByText("Business portfolio").closest("[lang]")).toHaveAttribute("lang", "en");
+    unmount();
+    render(<MetaSetupChecklist rows={null} locale="hi" />);
+    expect(screen.getByText(/अभी हम आपका Meta सेटअप नहीं पढ़ पाए/)).toBeInTheDocument();
+  });
 });
