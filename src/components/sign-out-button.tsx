@@ -6,7 +6,8 @@ import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
-export function SignOutButton() {
+/** #1438: the shell passes its words; English by default. */
+export function SignOutButton({ label = "Sign out", failed = "Could not sign out. Please try again.", lang }: { label?: string; failed?: string; lang?: string }) {
   const router = useRouter();
   const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -28,7 +29,7 @@ export function SignOutButton() {
       router.push("/login");
       router.refresh();
     } catch {
-      setError("Could not sign out. Please try again.");
+      setError(failed);
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -43,14 +44,15 @@ export function SignOutButton() {
       onClick={signOut}
       disabled={busy}
       aria-busy={busy}
-      aria-label="Sign out"
-      title="Sign out"
-      className="w-full justify-start px-3 text-slate-600"
+      aria-label={label}
+      title={label}
+      lang={lang}
+      className="min-h-11 w-full justify-start gap-3 px-3 text-slate-600"
     >
       <LogOut className="h-4 w-4" />
-      <span>Sign out</span>
+      <span>{label}</span>
     </Button>
-    {error && <p role="alert" className="mt-1 max-w-48 text-xs text-red-700">{error}</p>}
+    {error && <p role="alert" lang={lang} className="mt-1 max-w-48 text-xs text-red-700">{error}</p>}
     </div>
   );
 }

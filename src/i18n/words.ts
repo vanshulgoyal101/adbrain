@@ -35,9 +35,19 @@ export function settingsTranslator(words?: Words<"settings">) {
   return createTranslator({ locale: words?.locale ?? "en", messages: { settings: words?.messages ?? en.settings }, namespace: "settings" });
 }
 
+/** #1438: the Create page and its assistant's start screen; English when none are passed. */
+export function createAdsTranslator(words?: Words<"create">) {
+  return createTranslator({ locale: words?.locale ?? "en", messages: { create: words?.messages ?? en.create }, namespace: "create" });
+}
+
 /** #2345: client fallbacks (no reply, a dropped connection) in the owner's language; English when none are passed. */
 export function noticesTranslator(words?: Words<"notices">) {
   return createTranslator({ locale: words?.locale ?? "en", messages: { notices: words?.messages ?? en.notices }, namespace: "notices" });
+}
+
+/** #778: the Photos page, upload sheet and Create choice (`media`, CPO #1868); English when none are passed. */
+export function mediaTranslator(words?: Words<"media">) {
+  return createTranslator({ locale: words?.locale ?? "en", messages: { media: words?.messages ?? en.media }, namespace: "media" });
 }
 
 /** "3h ago" / "3 घंटे पहले" from the verdict words' age steps (#1438). */

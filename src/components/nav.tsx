@@ -83,7 +83,8 @@ export function Nav({
   const pathname = usePathname();
   return (
     <nav
-      aria-label="Workspace navigation"
+      aria-label={labels.navigation}
+      lang={lang}
       className={cn(
         "flex gap-1",
         orientation === "vertical"

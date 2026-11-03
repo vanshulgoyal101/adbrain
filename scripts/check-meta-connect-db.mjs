@@ -6,12 +6,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
-import { applyMigration } from "./database-migrations.mjs";
+import { applyMigration, managementMigrationSql } from "./database-migrations.mjs";
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
 import { createDefaultPrivilegeFixtures, verifyDefaultPrivilegeLedger, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
+import { preservedSecurityDefinerPrivileges, securityDefinerState, verifySecurityDefiners } from "./check-security-definers.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultPrivilegesMigration = await readFile(join(root, "db/migrations/20261102_default_public_privileges.sql"), "utf8");
+const definerHardeningMigration = await readFile(join(root, "db/migrations/20261102_security_definer_search_path.sql"), "utf8");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
@@ -42,6 +44,7 @@ const editOperationsMigration = await readFile(join(root, "db/migrations/2026102
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const mediaLibraryMigration = await readFile(join(root, "db/migrations/20261103_media_library.sql"), "utf8");
+const mediaUploadQuotaMigration = await readFile(join(root, "db/migrations/20261103_media_upload_quota.sql"), "utf8");
 const trackingConversionsMigration = await readFile(join(root, "db/migrations/20261105_tracking_conversions.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
@@ -1225,11 +1228,8 @@ async function verifyManagedWhatsAppPageLink(db, database) {
   });
 }
 
-async function verifyTokenSearchPath(db, database) {
-  await check(`${database}: the token RPCs run with an empty search_path and still store, read and delete (#625)`, async () => {
-    const config = (await db.query(`select p.proname, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.proname in ('meta_token_insert','meta_token_get','meta_token_delete') order by p.proname`)).rows;
-    assert.deepEqual(config, ["meta_token_delete", "meta_token_get", "meta_token_insert"].map((proname) => ({ proname, proconfig: ['search_path=""'] })));
+async function verifyTokenRoundTrip(db, database) {
+  await check(`${database}: the token RPCs still store, read and delete (#625)`, async () => {
     const owner = randomUUID(), business = randomUUID(), token = randomUUID();
     await db.query("begin");
     try {
@@ -1630,6 +1630,36 @@ async function verifyLeadFirstContacted(db, database) {
       assert.equal((await session.query("update public.leads set first_contacted_at=now() where id=$1", [lead])).rowCount, 0);
     });
     assert.equal((await db.query("select count(*)::int as n from pg_indexes where indexname='leads_business_first_contacted_idx'")).rows[0].n, 1);
+  });
+}
+
+async function verifyMediaUploadQuota(db, database) {
+  const owner = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Quota')", [business, owner]);
+  const sha = () => createHash("sha256").update(randomUUID()).digest("hex");
+  const row = (kind = "image", source = "upload") => [business, `${business}/${randomUUID()}.${kind === "video" ? "mp4" : "jpg"}`, sha(), kind, source];
+  const insert = "insert into public.media_assets(business_id,path,sha256,kind,source) values ($1,$2,$3,$4,$5)";
+  const monthStart = "date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata'";
+  await check(`${database}: media uploads: the monthly limit holds under parallel inserts, per kind, counting retired rows (#1209)`, async () => {
+    await db.query(`insert into public.media_assets(business_id,path,sha256,created_at) values ($1::uuid,$1::text||'/old.jpg',$2,${monthStart} - interval '1 day')`, [business, sha()]);
+    for (let i = 0; i < 48; i++) await db.query(insert, row());
+    await db.query(`update public.media_assets set deleted_at=now() where id in (select id from public.media_assets where business_id=$1 and created_at >= ${monthStart} limit 5)`, [business]);
+    const racers = await Promise.all(Array.from({ length: 5 }, async () => { const c = client(database); await c.connect(); return c; }));
+    try {
+      const results = await Promise.allSettled(racers.map(async (c) => {
+        await c.query("begin");
+        await c.query("set local role service_role");
+        try { await c.query(insert, row()); await c.query("commit"); } catch (error) { await c.query("rollback"); throw error; }
+      }));
+      assert.equal(results.filter(r => r.status === "fulfilled").length, 2, "exactly two of five parallel uploads fit under 50");
+      for (const r of results.filter(r => r.status === "rejected")) assert.equal(r.reason.message, "MEDIA_QUOTA");
+    } finally { await Promise.all(racers.map(c => c.end())); }
+    assert.equal((await db.query(`select count(*)::int as n from public.media_assets where business_id=$1 and kind='image' and created_at >= ${monthStart}`, [business])).rows[0].n, 50);
+    await assert.rejects(db.query(insert, row()), { code: "P0001", message: "MEDIA_QUOTA" });
+    await db.query(insert, row("image", "ai"));
+    for (let i = 0; i < 3; i++) await db.query(insert, row("video"));
+    await assert.rejects(db.query(insert, row("video")), { code: "P0001", message: "MEDIA_QUOTA" });
   });
 }
 
@@ -3317,6 +3347,37 @@ async function verify(database, source, integrityMigration, customerOnly = false
     }
     await db.query(source);
     if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
+    if (database === "customer_upgrade") {
+      const name = "20261102_security_definer_search_path.sql";
+      const before = await securityDefinerState(db);
+      await check(`${database}: definer hardening and its ledger roll back together`, async () => {
+        await db.query(`create table if not exists private.schema_migrations (
+          name text primary key, checksum text not null, applied_at timestamptz not null default now()
+        )`);
+        await db.query(managementMigrationSql(name, definerHardeningMigration, { commit: false }));
+        assert.deepEqual(await securityDefinerState(db), before, "the release dry run restores all function configuration and grants");
+        assert.equal((await db.query("select count(*)::int as count from private.schema_migrations where name=$1", [name])).rows[0].count, 0);
+        await db.query(`
+          create function private.reject_definer_ledger() returns trigger language plpgsql as $$
+            begin raise exception 'intentional ledger failure'; end $$;
+          create trigger reject_definer_ledger before insert on private.schema_migrations
+            for each row execute function private.reject_definer_ledger();
+        `);
+        try {
+          await assert.rejects(applyMigration(db, name, definerHardeningMigration), /intentional ledger failure/);
+          assert.deepEqual(await securityDefinerState(db), before, "a ledger failure rolls back the function changes");
+          assert.equal((await db.query("select count(*)::int as count from private.schema_migrations where name=$1", [name])).rows[0].count, 0);
+        } finally {
+          await db.query("drop trigger reject_definer_ledger on private.schema_migrations; drop function private.reject_definer_ledger()");
+        }
+      });
+      await check(`${database}: hardening preserves existing owners and non-trigger function grants`, async () => {
+        assert.equal(await applyMigration(db, name, definerHardeningMigration), "applied");
+        assert.equal(await applyMigration(db, name, definerHardeningMigration), "already_applied");
+        await db.query(definerHardeningMigration);
+        assert.deepEqual(preservedSecurityDefinerPrivileges(await securityDefinerState(db)), preservedSecurityDefinerPrivileges(before));
+      });
+    }
     if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
       const installed = (await db.query("select to_regclass('public.product_event_daily') is not null as installed")).rows[0].installed;
       if (!installed) {
@@ -3462,7 +3523,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       }
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
-      await verifyTokenSearchPath(db,database);
+      await verifyTokenRoundTrip(db,database);
       await verifyMetaTokenPurge(db,database);
       await verifyMetaRevocationTarget(db,database);
       await db.query(whatsappTemplateMigration);
@@ -3483,6 +3544,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(mediaLibraryMigration);
       await verifyMediaAssets(db,database);
       await verifyMediaConsents(db,database);
+      await db.query(mediaUploadQuotaMigration);
+      await db.query(mediaUploadQuotaMigration);
+      await verifyMediaUploadQuota(db,database);
       await db.query(trackingConversionsMigration);
       await db.query(trackingConversionsMigration);
       await verifyTrackingConversions(db,database);
@@ -3504,6 +3568,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
       await verifyMetaThrottle(db,database);
+      if (database !== "customer_legacy_upgrade") await verifySecurityDefiners(db, database, check);
       return;
     }
     if (integrityMigration) {
@@ -4610,6 +4675,8 @@ try {
     await verifyRollback();
   } else {
   const schema = buildSchema(root);
+  const preDefinerSchema = schema.replace(definerHardeningMigration.trim(), "");
+  assert.notEqual(preDefinerSchema, schema, "Canonical schema must include the exact definer hardening migration");
   const baseline = execFileSync("git", ["show", "d8d789071c74a7a93b1f270a0c4f119aff79aa34:db/schema.sql"], { cwd: root, encoding: "utf8" });
   const metaMigration = await readFile(join(root, "db/migrations/20260907_meta_instant_connect.sql"), "utf8");
   const campaignMigration = await readFile(join(root, "db/migrations/20260907_campaign_connect.sql"), "utf8");
@@ -4669,7 +4736,8 @@ try {
   if (!process.argv.includes("--analytics-only") && !process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
     await verifyDefaultPrivilegeMigrationLedger();
     await verify("customer_fresh",schema,undefined,true);
-    await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
+    await verify("customer_legacy_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
+    await verify("customer_upgrade",preDefinerSchema,undefined,true);
     if (!process.argv.includes("--customer-only")) {
       await verify("pricing_fresh",schema);
       await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));

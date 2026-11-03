@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreateFlow } from "@/components/create-flow";
 import type { Business } from "@/lib/types";
+import hi from "../messages/hi.json";
 
 // #760 (CPO walk): "Brief ✓" ticked while the owner was still typing. The stepper now follows the assistant.
 vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus: vi.fn(), updateCreativeCopy: vi.fn() }));
@@ -31,5 +32,30 @@ describe("<CreateFlow> stepper (#760)", () => {
     expect(screen.getByText("Brand context")).toBeInTheDocument();
     await act(async () => { fireEvent.click(await screen.findByRole("button", { name: "Generate 3 ads" })); });
     expect(current()).toBe("Create");
+  });
+
+  // #1438: with Hindi chosen, the steps and the assistant's start screen are Hindi; the language names stay as they are.
+  it("names the steps and the start screen in Hindi", () => {
+    render(<CreateFlow business={business} opening={null} words={{ locale: "hi", messages: hi.create }}><aside>Brand context</aside></CreateFlow>);
+    const steps = screen.getByRole("list", { name: "विज्ञापन के चरण" });
+    expect(steps).toHaveAttribute("lang", "hi");
+    expect(steps.querySelector('[aria-current="step"]')?.textContent).toBe("ब्रीफ़");
+    expect(screen.getByRole("heading", { name: "आप क्या हासिल करना चाहते हैं?" })).toHaveAttribute("lang", "hi");
+    const goal = screen.getByRole("textbox", { name: "कैंपेन का लक्ष्य" });
+    expect(goal).toHaveAttribute("placeholder", "आप किन लोगों तक पहुँचना चाहते हैं, और उनसे क्या करवाना चाहते हैं?");
+    expect(screen.getByRole("radiogroup", { name: "विज्ञापन की भाषा" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "English" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "बनाना शुरू करें" })).toHaveAttribute("lang", "hi");
+  });
+  it("says the brief review in Hindi, marked lang='hi' (#1438)", () => {
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Invite enquiries", started: true, turns: [], answers: [], phase: "review", prepared: { brief: "Use saved brand facts." },
+    }));
+    render(<CreateFlow business={business} opening={null} words={{ locale: "hi", messages: hi.create }}><aside>Brand context</aside></CreateFlow>);
+    expect(screen.getByRole("region", { name: "क्रिएटिव ब्रीफ़ जाँचें" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "क्रिएटिव ब्रीफ़" })).toHaveValue("Use saved brand facts.");
+    expect(screen.getByRole("button", { name: "लक्ष्य बदलें" })).toHaveAttribute("lang", "hi");
+    expect(screen.getByRole("button", { name: "3 विज्ञापन बनाएँ" })).toHaveAttribute("lang", "hi");
+    expect(screen.queryByText(/Generate 3 ads|Revise goal|Creative brief/)).toBeNull();
   });
 });

@@ -58,14 +58,15 @@ the text follows the token owner's locale (#185).
 | Stories/Reels placement creative | Refused with `1772103` ("Instagram account is missing") unless `object_story_spec.instagram_user_id` is the Page's Instagram account | #333, #447 |
 | WhatsApp destination | A WhatsApp Business number in `promoted_object.whatsapp_phone_number` is accepted with the Page's `whatsapp_number` empty | #209 |
 | Website destination (#2595, #2598) | `OUTCOME_TRAFFIC` campaign; ad set `LANDING_PAGE_VIEWS` with destination type `WEBSITE` and no Audience Network; the creative links to the business's own `https` site (Meta and WhatsApp domains are refused before any call), its button is Shop now, Sign up or Learn more from the ad's button words, and `url_tags` `utm_source=meta&utm_medium=paid&utm_campaign=<Meta campaign id>` survive edits. Every write accepted with `validate_only` | `tests/core/fixtures/meta/launch-validate-website.json` |
+| Website tracking (#2712) | `act_/adspixels` then `/{pixel}/stats?aggregation=event` over the last 7 days → `none`, `quiet`, `event_missing`, `ready` or `unreadable` (couldn't check; Graph's 100/33 can't tell missing from no permission, so it never means "another business owns it"). Test events never reach `/stats`. Read-only, cached 2 minutes per business | `src/lib/meta/pixels.ts`; `tests/core/fixtures/meta/pixels.json` (real), `pixel-stats.provisional.json` (documented shape until real events) |
 | WhatsApp number status | A number reading `DISCONNECTED`/`NOT_VERIFIED` still delivered and got chats; don't require `CONNECTED` | #286 |
 | Listings | Lists can be newest-first (bind by stored ID, #197); default listings hide archived ads unless the status filter is passed (#188) | #188, #197 |
 | Learning phase | About 50 optimisation events in 7 days after the last significant edit; a significant edit restarts it, so never edit a live run | `scripts/plan-check.ts` |
 
 ## Fixtures and Gates
 
-- Tapes: `tests/core/fixtures/meta/` (60 recorded responses, scrubbed of tokens and IDs).
-- Recorders: `scripts/record-meta-*.ts` (30), run with
+- Tapes: `tests/core/fixtures/meta/` (73 recorded responses, scrubbed of tokens and IDs).
+- Recorders: `scripts/record-meta-*.ts` (35), run with
   `npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> <script>`.
   They call the real account: read each script's header before running it, and record
   new create paths with `validate_only`.

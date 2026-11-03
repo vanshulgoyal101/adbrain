@@ -14,9 +14,12 @@
 .business > svg { flex-shrink: 0; color: var(--muted); }
 .account { margin-top: auto; padding-top: 24px; font-size: 13px; }
 .help { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--primary-hover); }
-.account > div { display: flex; align-items: center; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
-.account > div > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+/* #2748: the email row only; a bare `.account > div` also caught Sign out's wrapper and shifted it 12px with a second line. */
+.me { display: flex; align-items: center; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
+.me > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .avatar { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-strong); color: var(--foreground); display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+/* #2747: drawn by CSS, out of the text run, so iOS can't join the initial to the email as one address. */
+.avatar::before { content: attr(data-initial); }
 .legal { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px 0; color: var(--muted); }
 .legal a:hover { color: var(--primary-hover); text-decoration: underline; }
 .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -28,6 +31,7 @@
 .main { width: 100%; max-width: 1296px; margin: 0 auto; padding: 48px; flex: 1; outline: none; }
 .menu { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; }
 .drawer { position: fixed; inset: 0 auto 0 0; width: min(320px, calc(100vw - 32px)); height: 100dvh; max-height: 100dvh; max-width: none; padding: 0; margin: 0; border: 0; background: var(--surface-subtle); color: var(--foreground); }
+.drawer:focus-visible { outline: none; }
 .drawer::backdrop { background: rgb(27 36 32 / 0.4); }
 .drawerBody { min-height: 100%; display: flex; flex-direction: column; padding: 16px 12px 12px; }
 .drawerHeading { display: flex; align-items: center; justify-content: space-between; }
