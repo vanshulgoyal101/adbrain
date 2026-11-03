@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ChooseAds, formatDuration, type ChoosableAd } from "@/components/choose-ads";
+import { ADVICE_FROM_ADS, ChooseAds, budgetAdvice, formatDuration, type ChoosableAd } from "@/components/choose-ads";
 
 const ad = (id: string, kind: ChoosableAd["kind"], durationSec?: number): ChoosableAd => ({ id, kind, imageUrl: `https://example.com/${id}.jpg`, title: id, durationSec });
 const ads = [ad("p1", "photo"), ad("v1", "video", 24), ad("a1", "adbrain"), ad("v2", "video", 18), ad("a2", "adbrain"), ad("a3", "adbrain"), ad("a4", "adbrain")];
@@ -46,5 +46,10 @@ describe("Choose ads (#778, Designer frame 2)", () => {
 
   it("formats lengths as m:ss", () => {
     expect([formatDuration(24), formatDuration(102), formatDuration(60)]).toEqual(["0:24", "1:42", "1:00"]);
+  });
+
+  it("gives the same budget advice to the composer picker, from the 4th ad", () => {
+    expect(ADVICE_FROM_ADS).toBe(4);
+    expect(budgetAdvice(300)).toMatch(/^At ₹300 a day, Meta tests about 3–4 ads well/);
   });
 });

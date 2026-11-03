@@ -28,6 +28,10 @@ export function formatDuration(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** Shown while more than 3 ads are picked; advice only, the number waits for #588's data. */
+export const budgetAdvice = (dailyBudgetInr: number) => `At ${formatPerDay(dailyBudgetInr)}, Meta tests about 3–4 ads well; more ads share the budget thinly.`;
+export const ADVICE_FROM_ADS = 4;
+
 function tag(ad: ChoosableAd): string {
   if (ad.kind === "adbrain") return "AdBrain";
   if (ad.kind === "video") return ad.durationSec != null ? `Your video · ${formatDuration(ad.durationSec)}` : "Your video";
@@ -88,7 +92,7 @@ export function ChooseAds({ ads, initial = [], dailyBudgetInr = 300, onUse }: {
         </ul>
       )}
       <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-        At {formatPerDay(dailyBudgetInr)}, Meta tests about 3–4 ads well; more ads share the budget thinly.
+        {budgetAdvice(dailyBudgetInr)}
       </p>
       <button type="button" disabled={picked.length === 0} onClick={() => onUse(picked)}
         className="inline-flex min-h-11 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
