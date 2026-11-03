@@ -1,3 +1,4 @@
+import { loadCreativeVideos } from "@/lib/campaign/creative-video";
 import { createHash } from "node:crypto";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { renderStoriesWithin } from "@/lib/creative/story";
@@ -78,6 +79,10 @@ export async function executeReviewedCampaign(input: {
           const byId = new Map((creatives ?? []).map(creative => [creative.id, creative]));
           const creativeInputs = draft.input.creativeIds.map(id => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));
           if (creativeInputs.length !== draft.input.creativeIds.length) throw new OperationPhaseError("Selected creative changed before execution.", { transmitted: false });
+          // TODO(#781): launch sends every ad as a picture until the video hunk in MetaClient lands; refuse rather than send a video's poster.
+          if ((await loadCreativeVideos(database, actor.businessId, draft.input.creativeIds, async () => review.selected!.adAccountId)).size > 0) {
+            throw new OperationPhaseError("Videos can't be launched yet.", { transmitted: false });
+          }
           const creativeHash = createHash("sha256").update(JSON.stringify(buildCreativeReviewPayload(creativeInputs.map(creative => ({
             id: creative.id, businessId: actor.businessId, approved: true, imageUrl: creative.image_url,
             headline: creative.headline, primaryText: creative.primary_text, cta: creative.cta,

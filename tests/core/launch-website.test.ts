@@ -12,6 +12,7 @@ vi.mock("@/lib/campaign/operation-store", () => ({ createOperationCheckpoint: ()
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: meta.saveCampaign }));
 vi.mock("@/lib/campaign/learnings", () => ({ buildLaunchSnapshot: () => null, readCreativeMedia: async () => new Map(), saveLaunchSnapshot: async () => true }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => false }));
 vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: () => undefined }));
 
 import { executeReviewedCampaign } from "@/lib/campaign/create-service";

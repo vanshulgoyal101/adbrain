@@ -1457,6 +1457,8 @@
     "adNoHeadline": "An ad you chose has no headline. Take it out of this campaign and choose another ad.",
     "adNotApproved": "The ad {named, select, yes {{name}} other {you chose}} isn't approved yet. Approve it on the Review page, or take it out of this campaign.",
     "adNoPicture": "The ad {named, select, yes {{name}} other {you chose}} has no picture yet. Take it out of this campaign and choose another ad.",
+    "adVideoProcessing": "Your video is still being prepared by Facebook. Try again in a few minutes.",
+    "adVideoError": "The video {named, select, yes {in the ad {name}} other {you chose}} can't be used: {reason} Take it out of this campaign, or replace it.",
     "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
     "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
     "whatsappMessage": "Your WhatsApp message: {problem}",
