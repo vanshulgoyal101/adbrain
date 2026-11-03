@@ -111,7 +111,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget, weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, reviewableCampaign, runningNow } from "@/lib/campaign/activation";
-import { WHATSAPP_LINK_URL, WHATSAPP_UNVERIFIED_STEP } from "@/lib/meta/setup-checklist";
+import { WHATSAPP_LINK_URL } from "@/lib/meta/setup-checklist";
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
 import { verdict, type Comparison } from "@/lib/campaign/verdict";
@@ -142,12 +142,11 @@ import { formatDate, formatDay, formatMoney, formatMoneyExact, formatNumber, for
 const subscribeNever = () => () => {};
 
 /** #741: where the ads won't show, in the owner's words (launch applies the same exclusions). */
-function serviceAreaLine(area: NonNullable<ReviewDTO["serviceArea"]>): string {
-  const states = `the other ${area.excludedStateCount} states and UTs`;
-  const cities = area.excludedCities.length
-    ? `${area.excludedCities.join(", ")} (outside your area in ${area.keptStates.join(", ")}) or `
-    : "";
-  return `Not shown in: ${cities}${states}.`;
+function serviceAreaLine(area: NonNullable<ReviewDTO["serviceArea"]>, tc: ReturnType<typeof campaignsTranslator>): string {
+  const count = area.excludedStateCount;
+  return area.excludedCities.length
+    ? tc("review.facts.notShownIn", { cities: area.excludedCities.join(", "), kept: area.keptStates.join(", "), count })
+    : tc("review.facts.notShownInStates", { count });
 }
 
 const LEAD_FORMS_FRESH_MS = 60_000;
@@ -1676,27 +1675,27 @@ function BusinessCampaigns({
       )}
       {recoveryPending && !operation && !sendingNew && (
         <Alert variant="warning">
-          The previous campaign request has not been confirmed.
+          {tc("review.notConfirmed")}
           <div className="mt-3 flex gap-2">
             <Button size="sm" variant="outline" onClick={() => void checkExistingOperation()} disabled={operationChecking || creating}>
-              <RefreshCw className="h-4 w-4" />Check status
+              <RefreshCw className="h-4 w-4" />{tc("review.checkStatus")}
             </Button>
             {retryAllowed && prepareReview?.status === "ready" && (
               <Button size="sm" data-product-event="campaign.create" onClick={() => void createPreparedCampaign()} disabled={creating}>
-                <RefreshCw className="h-4 w-4" />Retry original request
+                <RefreshCw className="h-4 w-4" />{tc("review.retryOriginal")}
               </Button>
             )}
           </div>
         </Alert>
       )}
       {prepareReview && (
-        <section ref={reviewPanelRef} tabIndex={-1} aria-label="Campaign review result" className="scroll-mt-24 outline-none">
+        <section ref={reviewPanelRef} tabIndex={-1} aria-label={tc("review.region")} className="scroll-mt-24 outline-none">
         {/* #637: preflight answers 200 with blockers, so a blocked review must not read as success. */}
         {prepareReview.status !== "ready" ? <Alert variant={prepareReview.status === "blocked" ? "error" : "warning"}>
-          {prepareReview.status === "checking" && "Checking the saved campaign draft before review."}
+          {prepareReview.status === "checking" && tc("review.checking")}
           {prepareReview.status === "blocked" && (
             <>
-              {prepareReview.message} No campaign create or activation request was sent.
+              {prepareReview.message} {tc("review.nothingSent")}
             </>
           )}
         </Alert> : (
@@ -1747,29 +1746,29 @@ function BusinessCampaigns({
                 const fact = (label: string, value: ReactNode) => <div key={label} className="grid grid-cols-[5.75rem_1fr] gap-3 sm:grid-cols-[7.5rem_1fr] sm:gap-4"><dt className="text-slate-500">{label}</dt><dd className="min-w-0 wrap-break-word text-slate-900">{value}</dd></div>;
                 const facts = <>
                   <dl className="grid gap-2.5">{input.destination === "website" && <WebsiteReviewFacts url={reviewWebsiteUrl(review.websiteUrl, business.website)} ads={adsFor(input.creativeIds)} words={campaignWords} />}
-                    {fact("Budget", <>{formatMoney(review.totalDailyBudgetRupees)} a day{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> ({formatMoney(review.perAdSetDailyBudgetRupees)} per ad set)</span>}</>)}
-                    {fact("Where", <>{review.resolvedAreaLabel ?? "Needs review"}, {input.targeting.location?.cityScope === "city_only" ? "city only (no added radius)" : `${input.targeting.location?.radiusKm ?? 25} km radius`}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea)}</span>}</>)}
-                    {fact("Who", <>Ages {age?.min ?? "unset"}–{age?.max === 65 ? "65+" : age?.max ?? "unset"}, {{ all: "all genders", men: "men", women: "women" }[input.targeting.gender ?? "all"]}{interests ? `, interested in ${interests}` : input.targeting.audience?.interestNames.length ? ", interests need resolving" : ", no interest narrowing"}</>)}
-                    {input.destination !== "website" && fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{input.destination === "whatsapp" && !review.whatsappNumber && (
+                    {fact(tc("review.facts.budget"), <>{tc("launchReview.perDay", { money: formatMoney(review.totalDailyBudgetRupees) })}{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> {tc("review.facts.perAdSet", { money: formatMoney(review.perAdSetDailyBudgetRupees) })}</span>}</>)}
+                    {fact(tc("review.facts.where"), <>{review.resolvedAreaLabel ?? tc("review.facts.needsReview")}, {input.targeting.location?.cityScope === "city_only" ? tc("review.facts.cityOnly") : tc("review.facts.radius", { km: input.targeting.location?.radiusKm ?? 25 })}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea, tc)}</span>}</>)}
+                    {fact(tc("review.facts.who"), [tc("review.facts.ages", { min: age?.min ?? tc("review.facts.unset"), max: age?.max === 65 ? "65+" : age?.max ?? tc("review.facts.unset") }), tc(({ all: "review.facts.allGenders", men: "review.facts.men", women: "review.facts.women" } as const)[input.targeting.gender ?? "all"]), interests ? tc("review.facts.interestedIn", { interests }) : tc(input.targeting.audience?.interestNames.length ? "review.facts.interestsUnresolved" : "review.facts.noInterests")].join(", "))}
+                    {input.destination !== "website" && fact(tc("review.facts.destination"), <>{input.destination === "whatsapp" ? review.whatsappNumber ? tc("launchReview.whatsappChat", { number: review.whatsappNumber }) : tc("review.facts.whatsappUnverified") : tc("review.facts.instantForm")}{input.destination === "whatsapp" && !review.whatsappNumber && (
                       // #1301: an unverified number gets one plain next step, a link and a re-check (the same preflight read).
                       <span className="block text-slate-700">
-                        {WHATSAPP_UNVERIFIED_STEP}{" "}
-                        <a href={WHATSAPP_LINK_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline">Open WhatsApp settings</a>{" "}
+                        {tc("review.facts.whatsappUnverifiedStep")}{" "}
+                        <a href={WHATSAPP_LINK_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline">{tc("review.facts.openWhatsAppSettings")}</a>{" "}
                         <button type="button" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline disabled:opacity-60"
                           disabled={prepareReview.status !== "ready"}
-                          onClick={() => void loadPrepareReview(prepareReview.draft, prepareReview.connection).catch(() => undefined)}>Check again</button>
+                          onClick={() => void loadPrepareReview(prepareReview.draft, prepareReview.connection).catch(() => undefined)}>{tc("review.checkAgain")}</button>
                       </span>
-                    )}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}<span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span></>)}
-                    {fact("Meta account", <>{review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"}, Page {review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} ({review.currency})</>)}
+                    )}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}<span className="block text-slate-600">{tc("launchReview.shownOn")}</span></>)}
+                    {fact(tc("review.facts.metaAccount"), tc("review.facts.account", { account: review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? tc("review.facts.unavailable"), page: review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? tc("review.facts.unavailable"), currency: review.currency }))}
                   </dl>
-                  <p className="mt-3 text-xs text-slate-500">Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.</p>
+                  <p className="mt-3 text-xs text-slate-500">{tc("review.locationNote")}</p>
                 </>;
                 // While something blocks the send, the fix leads and the facts wait one tap away.
                 return review.canCreatePaused
                   ? <div className="mt-4 border-t border-slate-100 pt-4">{facts}</div>
                   : <details className="group mt-4 border-t border-slate-100 pt-3">
                     <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 font-medium text-slate-700 [&::-webkit-details-marker]:hidden">
-                      <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden="true" />What you&apos;re sending
+                      <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden="true" />{tc("review.whatYoureSending")}
                     </summary>
                     <div className="pt-2">{facts}</div>
                   </details>;
