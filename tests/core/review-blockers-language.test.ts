@@ -82,7 +82,26 @@ const variants: [string, (v: PreflightInput) => void, string][] = [
   ["one interest", (v) => { v.geo.unresolvedInterests = ["Wellness"]; }, "REVIEW_INTERESTS_UNRESOLVED"],
   ["two interests", (v) => { v.geo.unresolvedInterests = ["Wellness", "Yoga"]; }, "REVIEW_INTERESTS_UNRESOLVED"],
   ["interests unnamed", (v) => { v.geo.audienceInterests = []; }, "REVIEW_INTERESTS_UNRESOLVED"],
+  ["tracking none", (v) => toGoal(v, "leads", { state: "none", pixelId: null, window: null, counts: null, totalEvents: null }), "REVIEW_TRACKING"],
+  ["tracking choose", (v) => { toGoal(v, "sales", {}); v.tracking!.pixelId = null; }, "REVIEW_TRACKING"],
+  ["tracking unread", (v) => { toGoal(v, "leads", {}); v.tracking!.status = null; }, "REVIEW_TRACKING"],
+  ["tracking reconnect", (v) => toGoal(v, "leads", { state: "unreadable", unreadable: "reconnect", window: null, counts: null, totalEvents: null }), "REVIEW_TRACKING"],
+  ["tracking quiet", (v) => toGoal(v, "leads", { state: "quiet", lastSeenAt: null, counts: { Lead: 0, Purchase: 0 }, totalEvents: 0 }), "REVIEW_TRACKING"],
+  ["tracking quiet seen", (v) => toGoal(v, "sales", { state: "quiet", lastSeenAt: "2026-10-20T05:00:00+0000", counts: { Lead: 0, Purchase: 0 }, totalEvents: 0 }), "REVIEW_TRACKING"],
+  ["tracking no sale", (v) => toGoal(v, "sales", { state: "event_missing" }), "REVIEW_TRACKING"],
+  ["goal words leads", (v) => { toGoal(v, "leads", {}); v.creatives[0].cta = "Buy now"; }, "REVIEW_GOAL_WORDS"],
+  ["goal words sales", (v) => { toGoal(v, "sales", { counts: { Lead: 0, Purchase: 3 } }); v.creatives[0].cta = "Sign up"; v.creatives[0].headline = null; }, "REVIEW_GOAL_WORDS"],
 ];
+
+/** #2714: a website signup or sales campaign; its tracking ready unless changed (shape: tests/core/meta-pixels.test.ts). */
+function toGoal(v: PreflightInput, goal: "leads" | "sales", status: Partial<NonNullable<NonNullable<PreflightInput["tracking"]>["status"]>>): void {
+  toWebsite(v, { url: SITE, ok: true, finalUrl: `${SITE}/` });
+  v.draft.websiteGoal = goal;
+  v.tracking = { pixelId: "9000000000000003", status: {
+    state: "ready", unreadable: null, pixelId: "9000000000000003", pixels: [], window: { since: "2026-10-26T16:00:00+0000", until: "2026-11-02T16:00:00+0000" },
+    lastSeenAt: "2026-11-01T14:00:00+0000", counts: { Lead: 2, Purchase: 0 }, totalEvents: 60, ...status,
+  } };
+}
 
 const SITE = "https://cedarridgechiro.com";
 /** #2599: a website ad, its site checked (or not) by Review. */
@@ -133,6 +152,16 @@ const ENGLISH: Record<string, string> = {
   "one interest": "Meta didn't recognise the interest \"Wellness\". Edit or remove it.",
   "two interests": "Meta didn't recognise the interests \"Wellness\" and \"Yoga\". Edit or remove them.",
   "interests unnamed": "Meta didn't recognise some audience interests. Edit or remove them.",
+  // #2714's website goal sentences.
+  "tracking none": "Your ad account has no website tracking (Meta pixel) yet, so Meta can't count signups from this ad. Add tracking to your site, or choose the visits goal.",
+  "tracking choose": "Choose which website tracking counts your sales on the Your business page, then review again.",
+  "tracking unread": "AdBrain couldn't read your website tracking from Meta. Try reviewing again in a few minutes.",
+  "tracking reconnect": "AdBrain couldn't read your website tracking from Meta. Connect Facebook again, then review again.",
+  "tracking quiet": "Your website tracking reported nothing from 26 Oct to 2 Nov. Check that it is on your site, then review again, or choose the visits goal.",
+  "tracking quiet seen": "Your website tracking reported nothing from 26 Oct to 2 Nov (last heard 20 Oct). Check that it is on your site, then review again, or choose the visits goal.",
+  "tracking no sale": "Your website tracking works but reported no sale (Purchase) from 26 Oct to 2 Nov. Make sure your site sends it, then review again, or choose the visits goal.",
+  "goal words leads": "The ad \"New-Patient Exam\" asks people to buy, but this campaign looks for signups. Choose an ad that fits, or change the goal.",
+  "goal words sales": "The ad you chose asks people to sign up, but this campaign looks for sales. Choose an ad that fits, or change the goal.",
 };
 
 function message(locale: AppLocale | undefined, change: (v: PreflightInput) => void, reason: string): string | undefined {

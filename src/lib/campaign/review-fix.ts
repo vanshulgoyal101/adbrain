@@ -34,6 +34,9 @@ const FIXES: Record<ReviewBlockerReason, Fix<ReviewFix>> = {
   REVIEW_AD_POLICY: { kind: "field", targets: ["campaign-ad-picker"] },
   REVIEW_INTERESTS_UNRESOLVED: { kind: "field", targets: ["audience-interests", "recommend-audience"] },
   REVIEW_WHATSAPP_MESSAGE: { kind: "field", targets: ["whatsapp-message"] },
+  // #2714: the Brand holds the chosen tracking (#2595 D2's card); Review never picks another one.
+  REVIEW_TRACKING: { kind: "page", href: "/brand" },
+  REVIEW_GOAL_WORDS: { kind: "field", targets: ["campaign-ad-picker"] },
 };
 
 export function reviewBlockerFix(reason: ReviewBlockerReason | undefined, words?: Words<"campaigns">): ReviewFix | null {

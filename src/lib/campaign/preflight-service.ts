@@ -14,6 +14,7 @@ import type { LeadDestination } from "@/lib/types/campaign";
 import type { ReviewDestination } from "@/lib/campaign/plan-check";
 import { websiteAdLink } from "@/lib/campaign/website-review";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
+import { conversionGoal, websiteGoalOpen, type ConversionGoal, type ReviewTracking } from "@/lib/campaign/website-tracking";
 
 export type PreflightActor = {
   businessId: string;
@@ -38,6 +39,8 @@ export type PreflightLoaders = {
   findCostPerResult?: (actor: PreflightActor, destination: Exclude<LeadDestination, "call" | "website">) => Promise<number | null>;
   /** #2274: redraws one picture's printed phone over its saved background; the new picture's URL, or null. */
   redrawPictureNumber?: (actor: PreflightActor, creativeId: string, phone: string) => Promise<string | null>;
+  /** #2714: the Brand's chosen tracking and Meta's read of it for a signup or sales goal; absent or failing blocks Review. */
+  findTracking?: (actor: PreflightActor, goal: ConversionGoal) => Promise<ReviewTracking>;
   getConnection: (actor: PreflightActor) => Promise<PreflightConnection | null>;
   resolveGeo: (actor: PreflightActor, draft: DraftRecord) => Promise<PreflightGeo>;
   hash: (payload: string) => string;
@@ -75,9 +78,10 @@ export async function prepareCampaignReview(
   }
 
   const destination: ReviewDestination = draft.input.destination ?? "instant_form";
-  // #2710: conversion contracts are accepted, but no account may launch them before the recorded tracking/payload gates.
-  if (destination === "website" && ((draft.input.websiteGoal ?? "visits") !== "visits" || !(await input.websiteOpen?.()))) return { kind: "website_closed" };
-  const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts] = await Promise.all([
+  // #2710/#2714: a signup or sales goal stays closed to every account until the CEO opens it (websiteGoalOpen).
+  if (destination === "website" && !(websiteGoalOpen(draft.input.websiteGoal) && await input.websiteOpen?.())) return { kind: "website_closed" };
+  const goal = conversionGoal(draft.input.destination, draft.input.websiteGoal);
+  const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts, tracking] = await Promise.all([
     loaders.getConnection(input.actor),
     loaders.findCreatives(input.actor.businessId, draft.input.creativeIds),
     destination === "instant_form" && draft.input.leadFormId
@@ -94,6 +98,8 @@ export async function prepareCampaignReview(
     draft.input.destination === "whatsapp" ? loaders.findWhatsAppMessage?.(input.actor, draft.input) ?? Promise.resolve(null) : Promise.resolve(null),
     // Only a warning depends on it, like the cost per result.
     loaders.findBrandFacts?.(input.actor).catch(() => []) ?? Promise.resolve([]),
+    // An unreadable tracking is a blocker (preflight.ts), never a pass.
+    goal ? loaders.findTracking?.(input.actor, goal).catch(() => undefined) ?? Promise.resolve(undefined) : Promise.resolve(undefined),
   ]);
   // #2274: the picture prints the chat's number, not an older Brand phone. Before the creative hash, so
   // Review and launch both see the redrawn picture.
@@ -117,6 +123,7 @@ export async function prepareCampaignReview(
       whatsappMessageProblem: whatsappMessage?.problem ?? null,
       website,
       websiteReach,
+      tracking,
       vertical,
       brandFacts,
       geo,

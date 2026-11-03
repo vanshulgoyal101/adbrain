@@ -830,6 +830,21 @@ describe("campaign sync feedback", () => {
     expect(screen.queryByText(/"Diwali" was left unchanged/)).not.toBeInTheDocument();
   });
 
+  it("reports a skip-only automatic sync in the reserved sync line, with no notice above the list (#2795)", async () => {
+    localStorage.clear();
+    const sync = vi.fn().mockResolvedValue(Response.json({ campaigns: [], nextCursor: null, skipped: 1, skippedCampaigns: [{ name: "Diwali", reason: "lifetime_budget" }] }));
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    const line = await waitFor(() => {
+      const el = document.querySelector("[data-sync-status]");
+      expect(el).toHaveTextContent("1 left unchanged.");
+      return el!;
+    });
+    expect(line.closest("div")).not.toBeNull();
+    expect(screen.queryByText("Details")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Campaign sync completed/)).not.toBeInTheDocument();
+  });
+
   // #1286: a sync that fails reports beside Sync from Meta in a line that's always there, so nothing above the list moves.
   it("reports a failed automatic sync in the sync line under 'Your campaigns', not as a banner above the page", async () => {
     localStorage.clear();
