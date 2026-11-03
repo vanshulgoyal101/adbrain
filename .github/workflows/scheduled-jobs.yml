@@ -155,6 +155,17 @@ jobs:
               -b "$(printf 'A 2-Tier managed account has been in `%s` for %s min (over 30). Resume or fail it, then check its step log.\n\nFind it (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$state" "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
+      # Checked out before the access-request step (#2806) and kept for the public-data scan (#1627).
+      - name: Check out the scheduled-job scripts
+        if: always()
+        timeout-minutes: 1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts/access-request-action.mjs
+            scripts/scan-public-data.mjs
+            src/lib/internal-accounts.json
+          sparse-checkout-cone-mode: false
       - name: Facebook access requests (#692)
         if: always()
         env:
@@ -166,21 +177,31 @@ jobs:
           # Public repo: an opaque key and hours only; the owner's name and number stay in the database.
           echo "HTTP $code $(jq -c '{ok, requests: (.requests // [] | length), more, error}' access.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
           # #725: at most 5 public issues a run; the rest wait for the next run, noted on the newest issue.
-          opened=0; waiting=$(jq -r '.more // 0' access.json 2>/dev/null); [[ "$waiting" =~ ^[0-9]+$ ]] || waiting=0; last=""
-          for row in $(jq -r '.requests[]? | "\(.key):\(.hours)"' access.json 2>/dev/null); do
-            IFS=: read -r key hours <<<"$row"
+          opened=0; waiting=$(jq -r '.more // 0' access.json 2>/dev/null); [[ "$waiting" =~ ^[0-9]+$ ]] || waiting=0; last=""; failed=0
+          for row in $(jq -r '.requests[]? | "\(.key):\(.hours):\(.at // "")"' access.json 2>/dev/null); do
+            IFS=: read -r key hours at <<<"$row"
             [[ "$key" =~ ^[a-f0-9]{12}$ && "$hours" =~ ^[0-9]+$ ]] || continue
-            seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number --jq length)
-            [ "$seen" = 0 ] || continue
+            # #2806: a repeat request after the CEO closed the issue reopens it; an open issue or an older request does nothing.
+            matches=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number,state,closedAt)
+            action=$(node scripts/access-request-action.mjs "$at" "$matches" || echo skip)
+            [ "$action" != skip ] || continue
             if [ "$opened" -ge 5 ]; then waiting=$((waiting + 1)); continue; fi
             opened=$((opened + 1))
+            if [ "${action%%:*}" = reopen ]; then
+              # Reopen last: while the issue stays closed a failed label or comment is retried next run; a failure fails the step.
+              n="${action#reopen:}"
+              if gh issue edit "$n" -R "$GITHUB_REPOSITORY" --add-label waiting-owner \
+                && gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "$(printf 'Asked again %s h ago → CEO\nRun: %s/%s/actions/runs/%s\n' "$hours" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")" \
+                && gh issue reopen "$n" -R "$GITHUB_REPOSITORY"; then last="$n"; else failed=1; fi
+              continue
+            fi
             last=$(gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Facebook access request ($key)" \
               -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: WhatsApp them privately about this request and where Meta App Review stands (#156); do not promise Facebook connect works yet.\nFind their name, business and WhatsApp number (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
           done
           if [ -n "$last" ] && [ "$waiting" -gt 0 ]; then
             gh issue comment "$last" -R "$GITHUB_REPOSITORY" --body "$waiting more access requests are waiting; the next runs open them."
           fi
-          [ "$code" = 200 ]
+          [ "$code" = 200 ] && [ "$failed" = 0 ]
       - name: Launch reconciliation (#734)
         if: always()
         env:
@@ -283,16 +304,6 @@ jobs:
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l decision -t "$title" \
             -b "$(printf 'An OpenRouter key has $%s left (alert under $%s, #449). Paid Create models (images, Haiku concepts) stop when it runs out.\n\n→ CEO: ask the owner whether to raise the key limit (OpenRouter settings → Keys).\nRun: %s/%s/actions/runs/%s\n' "$(jq -r '.minRemainingUsd' credit.json)" "$(jq -r '.thresholdUsd' credit.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
-      # #1627: the repo is public. Flags customer data pasted into issues/PRs since the last run (URL + pattern type only).
-      - name: Check out the public-data scanner
-        if: always()
-        timeout-minutes: 1
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: |
-            scripts/scan-public-data.mjs
-            src/lib/internal-accounts.json
-          sparse-checkout-cone-mode: false
       - name: Public-data scan (#1627)
         if: always()
         # A scan problem is a warning, never a failed run; the bound keeps the 5-minute job's alert alive.
