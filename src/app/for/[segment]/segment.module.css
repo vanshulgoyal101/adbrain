@@ -3,9 +3,6 @@
 .page h1, .page h2, .page p, .page ul, .page ol, .page figure { margin: 0; }
 .page a:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
 
-.header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; max-width: 1080px; width: 100%; margin: 0 auto; }
-.logo { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; color: var(--foreground); text-decoration: none; }
-.signIn { min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; color: var(--foreground); }
 
 .hero { display: grid; gap: 32px; padding: 16px 20px 40px; max-width: 1080px; width: 100%; margin: 0 auto; }
 .heroText h1 { font-size: 34px; line-height: 1.12; font-weight: 750; letter-spacing: -0.02em; max-width: 18ch; text-wrap: balance; }
@@ -57,9 +54,6 @@
 .note { margin-top: 14px !important; font-size: 15px; color: var(--muted); }
 .pricingLink { display: inline-flex; min-height: 44px; align-items: center; color: var(--primary); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 
-.footer { margin-top: auto; display: flex; flex-wrap: wrap; gap: 12px 20px; justify-content: space-between; padding: 24px 20px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); }
-.footer nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
-.footer a { min-height: 44px; display: inline-flex; align-items: center; color: inherit; }
 
 @media (min-width: 860px) {
   .hero { grid-template-columns: 1.2fr 0.8fr; align-items: center; padding-top: 48px; padding-bottom: 64px; }

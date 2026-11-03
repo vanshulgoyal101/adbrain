@@ -1,7 +1,4 @@
-import Link from "next/link";
-import { Brain } from "lucide-react";
-import { LEGAL_LINKS } from "@/lib/legal-links";
-import { SIGN_IN_HREF } from "@/lib/site";
+import { PublicFooter, PublicHeader } from "@/components/public-chrome";
 
 /** Shared shell for public legal/content pages (privacy, terms). */
 export function LegalPage({
@@ -15,17 +12,7 @@ export function LegalPage({
 }) {
   return (
     <div className="flex flex-1 flex-col">
-      <header className="mx-auto flex w-full max-w-3xl items-center justify-between p-6">
-        <Link href="/" className="flex min-h-11 items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-            <Brain className="h-5 w-5" />
-          </span>
-          <span className="text-lg font-bold tracking-tight">AdBrain</span>
-        </Link>
-        <Link href={SIGN_IN_HREF} className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 hover:underline">
-          Sign in
-        </Link>
-      </header>
+      <PublicHeader />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">
@@ -37,19 +24,7 @@ export function LegalPage({
         </div>
       </main>
 
-      <footer className="border-t border-slate-200 py-8">
-        <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-between gap-3 px-6 text-sm text-slate-500 sm:flex-row">
-          <span>© {new Date().getFullYear()} AdBrain. All rights reserved.</span>
-          <nav aria-label="Resources and legal" className="flex flex-wrap justify-center gap-x-5">
-            <Link href="/guides" className="inline-flex min-h-11 items-center hover:underline">Guides</Link>
-            {LEGAL_LINKS.map((l) => (
-              <Link key={l.href} href={l.href} className="inline-flex min-h-11 items-center hover:underline">
-                {l.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

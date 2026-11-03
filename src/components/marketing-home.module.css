@@ -5,12 +5,8 @@
 .page a:focus-visible, .page summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 5px; }
 .skip { position: absolute; top: -100px; z-index: 20; padding: 12px; background: white; }
 .skip:focus { top: 8px; }
-.header { max-width: 1440px; margin: auto; height: 80px; padding: 0 48px; display: flex; align-items: center; justify-content: space-between; }
-.logo { display: inline-flex; align-items: center; min-height: 44px; gap: 10px; font-size: var(--t-lg); font-weight: 600; }
-.header nav { display: flex; align-items: center; gap: 32px; }
 .exampleLink { font-size: var(--t-sm); }
-.signIn, .primary, .heroSecondary, .textLink { display: inline-flex; align-items: center; justify-content: center; gap: 12px; font-weight: 600; }
-.signIn { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 18px; }
+.primary, .heroSecondary, .textLink { display: inline-flex; align-items: center; justify-content: center; gap: 12px; font-weight: 600; }
 .hero { position: relative; isolation: isolate; color: var(--ink); background: #f6f7f4; }
 /* Wide screens show the 1440 composition centred, like the hero text, instead of scaling the ads past the fold. */
 .heroMedia { position: absolute; inset: 0; max-width: 1440px; margin: 0 auto; }
@@ -62,9 +58,6 @@
 .pricing li { font-size: var(--t-sm); line-height: 1.7; color: var(--subtle); max-width: 60ch; }
 .pricing li strong { color: var(--ink); }
 .faq details p { margin-top: 5px; font-size: var(--t-sm); line-height: 1.7; color: var(--subtle); }
-.footer { border-top: 1px solid var(--line); padding: 28px 48px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; font-size: var(--t-xs); color: var(--subtle); }
-.footer nav { display: flex; flex-wrap: wrap; gap: 0 20px; }
-.footer a { display: inline-flex; align-items: center; min-height: 44px; }
 @media (max-width: 1000px) {
   .hero::after { background: linear-gradient(90deg, #f6f7f4 0%, rgba(246, 247, 244, .98) 60%, rgba(246, 247, 244, .9) 72%, rgba(246, 247, 244, 0) 94%); }
   .safety, .faq { gap: 32px; }
@@ -73,8 +66,6 @@
   .sectionHeading > p { flex-basis: auto; }
 }
 @media (max-width: 760px) {
-  .header { height: 68px; padding: 0 20px; }
-  .header nav { gap: 12px; }
   .exampleLink { display: none; }
   .heroContent { padding: 28px 24px 224px; }
   .hero h1.heroStatement { font-size: var(--t-2xl); max-width: 400px; }
@@ -89,7 +80,6 @@
   .safety, .faq { grid-template-columns: minmax(0, 1fr); }
       .sectionHeading { gap: 16px; }
   .safety { padding: 36px 24px; }
-  .footer { padding: 24px; }
 }
 /* #847: body copy stays under about 68 characters a line. */
 .cycle > p, .safety li p, .faq details p { max-width: 68ch; }

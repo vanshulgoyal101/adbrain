@@ -2,10 +2,6 @@
 .page a:focus-visible, .formColumn:focus-visible { outline: 3px solid var(--moss); outline-offset: 4px; }
 .skipLink { position: absolute; top: -100px; left: 16px; z-index: 20; padding: 12px; background: #fff; }
 .skipLink:focus { top: 8px; }
-.header { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 80px; padding: 0 48px; border-bottom: 1px solid var(--line); }
-.logo { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 17px; font-weight: 600; }
-.home { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 15px; color: var(--subtle); }
-.home:hover { color: var(--ink); }
 .main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .formColumn { display: flex; justify-content: center; padding: 64px 48px; }
 .formInner { width: 100%; max-width: 400px; }
@@ -27,20 +23,14 @@
 .promises svg { flex-shrink: 0; margin-top: 2px; color: var(--moss); }
 .promises h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
 .promises p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--subtle); }
-.footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 32px; padding: 12px 48px; border-top: 1px solid var(--line); font-size: 13px; color: var(--subtle); }
-.footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
-.footer nav a { display: inline-flex; align-items: center; min-height: 44px; }
-.footer nav a:hover { color: var(--ink); }
 @media (min-width: 1280px) {
   .proof { flex-direction: row; justify-content: center; align-items: flex-start; gap: 40px; padding-top: 64px; }
   .promises { width: 280px; padding-top: 8px; }
 }
 @media (max-width: 760px) {
-  .header { height: 64px; padding: 0 20px; }
   .main { grid-template-columns: minmax(0, 1fr); }
   .formColumn { padding: 32px 20px 40px; }
   .proof { padding: 32px 20px; }
   .post { display: none; }
   .promises { width: 100%; max-width: 400px; }
-  .footer { padding: 8px 20px; }
 }
