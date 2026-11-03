@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { coreApproval, coreFiles, syncExempt } from "../scripts/core-approval.mjs";
+import { qaApproval } from "../scripts/release.mjs";
 
 const head = "7612817abcdef0123456789abcdef0123456789";
 const at = (body: string, createdAt = "2026-10-27T10:00:00Z") => ({ body, createdAt, url: "u" });
@@ -104,6 +105,22 @@ describe("money and migrations need QA and the CTO/Reviewer (#1083)", () => {
   it("a QA 'changes requested' at the head holds any core PR, whoever else approved", () => {
     expect(coreApproval({ ...pr, comments: [cto, qaNo] })).toMatchObject({ state: "pending", description: "QA requested changes at 7612817" });
     expect(coreApproval({ files: ["src/lib/meta/client.ts"], head, headRef: "b", comments: [cto, qaNo] }).state).toBe("pending");
+  });
+  it("#2813: 'QA 2: approve <head>' approves; handoffs, conditionals and other heads still fail closed", () => {
+    const files = { files: ["src/lib/meta/client.ts"], head, headRef: "b" };
+    const verdict = (body: string) => coreApproval({ ...files, comments: [at(body, "2026-10-27T10:05:00Z")] });
+    expect(verdict("QA 2: approve 7612817. Separate private bucket, CI green.")).toMatchObject({ state: "success" });
+    expect(verdict("QA: please approve 7612817 soon").state).toBe("pending");
+    expect(verdict("QA: approve 1111111.").state).toBe("pending");
+    expect(verdict("QA: approve 7612817 once you rebase.").state).toBe("pending");
+    const stranger = verdict("QA: ready at 7612817 (no auto-merge).");
+    expect(stranger).toMatchObject({ state: "pending", description: expect.stringMatching(/isn't a recognised verdict/) });
+    expect(verdict("QA verdict at 7612817: changes requested.")).toMatchObject({ description: "QA requested changes at 7612817" });
+    // Release preflight reads the same parser.
+    const qa = (body: string) => qaApproval([at(body, "2026-10-27T10:05:00Z")], head);
+    expect(qa("QA 2: approve 7612817. CI green.").approved).toBe(true);
+    expect(qa("QA: ready at 7612817.")).toMatchObject({ approved: false, unrecognized: true });
+    expect(qa("QA: 7612817 on hold.")).toMatchObject({ approved: false, unrecognized: false });
   });
   it("treats migrations like money", () => {
     expect(coreApproval({ files: ["db/migrations/20261027_x.sql"], head, headRef: "b", comments: [cto] }).state).toBe("pending");

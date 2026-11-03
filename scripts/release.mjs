@@ -37,9 +37,11 @@ export function qaApproval(comments, headSha, samePatch = /** @type {(sha: strin
     .filter((c) => /^[*_\s]*QA\b/.test(c.body) && namesHead(c))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const firstLine = (c) => verdictSentence(c.body);
-  const approves = (c) => /(?<![-\w])(re-)?(approved|accepted|fine to (merge|ship))\b/i.test(firstLine(c)) && !negative.test(firstLine(c));
+  // #2813: "QA 2: approve e031f61a" (verb straight before a hash) is as explicit as "approved"; "please approve <sha>" stays vetoed by `negative`.
+  const approves = (c) => /(?<![-\w])(re-)?(approved|accepted|fine to (merge|ship))\b|^[*_\s]*QA\b[^:\n]{0,6}:?\s*\**(re-)?approve\**\s+[0-9a-f]{7,40}\b/i.test(firstLine(c)) && !negative.test(firstLine(c));
   const latest = verdicts.at(-1);
-  if (!latest || !approves(latest)) return { approved: false, latest };
+  // `unrecognized`: the latest comment on this head is neither an approval nor a hold; it still fails closed (#2813).
+  if (!latest || !approves(latest)) return { approved: false, latest, unrecognized: Boolean(latest) && !negative.test(firstLine(latest)) && !/\b(hold|reject|block|changes|denied|fail)/i.test(firstLine(latest)) };
   return { approved: true, latest, text: verdicts.filter(approves).map((c) => c.body.toLowerCase()).join("\n") };
 }
 
