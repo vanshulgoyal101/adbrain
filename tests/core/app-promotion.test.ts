@@ -6,7 +6,9 @@ import { readRegisteredApps } from "@/lib/meta/app-promotion";
 // #2824 (#2595 phase 3): real answers from the test ad account (scripts/record-meta-app-promotion.ts, scrubbed).
 // Its only registered app has no iOS/Android store URL, so Meta refuses every app-install ad set: there is no
 // success tape for the ad set until a mobile test app is registered. The campaign (validate_only) is accepted.
-type Exchange = { name: string; method: string; path: string; status: number; body: any };
+type Exchange = { name: string; method: string; path: string; form?: Record<string, string> | null; status: number; body: unknown };
+type Apps = { data: { id: string }[] };
+type Refusal = { error: { error_subcode: number } };
 const tape = recorded.tape as Exchange[];
 const byName = (name: string) => tape.find((exchange) => exchange.name === name)!;
 const appsCall = byName("apps");
@@ -27,7 +29,7 @@ describe("readRegisteredApps", () => {
       return appsCall.body;
     });
     const apps = await readRegisteredApps(graph as never, account);
-    expect(apps).toEqual([{ id: appsCall.body.data[0].id, name: "adBrain", storeUrls: [] }]);
+    expect(apps).toEqual([{ id: (appsCall.body as Apps).data[0].id, name: "adBrain", storeUrls: [] }]);
   });
 
   it("keeps iOS and Android links", async () => {
@@ -72,15 +74,15 @@ describe("appBlocker", () => {
 describe("recorded validate_only answers", () => {
   it("accepts the app-promotion campaign", () => {
     const campaign = byName("campaign");
-    expect(campaign.form.objective).toBe("OUTCOME_APP_PROMOTION");
+    expect(campaign.form?.objective).toBe("OUTCOME_APP_PROMOTION");
     expect(campaign.status).toBe(200);
     expect(campaign.body).toEqual({ success: true });
   });
 
   it("refuses ad sets for a store link the app doesn't own (2490408) and for the canvas link (1885185)", () => {
     expect(byName("adset-foreign-store").status).toBe(400);
-    expect(byName("adset-foreign-store").body.error.error_subcode).toBe(2490408);
+    expect((byName("adset-foreign-store").body as Refusal).error.error_subcode).toBe(2490408);
     expect(byName("adset-own-store").status).toBe(400);
-    expect(byName("adset-own-store").body.error.error_subcode).toBe(1885185);
+    expect((byName("adset-own-store").body as Refusal).error.error_subcode).toBe(1885185);
   });
 });
