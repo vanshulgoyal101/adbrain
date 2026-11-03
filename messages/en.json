@@ -1449,6 +1449,27 @@
     "editBrief": "Edit brief",
     "makeThree": "Make 3 ads",
     "start": "Start creating",
-    "aboutTwoMinutes": "About 2 minutes. Nothing is published."
+    "aboutTwoMinutes": "About 2 minutes. Nothing is published.",
+    "conversation": "Creative conversation",
+    "history": "Conversation history",
+    "whatIllWrite": "What I'll write about · Edit",
+    "editLater": "You can edit it once these ads are ready.",
+    "creating": "Creating images and copy…",
+    "preparing": "Preparing your brief…",
+    "stillMakingOne": "1 more ad is still being made. It's added here when it's ready.",
+    "stillMakingMany": "{count} more ads are still being made. They're added here when they're ready.",
+    "reviewBrief": "Review creative brief",
+    "creativeBrief": "Creative brief",
+    "reviseGoal": "Revise goal",
+    "generateThree": "Generate 3 ads",
+    "changeAnswer": "Change my answer",
+    "checkSaved": "Check saved results",
+    "tryAgain": "Try again",
+    "startOver": "Start over",
+    "reviewAds": "Review ads",
+    "makeAnother": "Make another",
+    "selected": "{count} selected",
+    "nextCampaign": "Next: set up campaign",
+    "moreIdeas": "Ideas for more ads"
   }
 }
