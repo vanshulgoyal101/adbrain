@@ -1,5 +1,6 @@
 // #2598: where an ad sends people, and the Meta ad-set plan and button for each destination.
 import type { LeadDestination, WebsiteGoal } from "@/lib/types/campaign";
+import { websiteButton } from "@/lib/campaign/website-button";
 export type { WebsiteGoal };
 
 /** Where people land: an in-ad instant form, a WhatsApp chat, a phone call, or the business's website (#2595). */
@@ -90,21 +91,14 @@ export function destinationPlan(dest: AdDestination, goal?: WebsiteGoal): Destin
   }
 }
 
-/** #2598: a website ad's button from the ad's own button words: Shop now, Sign up, else Learn more. */
-function websiteCtaType(label: string | null | undefined): "SHOP_NOW" | "SIGN_UP" | "LEARN_MORE" {
-  const words = (label ?? "").toLowerCase().replace(/[^a-z]+/g, " ").trim();
-  if (/^(shop|buy|order) now$/.test(words)) return "SHOP_NOW";
-  if (/^(sign up|register)$/.test(words)) return "SIGN_UP";
-  return "LEARN_MORE";
-}
-
 /** The creative call-to-action for a destination. */
 export function destinationCTA(
   dest: AdDestination,
   opts: { leadFormId?: string; phone?: string; ctaLabel?: string | null; link?: string },
 ): { type: string; value: Record<string, unknown> } {
   if (dest === "website") {
-    return { type: websiteCtaType(opts.ctaLabel), value: { link: opts.link } };
+    // #2703: the same rule Review shows the owner.
+    return { type: websiteButton(opts.ctaLabel).toUpperCase(), value: { link: opts.link } };
   }
   if (dest === "call" && opts.phone) {
     return { type: "CALL_NOW", value: { link: `tel:${opts.phone}` } };

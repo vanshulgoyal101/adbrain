@@ -2,8 +2,17 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import hi from "../messages/hi.json";
 
 describe("<CampaignLaunchReview>", () => {
+  it("#1438 shows the launch summary in Hindi", () => {
+    render(<CampaignLaunchReview selectedCount={2} budget={500} destination="whatsapp" whatsappNumber="98•••••210" audience="Jaipur" words={{ locale: "hi", messages: hi.campaigns }} />);
+    expect(screen.getByText("कैंपेन रिव्यू के लिए तैयार")).toBeInTheDocument();
+    expect(screen.getByText("2 चुने गए")).toBeInTheDocument();
+    expect(screen.getByText("WhatsApp चैट 98•••••210")).toBeInTheDocument();
+    expect(screen.queryByText("Select an ad")).toBeNull();
+  });
+
   it("shows incomplete choices before launch", () => {
     render(
       <CampaignLaunchReview

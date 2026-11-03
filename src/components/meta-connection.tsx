@@ -105,7 +105,7 @@ export function MetaConnectionPanel({
             </Button>
           )}
           {connection.source === "oauth" && (
-            <Button variant="danger" size="sm" disabled={!businessId || disconnecting} onClick={() => void disconnect()}>
+            <Button variant="danger" disabled={!businessId || disconnecting} onClick={() => void disconnect()}>
               {t(disconnecting ? "meta.disconnecting" : "meta.disconnect")}
             </Button>
           )}
