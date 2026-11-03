@@ -271,6 +271,22 @@ describe("<LeadInbox> syncing", () => {
     expect(Number(localStorage.getItem(key))).toBeGreaterThan(Date.now() - 60_000);
   });
 
+  it("#2748: the status keeps the wider text's width while checking, so Check now doesn't slide", async () => {
+    localStorage.setItem("lead-sync:owner:b1", String(Date.now() - 16 * 60_000));
+    let complete!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn((url: string) => url === "/api/leads/sync"
+      ? new Promise<Response>(resolve => { complete = resolve; })
+      : Promise.resolve(Response.json({ leads: [lead()], total: 1, nextCursor: null }))));
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady syncScope="owner:b1" />);
+    const live = await screen.findByText("Checking Meta for new enquiries…", { selector: "[aria-live]" });
+    const holder = live.parentElement!.querySelector("[aria-hidden=true]")!;
+    expect(holder).toHaveClass("invisible");
+    expect(holder.textContent).toBe("Updated 16m ago");
+    await act(async () => complete(Response.json({ leads: [lead()], imported: 0, sync: { id: "run-1", state: "complete", hasMore: false } })));
+    expect(await screen.findByText("Updated just now", { selector: "[aria-live]" })).toBeInTheDocument();
+    expect(live.parentElement!.querySelector("[aria-hidden=true]")!.textContent).toBe("Checking Meta for new enquiries…");
+  });
+
   it("skips recent syncs but checks a newly bound Meta Page", async () => {
     localStorage.setItem("lead-sync:owner:b1:act:page-a", String(Date.now() - 60_000));
     const fetcher = vi.fn(async () => Response.json({ leads: [], imported: 0, sync: { id: "run-2", state: "complete", hasMore: false } }));

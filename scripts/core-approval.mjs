@@ -62,8 +62,9 @@ export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = 
   const qa = qaApproval(comments, head, samePatch);
   const short = head.slice(0, 7);
   const list = core.length > 2 ? `${core.slice(0, 2).join(", ")} +${core.length - 2}` : core.join(", ");
-  // A QA verdict on this head that isn't an approval ("changes requested") holds the PR, whoever else approved.
-  if (qa.latest && !qa.approved) return { state: "pending", description: `QA requested changes at ${short}`, url: qa.latest.url };
+  // A QA verdict on this head that isn't an explicit approval holds the PR, whoever else approved. It may be
+  // "changes requested" or just wording the parser doesn't accept ("approve <sha>"), so say which word counts.
+  if (qa.latest && !qa.approved) return { state: "pending", description: `QA's latest verdict at ${short} is not an explicit "approved"`, url: qa.latest.url };
   const who = reviewer?.approved ? reviewer.body.split(" ")[0].replace(/[*_:]/g, "") : "QA";
   // #364: words only. Launch/Meta/tenant wording ships on green CI; money wording needs one approval, not two.
   if (core.every((f) => !MIGRATION.test(f) && wordsFiles.has(f))) {

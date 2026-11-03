@@ -3,6 +3,7 @@ import {
   describeAudience,
   normalizeTargetingInput,
 } from "@/lib/campaign/targeting";
+import hi from "../messages/hi.json";
 
 describe("normalizeTargetingInput", () => {
   it("defaults to AI mode with sensible values when empty", () => {
@@ -93,5 +94,13 @@ describe("describeAudience", () => {
     expect(s).toBe(
       "People in India (nationwide), ages picked by AdBrain when you check the campaign.",
     );
+  });
+
+  it("speaks the owner's language (#1438)", () => {
+    const s = describeAudience(
+      { areaLabel: "Jaipur", excluded: [{ key: "9", name: "Kota", type: "city" }], ageMode: "manual", ageMin: 30, ageMax: 65 },
+      { locale: "hi", messages: hi.campaigns },
+    );
+    expect(s).toBe("Jaipur के लोग, Kota को छोड़कर, उम्र 30–65+।");
   });
 });

@@ -7,18 +7,21 @@ import { InfoHint } from "@/components/ui/info-hint";
 import { AGE_BOUNDS, describeAudience, normalizeAgeRange } from "@/lib/campaign/targeting";
 import { cn } from "@/lib/utils";
 import type { GeoPick, TargetingValue } from "@/lib/campaign/editor-targeting";
+import { campaignsTranslator, type Words } from "@/i18n/words";
 export { defaultTargeting, type GeoPick, type TargetingValue } from "@/lib/campaign/editor-targeting";
+
+type T = ReturnType<typeof campaignsTranslator>;
 
 function ModeToggle({
   mode,
   onChange,
-  aiLabel = "Let AdBrain decide",
   manualId,
+  t,
 }: {
   mode: "ai" | "manual";
   onChange: (m: "ai" | "manual") => void;
-  aiLabel?: string;
   manualId?: string;
+  t: T;
 }) {
   return (
     <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-sm">
@@ -34,7 +37,7 @@ function ModeToggle({
         )}
       >
         <Sparkles className="h-3.5 w-3.5" />
-        {aiLabel}
+        {t("targeting.decide")}
       </button>
       <button
         id={manualId}
@@ -48,7 +51,7 @@ function ModeToggle({
             : "text-slate-500 hover:text-slate-700",
         )}
       >
-        Choose myself
+        {t("targeting.chooseMyself")}
       </button>
     </div>
   );
@@ -59,12 +62,16 @@ export function LocationPicker({
   onChange,
   placeholder,
   tone,
+  words,
 }: {
   value: GeoPick[];
   onChange: (next: GeoPick[]) => void;
   placeholder: string;
   tone: "include" | "exclude";
+  /** #1438: the picker's words in the owner's language; English without. */
+  words?: Words<"campaigns">;
 }) {
+  const t = campaignsTranslator(words);
   const [query, setQuery] = React.useState("");
   const [results, setResults] = React.useState<GeoPick[]>([]);
   const [status, setStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
@@ -192,7 +199,7 @@ export function LocationPicker({
           ref={inputRef}
           id={tone === "include" ? "location-include" : undefined}
           role="combobox"
-          aria-label={tone === "include" ? "Search locations to include" : "Search locations to exclude"}
+          aria-label={t(tone === "include" ? "targeting.searchInclude" : "targeting.searchExclude")}
           aria-autocomplete="list"
           aria-expanded={open}
           aria-controls={open && results.length > 0 ? listId : undefined}
@@ -235,7 +242,7 @@ export function LocationPicker({
           <ul
             id={listId}
             role="listbox"
-            aria-label={tone === "include" ? "Locations to include" : "Locations to exclude"}
+            aria-label={t(tone === "include" ? "targeting.listInclude" : "targeting.listExclude")}
             className="scrollbar-stable absolute z-30 mt-1 max-h-60 w-full overflow-y-scroll rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
           >
             {results.map((r, index) => (
@@ -267,12 +274,12 @@ export function LocationPicker({
         {open && (loading || status === "error" || (status === "success" && results.length === 0)) && (
           <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 shadow-lg">
             <p id={statusId} role="status" className="wrap-break-word">
-              {loading ? "Searching locations..." : status === "error" ? "Location search is unavailable. Your selected places are unchanged." : `No locations found for "${query.trim()}".`}
+              {loading ? t("targeting.searching") : status === "error" ? t("targeting.searchUnavailable") : t("targeting.noneFound", { query: query.trim() })}
             </p>
             {status === "error" && (
               <button type="button" className="mt-2 inline-flex items-center gap-1.5 rounded px-2 py-1 font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-600"
                 onClick={() => { inputRef.current?.focus(); dismissed.current = false; setStatus("loading"); setRetry((current) => current + 1); }}>
-                <RefreshCw className="h-3.5 w-3.5" />Retry
+                <RefreshCw className="h-3.5 w-3.5" />{t("targeting.retry")}
               </button>
             )}
           </div>
@@ -291,7 +298,7 @@ export function LocationPicker({
               {v.name}
               <button
                 type="button"
-                aria-label={`Remove ${v.name}`}
+                aria-label={t("targeting.remove", { name: v.name })}
                 onClick={() => remove(v)}
                 className="opacity-60 hover:opacity-100"
               >
@@ -318,6 +325,7 @@ export function TargetingControls({
   plannedExclusions = [],
   onDecide,
   areaFields,
+  words,
 }: {
   value: TargetingValue;
   onChange: (v: TargetingValue) => void;
@@ -327,7 +335,10 @@ export function TargetingControls({
   onDecide?: (field: "location" | "age") => void;
   /** Typed place lists, shown only under "Choose myself" so location is asked once (#305). */
   areaFields?: React.ReactNode;
+  /** #1438: the audience step's words in the owner's language; English without. */
+  words?: Words<"campaigns">;
 }) {
+  const t = campaignsTranslator(words);
   const set = (patch: Partial<TargetingValue>) => onChange({ ...value, ...patch });
 
   // Ignore unparseable input so a cleared box can't put NaN in the field.
@@ -348,7 +359,7 @@ export function TargetingControls({
   const cityScope = value.cityScope ?? "radius";
   const scopeId = React.useId();
   const areaNames = [...(value.locationMode === "manual" ? value.included.map((item) => item.name) : plannedAreas.length ? [] : brandAreas), ...plannedAreas];
-  const areaLabel = areaNames.length ? areaNames.join(", ") : "an area still to be selected";
+  const areaLabel = areaNames.length ? areaNames.join(", ") : t("targeting.areaPending");
 
   const audience = describeAudience({
     areaLabel,
@@ -360,7 +371,7 @@ export function TargetingControls({
     ageMode: value.ageMode,
     ageMin: value.ageMin,
     ageMax: value.ageMax,
-  });
+  }, words);
 
   return (
     <div className="flex flex-col gap-5 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
@@ -368,15 +379,12 @@ export function TargetingControls({
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Label className="flex items-center gap-1.5">
-            Where should ads show?
-            <InfoHint>
-              The area your ads run in. Most local businesses do best targeting
-              only the towns they actually serve — cheaper, better leads than
-              showing to the whole country.
-            </InfoHint>
+            {t("targeting.where")}
+            <InfoHint>{t("targeting.whereHint")}</InfoHint>
           </Label>
           <ModeToggle
             manualId="location-mode"
+            t={t}
             mode={value.locationMode}
             onChange={(mode) => mode === "ai" && onDecide ? onDecide("location") : set({ locationMode: mode })}
           />
@@ -385,16 +393,14 @@ export function TargetingControls({
         {value.locationMode === "ai" ? (
           <p className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-sm text-blue-800">
             {plannedAreas.length ? (
-              <>Saved campaign areas: <span className="font-medium">{plannedAreas.join(", ")}</span>{plannedExclusions.length ? <>; excluding <span className="font-medium">{plannedExclusions.join(", ")}</span></> : null}.</>
+              <>{t("targeting.savedAreas")} <span className="font-medium">{plannedAreas.join(", ")}</span>{plannedExclusions.length ? <>{t("targeting.excludingList")} <span className="font-medium">{plannedExclusions.join(", ")}</span></> : null}{t("targeting.stop")}</>
             ) : brandAreas.length ? (
               <>
-                AdBrain will target your service areas from your business details:{" "}
-                <span className="font-medium">{brandAreas.join(", ")}</span>{plannedExclusions.length ? <>; excluding <span className="font-medium">{plannedExclusions.join(", ")}</span></> : null}.
+                {t("targeting.brandAreas")}{" "}
+                <span className="font-medium">{brandAreas.join(", ")}</span>{plannedExclusions.length ? <>{t("targeting.excludingList")} <span className="font-medium">{plannedExclusions.join(", ")}</span></> : null}{t("targeting.stop")}
               </>
             ) : (
-              <>
-                No service areas selected.
-              </>
+              t("targeting.noAreas")
             )}
           </p>
         ) : (
@@ -402,32 +408,28 @@ export function TargetingControls({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label className="flex items-center gap-1.5 text-xs text-slate-600">
-                Show ads in
-                <InfoHint>
-                  Cities, districts or states where you want leads. Start typing
-                  and pick from the list.
-                </InfoHint>
+                {t("targeting.showIn")}
+                <InfoHint>{t("targeting.showInHint")}</InfoHint>
               </Label>
               <LocationPicker
                 value={value.included}
                 onChange={(included) => set({ included })}
-                placeholder="e.g. Mohali, Punjab…"
+                placeholder={t("targeting.showInPlaceholder")}
                 tone="include"
+                words={words}
               />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label className="flex items-center gap-1.5 text-xs text-slate-600">
-                Don’t show in (optional)
-                <InfoHint>
-                  Places to skip — e.g. areas you can’t install in, or a city
-                  you already have enough leads from.
-                </InfoHint>
+                {t("targeting.dontShowIn")}
+                <InfoHint>{t("targeting.dontShowInHint")}</InfoHint>
               </Label>
               <LocationPicker
                 value={value.excluded}
                 onChange={(excluded) => set({ excluded })}
-                placeholder="e.g. exclude a city…"
+                placeholder={t("targeting.dontShowInPlaceholder")}
                 tone="exclude"
+                words={words}
               />
             </div>
           </div>
@@ -438,15 +440,15 @@ export function TargetingControls({
         {(value.locationMode === "ai" || hasCities || plannedAreas.length > 0 || plannedExclusions.length > 0) && (
           <fieldset className="min-w-0">
             <legend className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-600">
-              City coverage
-              <InfoHint>No added radius uses Meta&apos;s city area, not a guaranteed municipal boundary. Applies to included and excluded cities; states and countries are unchanged.</InfoHint>
+              {t("targeting.cityCoverage")}
+              <InfoHint>{t("targeting.cityCoverageHint")}</InfoHint>
             </legend>
             <div className="grid w-full grid-cols-2 rounded-md border border-slate-200 bg-slate-100 p-0.5 sm:max-w-80">
-              {([ ["city_only", "City only"], ["radius", "City + radius"] ] as const).map(([scope, label]) => (
+              {([ ["city_only", t("targeting.cityOnly")], ["radius", t("targeting.cityRadius")] ] as const).map(([scope, label]) => (
                 <label key={scope} className="relative min-w-0 cursor-pointer">
                   <input type="radio" name={scopeId} value={scope} checked={cityScope === scope}
                     onChange={() => set({ cityScope: scope })} className="peer sr-only" />
-                  <span title={scope === "city_only" ? "No added radius; Meta defines the city area" : "City with a surrounding radius"}
+                  <span title={t(scope === "city_only" ? "targeting.cityOnlyTitle" : "targeting.cityRadiusTitle")}
                     className="flex min-h-10 items-center justify-center rounded px-2 py-1 text-center text-sm font-medium text-slate-600 max-sm:min-h-11 peer-checked:bg-white peer-checked:text-blue-700 peer-checked:shadow-sm peer-focus-visible:outline-2 peer-focus-visible:outline-blue-600">{label}</span>
                 </label>
               ))}
@@ -456,16 +458,13 @@ export function TargetingControls({
         {cityScope === "radius" && (hasCities || plannedAreas.length > 0 || plannedExclusions.length > 0 || value.locationMode === "ai") && (
           <div className="flex flex-col gap-1.5">
             <Label className="flex items-center gap-1.5 text-xs text-slate-600">
-              Radius around each city: {value.radiusKm} km
-              <InfoHint>
-                How far out from a city centre to reach. Wider = more people but
-                less local. 25 km suits most local businesses.
-              </InfoHint>
+              {t("targeting.radius", { km: value.radiusKm })}
+              <InfoHint>{t("targeting.radiusHint")}</InfoHint>
             </Label>
             <input
               type="range"
               id="city-radius"
-              aria-label="City radius in kilometers"
+              aria-label={t("targeting.radiusLabel")}
               min={17}
               max={80}
               step={1}
@@ -481,14 +480,12 @@ export function TargetingControls({
       <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Label className="flex items-center gap-1.5">
-            Age range
-            <InfoHint>
-              AdBrain recommends an age range from the business and campaign context.
-              You can review and change the recommendation before creation.
-            </InfoHint>
+            {t("targeting.ageRange")}
+            <InfoHint>{t("targeting.ageHint")}</InfoHint>
           </Label>
           <ModeToggle
             manualId="age-mode"
+            t={t}
             mode={value.ageMode}
             onChange={(mode) => mode === "ai" && onDecide ? onDecide("age") : set({ ageMode: mode })}
           />
@@ -500,7 +497,7 @@ export function TargetingControls({
               min={AGE_BOUNDS.min}
               max={AGE_BOUNDS.max}
               id="age-min"
-              aria-label="Minimum age"
+              aria-label={t("targeting.minAge")}
               value={value.ageMin}
               // Settle on blur, not per keystroke, so typing "3" toward "30"
               // isn't fought by the clamp.
@@ -508,12 +505,12 @@ export function TargetingControls({
               onBlur={() => settleAges()}
               className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center text-sm outline-none"
             />
-            <span className="text-slate-400">to</span>
+            <span className="text-slate-400">{t("targeting.ageTo")}</span>
             <input
               type="number"
               min={AGE_BOUNDS.min}
               max={AGE_BOUNDS.max}
-              aria-label="Maximum age"
+              aria-label={t("targeting.maxAge")}
               value={value.ageMax}
               onChange={(e) => setAge("ageMax", e.target.value)}
               onBlur={() => settleAges()}
@@ -524,27 +521,27 @@ export function TargetingControls({
       </div>
 
       <div className="flex flex-col gap-2 border-t border-slate-200 pt-4">
-        <Label htmlFor="audience-gender">Gender</Label>
+        <Label htmlFor="audience-gender">{t("targeting.gender")}</Label>
         <select
           id="audience-gender"
           value={value.gender ?? "all"}
           onChange={(event) => set({ gender: event.target.value as TargetingValue["gender"] })}
           className="h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none sm:max-w-64"
         >
-          <option value="all">All genders</option>
-          <option value="men">Men</option>
-          <option value="women">Women</option>
+          <option value="all">{t("targeting.allGenders")}</option>
+          <option value="men">{t("targeting.men")}</option>
+          <option value="women">{t("targeting.women")}</option>
         </select>
       </div>
 
       {/* Live summary */}
       <div className="rounded-lg bg-white px-3 py-2.5 text-sm text-slate-600 ring-1 ring-slate-200">
-        <span className="font-medium text-slate-800">Who’ll see this:</span>{" "}
+        <span className="font-medium text-slate-800">{t("targeting.whoSees")}</span>{" "}
         {audience}
-        {" "}{value.gender === "men" ? "Men." : value.gender === "women" ? "Women." : "All genders."}
-        {plannedExclusions.length > 0 && <> Excluding {plannedExclusions.join(", ")}.</>}
+        {" "}{t(value.gender === "men" ? "targeting.summaryMen" : value.gender === "women" ? "targeting.summaryWomen" : "targeting.summaryAll")}
+        {plannedExclusions.length > 0 && <> {t("targeting.summaryExcluding", { places: plannedExclusions.join(", ") })}</>}
         {/* #334: Advantage+ audience is on, so age, gender and interests are suggestions to Meta. */}
-        <p className="mt-1 text-xs text-slate-500">Meta may reach people beyond your age range and interests; never outside your area.</p>
+        <p className="mt-1 text-xs text-slate-500">{t("launchReview.audienceNote")}</p>
       </div>
     </div>
   );

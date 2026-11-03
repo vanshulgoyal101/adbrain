@@ -70,6 +70,7 @@ const breaks: Record<ReviewBlockerReason, (input: PreflightInput) => void> = {
   REVIEW_AD_POLICY: (input) => { input.vertical = "chiropractic clinic"; input.creatives[0].headline = "Cures back pain, guaranteed"; },
   REVIEW_WHATSAPP_MESSAGE: (input) => { input.draft.destination = "whatsapp"; input.whatsappMessageProblem = "\"guaranteed\" isn't in your business details. Reword it or add it there."; },
   REVIEW_WEBSITE_UNREACHABLE: (input) => { input.draft.destination = "website"; input.websiteReach = { url: "https://cedarridgechiro.com", ok: false, problem: "unreachable" }; },
+  REVIEW_MEDIA_RIGHTS: (input) => { input.creatives[0].ownMedia = true; input.mediaConsent = false; },
   REVIEW_TRACKING: (input) => { toSignups(input); input.tracking = { pixelId: null, status: null }; },
   REVIEW_GOAL_WORDS: (input) => { toSignups(input); input.creatives[0].cta = "Shop now"; },
 };
@@ -194,6 +195,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
 
   it.each([
     ["REVIEW_NO_WEBSITE", "/brand"],
+    ["REVIEW_MEDIA_RIGHTS", "/assets?confirm=rights"],
     ["REVIEW_TRACKING", "/brand"],
     // #681 (#847): linking a WhatsApp number lives in Settings' WhatsApp card, not on Your business.
     ["REVIEW_WHATSAPP_NOT_LINKED", "/settings#whatsapp-status-title"],

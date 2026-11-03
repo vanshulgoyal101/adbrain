@@ -13,7 +13,7 @@ const MAX_LOOKUPS = 10;
 /**
  * "Ask for Facebook access" requests (#692), read-only: outside owners who tapped it in the last
  * 7 days, one opaque key per person (the first 12 hex of sha256 of the user id). Public workflow
- * logs get the key and hours only, never ids, names or numbers; `.github/workflows/scheduled-jobs.yml`
+ * logs get the key, hours and the request time only, never ids, names or numbers; `.github/workflows/scheduled-jobs.yml`
  * opens one `waiting-owner` issue per key.
  */
 export const GET = observeRoute("/api/cron/access-requests", "GET", handleGET);
@@ -48,13 +48,13 @@ async function handleGET(request: Request) {
   // Listed team ids need no lookup (domain accounts still do).
   const outside = [...latest].filter(([id]) => !isInternalUser({ id }));
   const newest = outside.sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, MAX_LOOKUPS);
-  const requests: Array<{ key: string; hours: number }> = [];
+  const requests: Array<{ key: string; hours: number; at: string }> = [];
   for (const [userId, at] of newest) {
     const { data: found, error: userError } = await admin.auth.admin.getUserById(userId);
     // Unknown means it can't be shown to be internal: tell the team rather than drop a lead.
     if (!userError && isInternalUser(found.user)) continue;
     requests.push({ key: createHash("sha256").update(userId).digest("hex").slice(0, 12),
-      hours: Math.floor((Date.now() - Date.parse(at)) / 3_600_000) });
+      hours: Math.floor((Date.now() - Date.parse(at)) / 3_600_000), at: new Date(at).toISOString() });
   }
   return NextResponse.json({ ok: true, requests, more: outside.length - newest.length });
 }

@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const save = vi.hoisted(() => vi.fn());
 vi.mock("@/app/(app)/brand/whatsapp-template-actions", () => ({ saveWhatsAppTemplate: save }));
 import { WhatsAppMessageCard, WhatsAppPreview } from "@/components/whatsapp-message-card";
+import en from "../messages/en.json";
+import hi from "../messages/hi.json";
 
 const suggested = {
   en: { greeting: "Hi! Thanks for messaging Solaride. Send this message and we'll reply here.", prefill: "Hi! I'd like a free solar site survey." },
@@ -173,5 +175,30 @@ describe("WhatsApp preview (#847: what the customer's phone shows)", () => {
     expect(within(within(phone).getByRole("list", { name: "Questions to tap" })).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Price for my home?", "Call me back"]);
     expect(within(phone).queryByText("Free solar site survey in Mohali")).not.toBeInTheDocument();
     expect(phone).not.toHaveTextContent("Ready to send");
+  });
+});
+
+describe("WhatsApp message card in Hindi (#1438)", () => {
+  const words = { locale: "hi" as const, messages: hi.whatsappMessage };
+
+  it("shows the card's labels, status and save result in Hindi", async () => {
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={null} suggested={suggested} words={words} callNumber={Promise.resolve("+91 ••••• 4842")} />);
+    expect(screen.getByRole("heading", { name: "WhatsApp मैसेज" })).toBeInTheDocument();
+    expect(screen.getByText("सुझाया गया")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "अपने-आप (हर ऐड के हिसाब से)" })).toBeInTheDocument();
+    expect(screen.getByRole("figure", { name: "WhatsApp झलक" })).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByLabelText("अभी कॉल करें")); });
+    expect(await screen.findByText(/जो आपके पेज का WhatsApp है/)).toHaveTextContent("कॉल +91 ••••• 4842 पर आएँगी");
+    fireEvent.click(screen.getByLabelText("झटपट सवाल"));
+    expect(screen.getByLabelText("सवाल 1")).toHaveAttribute("placeholder", "जैसे: दाम क्या है?");
+    expect(screen.getByLabelText("सवाल 2")).toHaveAttribute("placeholder", "ज़रूरी नहीं");
+    fireEvent.click(screen.getByRole("button", { name: "WhatsApp मैसेज सेव करें" }));
+    expect(await screen.findByText("सेव हो गया। नए WhatsApp कैंपेन इसी का इस्तेमाल करेंगे।")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "सुझाया गया मैसेज वापस लाएँ" })).toBeInTheDocument();
+  });
+
+  it("keeps the English words in the English messages", () => {
+    expect(en.whatsappMessage.title).toBe("WhatsApp message");
+    expect(Object.keys(hi.whatsappMessage)).toEqual(Object.keys(en.whatsappMessage));
   });
 });

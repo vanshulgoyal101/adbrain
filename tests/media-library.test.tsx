@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MediaLibrary } from "@/components/media-library";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
@@ -59,5 +59,41 @@ describe("<MediaLibrary> (#778 slice 3a)", () => {
     expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("button", { name: /^More for / }), { key: "Enter" });
     expect(screen.getByRole("menuitem", { name: "Download" })).toBeInTheDocument();
+  });
+});
+
+describe("<MediaLibrary> Make ads from these (#780 slice 2a)", () => {
+  const ids = ["a", "b", "c", "d"].map((x) => `${x.repeat(8)}-1111-4111-8111-111111111111`);
+  const photos = ids.map((id, i) => photo({ id, name: `Photo ${i + 1}` }));
+
+  it("picks up to 3 own photos and links Create with them, in the order picked", () => {
+    render(<MediaLibrary business={biz} media={photos} creatives={[]} brandAssets={[]} />);
+    expect(screen.queryByRole("link", { name: /Make ads from these/ })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Photo 3" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Photo 1" }));
+    expect(screen.getByRole("link", { name: "Make ads from these (2)" })).toHaveAttribute("href", `/create?all=1&photos=${ids[2]},${ids[0]}`);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Photo 2" }));
+    expect(screen.getByRole("checkbox", { name: "Pick Photo 4" })).toBeDisabled();
+    expect(screen.getByText("Pick up to 3 photos at a time.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Photo 3" }));
+    expect(screen.getByRole("checkbox", { name: "Pick Photo 4" })).toBeEnabled();
+    expect(screen.getByRole("link", { name: "Make ads from these (2)" })).toHaveAttribute("href", `/create?all=1&photos=${ids[0]},${ids[1]}`);
+  });
+
+  it("offers no pick on a sample library, a video, or a photo without its signed link", () => {
+    const { unmount } = render(<MediaLibrary business={biz} media={photos} creatives={[]} brandAssets={[]} sample />);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    unmount();
+    render(<MediaLibrary business={biz} media={[photo({ kind: "video" }), photo({ id: "m2", url: null })]} creatives={[]} brandAssets={[]} />);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("drops a deleted photo from the pick", () => {
+    const deps = { fetch: vi.fn(async () => new Response(null, { status: 204 })) as unknown as typeof fetch, uploadToSignedUrl: vi.fn() };
+    render(<MediaLibrary business={biz} media={photos.slice(0, 1)} creatives={[]} brandAssets={[]} deps={deps} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Photo 1" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "More for Photo 1" }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(screen.queryByRole("link", { name: /Make ads from these/ })).toBeNull();
   });
 });

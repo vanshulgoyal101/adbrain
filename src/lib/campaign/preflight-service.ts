@@ -39,6 +39,8 @@ export type PreflightLoaders = {
   findCostPerResult?: (actor: PreflightActor, destination: Exclude<LeadDestination, "call" | "website">) => Promise<number | null>;
   /** #2274: redraws one picture's printed phone over its saved background; the new picture's URL, or null. */
   redrawPictureNumber?: (actor: PreflightActor, creativeId: string, phone: string) => Promise<string | null>;
+  /** #784: the owner confirmed the current rights terms for their own photos; read only when an ad uses one. */
+  findMediaConsent?: (actor: PreflightActor) => Promise<boolean>;
   /** #2714: the Brand's chosen tracking and Meta's read of it for a signup or sales goal; absent or failing blocks Review. */
   findTracking?: (actor: PreflightActor, goal: ConversionGoal) => Promise<ReviewTracking>;
   getConnection: (actor: PreflightActor) => Promise<PreflightConnection | null>;
@@ -107,6 +109,10 @@ export async function prepareCampaignReview(
   const aligned = draft.input.destination === "whatsapp" && whatsappNumber && /^\+[1-9]\d{6,14}$/.test(whatsappNumber) && redraw
     ? await alignPrintedNumbers(creatives, whatsappNumber, (creative, phone) => redraw(input.actor, creative.id, phone))
     : { creatives, notice: null };
+  // A failed read throws (Review says try again), never a pass.
+  const mediaConsent = creatives.some((creative) => creative.ownMedia) && loaders.findMediaConsent
+    ? await loaders.findMediaConsent(input.actor)
+    : undefined;
 
   return {
     kind: "review",
@@ -130,6 +136,7 @@ export async function prepareCampaignReview(
       hash: loaders.hash,
       costPerResultRupees,
       locale: input.locale,
+      mediaConsent,
     }),
   };
 }

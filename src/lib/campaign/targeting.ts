@@ -1,4 +1,5 @@
 import type { GeoItem } from "@/lib/meta/client";
+import { campaignsTranslator, type Words } from "@/i18n/words";
 
 /** One place as sent from the UI (already carries a Meta key from search). */
 export interface TargetingInputItem {
@@ -118,15 +119,16 @@ export function describeAudience(t: {
   ageMode: "ai" | "manual";
   ageMin?: number;
   ageMax?: number;
-}): string {
-  const parts: string[] = [`People in ${t.areaLabel}`];
+}, words?: Words<"campaigns">): string {
+  const tr = campaignsTranslator(words);
+  const parts: string[] = [tr("targeting.people", { area: t.areaLabel })];
   if (t.excluded.length) {
-    parts.push(`excluding ${t.excluded.map((e) => e.name).join(", ")}`);
+    parts.push(tr("targeting.peopleExcluding", { places: t.excluded.map((e) => e.name).join(", ") }));
   }
   if (t.ageMode === "manual" && t.ageMin && t.ageMax) {
-    parts.push(`ages ${t.ageMin}–${t.ageMax === 65 ? "65+" : t.ageMax}`);
+    parts.push(tr("targeting.ages", { min: t.ageMin, max: t.ageMax === 65 ? "65+" : t.ageMax }));
   } else {
-    parts.push("ages picked by AdBrain when you check the campaign");
+    parts.push(tr("targeting.agesByAdBrain"));
   }
-  return parts.join(", ") + ".";
+  return tr("targeting.summaryEnd", { parts: parts.join(", ") });
 }
