@@ -7,6 +7,7 @@ import { hasCurrentMediaConsent } from "@/lib/media/consent";
 import { getEnv } from "@/lib/env";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
 import type { Json } from "@/lib/types";
+import { loadCreativeVideos } from "@/lib/campaign/creative-video";
 import { getCostPerResult } from "@/lib/campaign/result-evidence-store";
 import { checkWebsiteReach } from "@/lib/campaign/website-reach";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
@@ -45,7 +46,10 @@ export function buildCampaignPreflightLoaders(
         .select("id, business_id, status, image_url, headline, primary_text, cta, generation, media_asset_id")
         .in("id", creativeIds)
         .eq("business_id", businessId);
-      return (data ?? []).map((creative) => ({
+      const rows = data ?? [];
+      const videos = await loadCreativeVideos(supabase, businessId, rows.map((creative) => creative.id), async () => (await status()).selected?.adAccountId);
+      return rows.map((creative) => ({
+        video: videos.get(creative.id),
         id: creative.id,
         businessId: creative.business_id,
         approved: creative.status === "approved",

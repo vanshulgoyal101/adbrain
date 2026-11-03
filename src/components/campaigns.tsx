@@ -96,7 +96,6 @@ import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectatio
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
-import { ADVICE_FROM_ADS, budgetAdvice } from "@/components/choose-ads";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { preparedAudienceForm, targetingFromEditor, withPreparedAudienceForm, targetingToEditor } from "@/lib/campaign/editor-targeting";
@@ -2005,7 +2004,6 @@ function BusinessCampaigns({
                               <CheckCircle2 className="h-4 w-4" />
                             </span>
                           )}
-                          {c.media_asset_id && <span className="absolute bottom-1.5 left-1.5 rounded-full bg-white/90 px-2 py-0.5 text-xs font-medium text-slate-900">Your photo</span>}
                           <p className="truncate px-2 py-1.5 text-xs font-medium text-slate-700 max-sm:hidden">
                             {c.headline}
                           </p>
@@ -2029,7 +2027,6 @@ function BusinessCampaigns({
                       );
                     })}
                   </div>
-                  {selected.size >= ADVICE_FROM_ADS && <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{budgetAdvice(budget)}</p>}
                   {!showAllAds && pickerAds.some((c, index) => index >= PHONE_PICKER_ADS && !selected.has(c.id)) && (
                     <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 h-11 w-full sm:hidden">
                       Show all {pickerAds.length} ads

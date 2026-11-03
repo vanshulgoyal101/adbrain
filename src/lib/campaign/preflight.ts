@@ -11,6 +11,7 @@ import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { translator, type AppLocale } from "@/i18n/locale";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
 import { isAdvertiserWebsite, websiteAdLink, websiteBlocker } from "@/lib/campaign/website-review";
+import type { PreflightVideo } from "@/lib/campaign/creative-video";
 import { creativesBlockerMessage, named, trackingBlockerWords, websiteBlockerWords } from "@/lib/campaign/review-blocker-words";
 import { conversionGoal, goalWordsMismatch, trackingBlocker, type ReviewTracking } from "@/lib/campaign/website-tracking";
 
@@ -34,6 +35,8 @@ export interface PreflightCreative {
   printedPhone?: string | null;
   /** #784: its picture is the owner's own upload (`creatives.media_asset_id`), so launch needs their rights confirmation. */
   ownMedia?: boolean;
+  /** #781: set only for an owner's video; Go live waits until it is ready at Meta. */
+  video?: PreflightVideo;
 }
 
 export interface PreflightForm {

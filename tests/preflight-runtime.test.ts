@@ -12,6 +12,7 @@ const access = vi.hoisted(() => ({
 vi.mock("@/lib/meta/connection-access", () => access);
 const evidence = vi.hoisted(() => ({ getCostPerResult: vi.fn(async () => 69) }));
 vi.mock("@/lib/campaign/result-evidence-store", () => evidence);
+vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => false }));
 // #253's bindings have their own tests (whatsapp-bindings.test.ts); here the Page's number is the one.
 vi.mock("@/lib/meta/whatsapp-bindings", () => ({
   whatsappNumberForBusiness: (_businessId: string, meta: { getWhatsAppNumber: (requested: string | null, bound: string[]) => Promise<string | null> }, requested: string | null) => meta.getWhatsAppNumber(requested, []),
