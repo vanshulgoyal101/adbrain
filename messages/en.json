@@ -1550,6 +1550,9 @@
       "limitCount": "You can add up to {max} at a time. Add the rest after these finish.",
       "rightsRequired": "Tick the box above to add your photos.",
       "consentFailed": "Your confirmation couldn't be saved. Try again.",
+      "confirmTitle": "Confirm your rights to the photos in your ads",
+      "confirmAction": "Confirm",
+      "confirmSaving": "Saving…",
       "format": "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
       "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again."
     },

@@ -64,7 +64,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
     return (
       <div>
         <PageHeader title={t("page.title")} description={<p>{t("page.description", { name: business.name })}</p>} />
-        {params.confirm === "rights" && !consented && <MediaRightsConfirm businessId={business.id} vertical={business.vertical ?? null} />}
+        {params.confirm === "rights" && !consented && <MediaRightsConfirm words={words} businessId={business.id} vertical={business.vertical ?? null} />}
         <div className="mt-6">
           <MediaLibrary words={words} business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
             brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} />
@@ -75,6 +75,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
 
   // Uploads are off, but an ad can still carry a Brand photo that needs the owner's rights confirmation (#784).
   const confirmRights = params.confirm === "rights" && !await hasCurrentMediaConsent(await createClient(), business).catch(() => false);
+  const confirmWords = confirmRights ? await requestWords("media") : undefined;
 
   return (
     <div>
@@ -84,7 +85,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
           <p>Every ad and upload for {business.name}, {sample ? "kept here until the account is handed over (sample ads can\u2019t be downloaded)." : "ready to download or share."}</p>
         }
       />
-      {confirmRights && <MediaRightsConfirm businessId={business.id} vertical={business.vertical ?? null} />}
+      {confirmRights && <MediaRightsConfirm words={confirmWords} businessId={business.id} vertical={business.vertical ?? null} />}
       <div className="mt-6">
         <AssetsLibrary creatives={creatives} brandAssets={brandAssets} sample={sample} />
       </div>
