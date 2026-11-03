@@ -10,6 +10,8 @@ const unsafe = [
   ["a misplaced begin", "select 1;\nbegin;\nselect 2;\n"],
   ["a misplaced commit", "begin;\nselect 1;\ncommit;\nselect 2;\n"],
   ["a prepared transaction", "select 1;\nprepare transaction 'fixture';"],
+  ["set transaction", "set transaction read only;\nselect 1;"],
+  ["set session characteristics", "set session characteristics as transaction read only;\nselect 1;"],
   ["rollback without a final semicolon", "select 1;\nrollback"],
   ["rollback and chain", "select 1;\nrollback and chain;"],
   ["inline rollback", "select 1; rollback;"],

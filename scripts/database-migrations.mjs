@@ -172,7 +172,9 @@ function migrationBody(name, sql) {
   for (const statement of statements) {
     const transactionControl = controls.has(statement.first) ||
       (statement.first === "start" && statement.second === "transaction") ||
-      (statement.first === "prepare" && statement.second === "transaction");
+      (statement.first === "prepare" && statement.second === "transaction") ||
+      (statement.first === "set" && statement.second === "transaction") ||
+      (statement.first === "set" && statement.second === "session" && statement.head[2] === "characteristics");
     if (transactionControl && !(statement === first && stripBegin) && !(statement === last && stripCommit)) {
       throw new Error(`${name} controls its own transaction mid-file; apply it by hand.`);
     }
