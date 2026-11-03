@@ -220,6 +220,19 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[2][0])).toContain(`generationId=${running}`);
   });
 
+  it("#1402: following a batch that closed short (`ended`) shows its saved ads at once, not 'busy'", async () => {
+    const running = "33333333-3333-4333-8333-333333333333";
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") return Response.json({ ready: true, brief: "b" });
+      if (init?.method === "POST") return Response.json({ error: "busy", code: "CREATE_RUNNING", variantGroup: running, expectedCount: 3 }, { status: 409 });
+      return Response.json({ status: "ended", creatives: [ad("a"), ad("b")], count: 2, expectedCount: 3 });
+    }));
+    render(<SetupAdsStep business={business} initialAds={[]} />);
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(calls()).toEqual(["POST /api/creatives/assistant", "POST /api/creatives/generate", "GET /api/creatives/generate"]);
+    expect(screen.getByText(/1 ad couldn't be made\./)).toBeInTheDocument();
+  });
+
   it("when no ad could be made it says so and offers Try again", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/creatives/assistant"
       ? Response.json({ ready: true, brief: "b" })

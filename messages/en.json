@@ -821,6 +821,8 @@
       "offline": "Couldn't reach Meta. Check your connection, then try Sync from Meta again.",
       "named": "\"{name}\" was left unchanged: {reason}.",
       "unnamed": "A campaign was left unchanged: {reason}.",
+      "unchangedCount": "{n} left unchanged.",
+      "details": "Details",
       "rest": "{n, plural, one {# more campaign was left unchanged.} other {# more campaigns were left unchanged.}}",
       "reasons": {
         "not_running": "it's archived or deleted in Meta",
