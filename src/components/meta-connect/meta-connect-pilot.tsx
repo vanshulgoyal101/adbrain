@@ -16,7 +16,7 @@ export function MetaConnectPilot({ businessName, connection: initialConnection }
   const connected = connection.authorization === "connected" && connection.selected;
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-6 py-12">
-      <Link href="/settings" className="inline-flex items-center gap-2 text-sm text-slate-600">
+      <Link href="/settings" className="inline-flex min-h-11 items-center gap-2 text-sm text-slate-600">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Settings
       </Link>
       <div className="mt-10 border-b border-slate-200 pb-6">

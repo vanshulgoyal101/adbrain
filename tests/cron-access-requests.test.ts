@@ -72,19 +72,19 @@ describe("GET /api/cron/access-requests (#692)", () => {
     ];
     const { status, body } = await call();
     expect(status).toBe(200);
-    expect(body).toEqual({ ok: true, requests: [{ key: key("owner-outside-1"), hours: 1 }], more: 0 });
+    expect(body).toEqual({ ok: true, requests: [{ key: key("owner-outside-1"), hours: 1, at: (mocks.rows[0] as { created_at: string }).created_at }], more: 0 });
     expect(JSON.stringify(body)).not.toMatch(/owner-|example\.com/);
   });
 
   it("keeps a request whose account can't be read, rather than drop a lead", async () => {
     mocks.rows = [{ user_id: "owner-unknown-1", created_at: ago(0) }];
-    expect((await call()).body.requests).toEqual([{ key: key("owner-unknown-1"), hours: 0 }]);
+    expect((await call()).body.requests).toEqual([{ key: key("owner-unknown-1"), hours: 0, at: (mocks.rows[0] as { created_at: string }).created_at }]);
   });
 
   // #725: the server-side record counts even when the analytics beacon was dropped.
   it("reads the durable audit record when no beacon arrived", async () => {
     mocks.audit = [{ actor_id: "owner-outside-2", created_at: ago(2) }];
-    expect((await call()).body.requests).toEqual([{ key: key("owner-outside-2"), hours: 2 }]);
+    expect((await call()).body.requests).toEqual([{ key: key("owner-outside-2"), hours: 2, at: (mocks.audit[0] as { created_at: string }).created_at }]);
   });
 
   it("looks up at most 10 accounts a run, newest first, and counts the rest as waiting", async () => {
