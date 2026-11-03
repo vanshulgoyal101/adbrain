@@ -75,6 +75,7 @@ import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { PickerAdTile } from "@/components/picker-ad-tile";
+import { VideoPrepare } from "@/components/video-prepare";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
@@ -1972,13 +1973,17 @@ function BusinessCampaigns({
                         hidden={!showAllAds && index >= PHONE_PICKER_ADS && !selected.has(c.id)}
                         editing={editingAdId === c.id}
                         describedBy={placedError?.at === "ads" ? "ads-error" : undefined}
-                        yoursLabel={tc("picker.yourPhoto")}
+                        labels={{ yours: tc("picker.yourPhoto"), select: tc("picker.selectAd"), preview: tc("picker.adPreview"), edit: tc("picker.edit"), editAd: (headline) => tc("picker.editAd", { headline: headline || tc("picker.thisAd") }) }}
                         livePicture={c.id === editingAdId && adPicture ? <LivePicture preview={adPicture} /> : null}
                         onToggle={() => toggle(c.id)}
                         onEdit={() => { setAdEditNotes(null); setEditingAdId(c.id); }}
                       />
                     ))}
                   </div>
+                  <VideoPrepare
+                    assetIds={pickerAds.filter((c) => selected.has(c.id) && c.media_asset_id).map((c) => c.media_asset_id!)}
+                    words={{ working: tc("picker.preparing"), ready: tc("picker.prepared"), error: tc("picker.prepareFailed") }}
+                  />
                   {!showAllAds && pickerAds.some((c, index) => index >= PHONE_PICKER_ADS && !selected.has(c.id)) && (
                     <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 h-11 w-full sm:hidden">
                       Show all {pickerAds.length} ads

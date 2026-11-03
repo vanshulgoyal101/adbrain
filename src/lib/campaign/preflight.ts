@@ -219,6 +219,8 @@ export function buildCreativeReviewPayload(creatives: PreflightCreative[]) {
     primaryText: creative.primaryText ?? "",
     description: creative.description ?? null,
     cta: creative.cta ?? null,
+    // #781: only for an owner's video, so photo plans keep their hash; a swapped video is a different Review.
+    ...(creative.video ? { video: { assetId: creative.video.assetId, videoId: creative.video.videoId ?? null } } : {}),
   }));
 }
 

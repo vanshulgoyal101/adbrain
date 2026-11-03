@@ -87,7 +87,7 @@ export async function executeReviewedCampaign(input: {
           const creativeHash = createHash("sha256").update(JSON.stringify(buildCreativeReviewPayload(creativeInputs.map(creative => ({
             id: creative.id, businessId: actor.businessId, approved: true, imageUrl: creative.image_url,
             headline: creative.headline, primaryText: creative.primary_text, cta: creative.cta,
-            description: savedCreativeDescription(creative.generation),
+            description: savedCreativeDescription(creative.generation), video: videos.get(creative.id),
           }))))).digest("hex");
           if (creativeHash !== review.creativeHash) throw new OperationPhaseError("Selected creative changed since review.", { transmitted: false });
           // #333: Stories and Reels get a 9:16 layout of the same reviewed design; on any failure they keep the 4:5.
