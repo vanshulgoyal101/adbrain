@@ -37,8 +37,13 @@ export function qaApproval(comments, headSha, samePatch = /** @type {(sha: strin
     .filter((c) => /^[*_\s]*QA\b/.test(c.body) && namesHead(c))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const firstLine = (c) => verdictSentence(c.body);
-  // #2813: "QA 2: approve e031f61a" (verb straight before a hash) is as explicit as "approved"; "please approve <sha>" stays vetoed by `negative`.
-  const approves = (c) => /(?<![-\w])(re-)?(approved|accepted|fine to (merge|ship))\b|^[*_\s]*QA\b[^:\n]{0,6}:?\s*\**(re-)?approve\**\s+[0-9a-f]{7,40}\b/i.test(firstLine(c)) && !negative.test(firstLine(c));
+  // #2813: "QA 2: approve e031f61a" is as explicit as "approved", but only as a bare sentence naming the head (or an earlier head with the same patch);
+  // any qualifier after the hash ("only if…", "?", "after…") isn't an approval. "please approve <sha>" is also vetoed by `negative`.
+  const bareApprove = (c) => {
+    const sha = firstLine(c).match(/^[*_\s]*QA\b[^:\n]{0,6}:?\s*\**(?:re-)?approve\**\s+([0-9a-f]{7,40})\**[.!]?\**\s*$/i)?.[1]?.toLowerCase();
+    return Boolean(sha) && (headSha.toLowerCase().startsWith(sha) || samePatch(sha));
+  };
+  const approves = (c) => (/(?<![-\w])(re-)?(approved|accepted|fine to (merge|ship))\b/i.test(firstLine(c)) || bareApprove(c)) && !negative.test(firstLine(c));
   const latest = verdicts.at(-1);
   // `unrecognized`: the latest comment on this head is neither an approval nor a hold; it still fails closed (#2813).
   if (!latest || !approves(latest)) return { approved: false, latest, unrecognized: Boolean(latest) && !negative.test(firstLine(latest)) && !/\b(hold|reject|block|changes|denied|fail)/i.test(firstLine(latest)) };

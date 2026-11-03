@@ -113,6 +113,7 @@ describe("money and migrations need QA and the CTO/Reviewer (#1083)", () => {
     expect(verdict("QA: please approve 7612817 soon").state).toBe("pending");
     expect(verdict("QA: approve 1111111.").state).toBe("pending");
     expect(verdict("QA: approve 7612817 once you rebase.").state).toBe("pending");
+    for (const body of ["QA: approve 1111111 (head is 7612817)", "QA: approve 7612817?", "QA: approve 7612817 only if CI green", "QA: approve 7612817 after migration", "QA: approve 0000000 7612817", "QA: do not approve 7612817"]) expect(verdict(body).state, body).toBe("pending");
     const stranger = verdict("QA: ready at 7612817 (no auto-merge).");
     expect(stranger).toMatchObject({ state: "pending", description: expect.stringMatching(/isn't a recognised verdict/) });
     expect(verdict("QA verdict at 7612817: changes requested.")).toMatchObject({ description: "QA requested changes at 7612817" });
