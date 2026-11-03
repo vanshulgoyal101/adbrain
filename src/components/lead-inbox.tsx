@@ -3,7 +3,7 @@
 import { checkLaterLine, enquiriesWaitLine, throttleActive } from "@/lib/campaign/meta-wait";
 import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
-import { Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
+import { Inbox, Loader2, MessageCircle, Phone, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { EnquiryStatusNotice, leadName, useLeadErasure } from "@/components/enquiry-erasure";
@@ -24,6 +24,7 @@ import { isWaiting } from "@/lib/leads/waiting";
 import { leadAnswers } from "@/lib/leads/answers";
 import styles from "./lead-inbox.module.css";
 import { LeadInboxEmpty } from "@/components/lead-inbox-empty";
+import { LeadSyncStatus } from "@/components/lead-sync-status";
 
 const LEADS_FRESH_MS = 15 * 60_000;
 
@@ -334,7 +335,6 @@ export function LeadInbox({
 
   const now = new Date();
   const lastSync = syncedAt ?? (mounted && syncStorageKey ? readLeadSyncTime(syncStorageKey) : 0);
-  const updatedText = lastSync ? t("sync.updated", { age: enquiryAge(t, new Date(lastSync).toISOString(), now) }) : null;
 
   // Render a deterministic absolute date on the server and first client render
   // (same string on both sides = no hydration mismatch), then upgrade to the
@@ -396,18 +396,7 @@ export function LeadInbox({
           <span className="font-normal text-slate-400">({view === "all" || allTotal === undefined ? page.total : allTotal})</span>
         </h2>
       </div>
-      {metaReady && <p className="-mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-        {/* #1260: checking runs on open; the time sits quietly here, with a small Check now for impatient owners and retries. */}
-        {/* #2748: both texts share one grid cell, so the wider one holds the width and Check now doesn't slide as they swap. */}
-        <span className="inline-grid">
-          <span className="[grid-area:1/1]" aria-live="polite">{syncing ? t("sync.checking") : updatedText}</span>
-          <span className="invisible [grid-area:1/1]" aria-hidden="true">{syncing ? updatedText : t("sync.checking")}</span>
-        </span>
-        <button type="button" className="inline-flex min-h-11 items-center gap-1 font-medium text-blue-700 disabled:text-slate-400" onClick={() => void sync(true)} disabled={syncing}>
-          {syncing ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={12} aria-hidden="true" />}
-          {t(syncId ? "sync.keepChecking" : "sync.checkNow")}
-        </button>
-      </p>}
+      {metaReady && <LeadSyncStatus t={t} syncing={syncing} lastSync={lastSync} now={now} keepChecking={Boolean(syncId)} onCheck={() => void sync(true)} />}
       {metaReady && mounted && throttleActive(metaWaitUntil, now) && <p className="-mt-2 text-xs text-slate-600">{enquiriesWaitLine(lastSync ? now.getTime() - lastSync : Date.parse(metaWaitUntil) - now.getTime(), words)}</p>}
 
       {waiting !== null && <p className={styles.summary}>
