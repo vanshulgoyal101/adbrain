@@ -773,6 +773,25 @@
       "reconnectBy": "Reconnect Facebook by {date} to keep managing your ads.",
       "savedDrafts": "Saved drafts"
     },
+    "launchReview": {
+      "readyTitle": "Ready for campaign review",
+      "reviewTitle": "Review before creation",
+      "readyBody": "AdBrain creates this campaign paused. Nothing spends until you activate it. Review these settings; Meta eligibility and audience checks still apply.",
+      "pausedBody": "AdBrain creates this campaign paused. Nothing spends until you activate it.",
+      "leadDestination": "Lead destination",
+      "whatsappChat": "WhatsApp chat {number}",
+      "whatsappPending": "WhatsApp chat (number verification pending)",
+      "chooseLeadForm": "Choose a lead form",
+      "shownOn": "Shown on Facebook, Instagram and Messenger",
+      "ad": "Ad",
+      "selected": "{n} selected",
+      "selectAd": "Select an ad",
+      "dailyBudget": "Total daily budget",
+      "perDay": "{money} a day",
+      "enterBudget": "Enter a budget",
+      "audience": "Audience",
+      "audienceNote": "Meta may reach people beyond your age range and interests; never outside your area."
+    },
     "filters": {
       "search": "Search campaigns",
       "status": "Campaign status",
