@@ -23,7 +23,7 @@ import { readTrackingStatus, type TrackingEvent, type TrackingStatus } from "./p
 import { collectLeadPages, formPageSchema, leadPageSchema, parseLeadPage, type MetaLeadPage } from "./lead-pages";
 export type { MetaLeadPage } from "./lead-pages";
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
-import { destinationCTA, destinationPlan, hasPlacementCreative, isWebsiteLink, leavesAudienceNetworkOut, websiteUrlTags, type AdDestination } from "./destinations";
+import { campaignObjective, destinationCTA, destinationPlan, destinationProblem, hasPlacementCreative, leavesAudienceNetworkOut, promotedObject, websiteUrlTags, type AdDestination, type WebsiteGoal } from "./destinations";
 export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, type DestinationPlan } from "./destinations";
 import { CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
 export { CREATIVE_FEATURES_OPT_OUT, CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
@@ -1207,6 +1207,7 @@ export class MetaClient {
     location?: GeoTargeting;
     excludedLocation?: GeoTargeting;
     destination?: AdDestination;
+    websiteGoal?: WebsiteGoal; pixelId?: string; // #2713: a website goal (absent: visits); leads/sales optimise for this pixel's Lead/Purchase
     whatsappNumber?: string;
     /** Numbers bound to this AdBrain business (#253); a non-Page number must be one of them. */
     boundWhatsAppNumbers?: readonly string[];
@@ -1247,10 +1248,9 @@ export class MetaClient {
       throw new MetaError("Choose a supported gender demographic before creating ads.");
     }
     const requested = params.destination ?? "instant_form";
-    if (requested === "instant_form" && !params.leadFormId) throw new MetaError("Choose an active lead form before creating ads.");
-    if (requested === "website" && !isWebsiteLink(params.link)) throw new MetaError("Add the business's own website (starting https://) before creating website ads.");
+    const problem = destinationProblem(requested, params);
+    if (problem) throw new MetaError(problem);
     if (requested === "whatsapp") {
-      if (!params.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(params.whatsappNumber)) throw new MetaError("Review the Page-linked WhatsApp Business number before creating ads.");
       if (await this.getWhatsAppNumber(params.whatsappNumber, params.boundWhatsAppNumbers ?? []) !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
     }
 
@@ -1277,7 +1277,7 @@ export class MetaClient {
       method: "POST",
       form: {
         name: params.name,
-        objective: requested === "whatsapp" ? "OUTCOME_ENGAGEMENT" : requested === "website" ? "OUTCOME_TRAFFIC" : "OUTCOME_LEADS",
+        objective: campaignObjective(requested, params.websiteGoal),
         status: "PAUSED",
         special_ad_categories: "[]",
         is_adset_budget_sharing_enabled: "false",
@@ -1361,7 +1361,7 @@ export class MetaClient {
     const plannedCreatives: Record<string, string>[] = [];
     const creativeForms = new Map<string, Record<string, string>>();
     const makeAdSet = async (dest: AdDestination, v: AdSetVariant, i: number) => {
-      const dp = destinationPlan(dest);
+      const dp = destinationPlan(dest, params.websiteGoal);
       const suffix =
         v.label ?? (variants.length > 1 ? `Ad set ${i + 1}` : "Ad set");
       const form = {
@@ -1373,7 +1373,7 @@ export class MetaClient {
         optimization_goal: dp.optimizationGoal,
         bid_strategy: "LOWEST_COST_WITHOUT_CAP",
         destination_type: dp.destinationType,
-        promoted_object: JSON.stringify({ page_id: this.creds.pageId, ...(dest === "whatsapp" ? { whatsapp_phone_number: params.whatsappNumber } : {}) }),
+        promoted_object: promotedObject(dest, { ...params, pageId: this.creds.pageId }),
         targeting: targetingFor(v, dest),
       };
       const created = await this.graph<{ id: string }>(`${acct}/adsets`, { method: "POST", form });
