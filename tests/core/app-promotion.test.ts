@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/app-promotion.json";
-import { appBlocker, normalizeStoreUrl } from "@/lib/campaign/app-tracking";
+import { appBlocker } from "@/lib/campaign/app-tracking";
 import { readRegisteredApps } from "@/lib/meta/app-promotion";
 
 // #2824 (#2595 phase 3): real answers from the test ad account (scripts/record-meta-app-promotion.ts, scrubbed).
@@ -29,16 +29,16 @@ describe("readRegisteredApps", () => {
       return appsCall.body;
     });
     const apps = await readRegisteredApps(graph as never, account);
-    expect(apps).toEqual([{ id: (appsCall.body as Apps).data[0].id, name: "adBrain", storeLinks: [] }]);
+    expect(apps).toEqual([{ id: (appsCall.body as Apps).data[0].id, name: "adBrain", storeUrls: [] }]);
   });
 
   it("keeps iOS and Android links", async () => {
     const apps = await readRegisteredApps(
       graphReturning({ data: [{ id: "1", name: "A", object_store_urls: { itunes: "https://apps.apple.com/app/id1", google_play: "https://play.google.com/store/apps/details?id=a.b", fb_canvas: "https://x.test/" } }] }),
       account);
-    expect(apps?.[0].storeLinks).toEqual([
-      { platform: "ios", url: "https://apps.apple.com/app/id1" },
-      { platform: "android", url: "https://play.google.com/store/apps/details?id=a.b" },
+    expect(apps?.[0].storeUrls).toEqual([
+      { os: "ios", url: "https://apps.apple.com/app/id1" },
+      { os: "android", url: "https://play.google.com/store/apps/details?id=a.b" },
     ]);
   });
 
@@ -50,36 +50,51 @@ describe("readRegisteredApps", () => {
 });
 
 describe("appBlocker", () => {
-  const app = { id: "1", name: "A", storeLinks: [{ platform: "ios" as const, url: "https://apps.apple.com/app/id1/" }] };
+  const ios = "https://apps.apple.com/app/id1";
+  const play = "https://play.google.com/store/apps/details?id=a.b";
+  const app = { id: "1", name: "A", storeUrls: [{ os: "ios" as const, url: ios }, { os: "android" as const, url: play }] };
+  const pick = (over: Partial<{ appId: string; os: "ios" | "android"; storeUrl: string | null }> = {}) => ({ appId: "1", os: "ios" as const, storeUrl: ios, ...over });
 
-  it("blocks the recorded account: its app has no store link, so no link can match", async () => {
+  it("blocks the recorded account: its app has no mobile store link", async () => {
     const apps = await readRegisteredApps(graphReturning(appsCall.body), account);
-    expect(appBlocker(apps, recorded.foreignStoreUrl)).toEqual({ blocker: "link_not_registered" });
-    expect(appBlocker(apps, "https://adbrain.vanshul.com/")).toEqual({ blocker: "link_not_registered" });
+    const id = (appsCall.body as Apps).data[0].id;
+    expect(appBlocker(apps, { appId: id, os: "android", storeUrl: play })).toEqual({ blocker: "link_not_registered" });
+    expect(appBlocker(apps, { appId: id, os: "ios", storeUrl: recorded.foreignStoreUrl })).toEqual({ blocker: "unsafe_link" });
   });
 
-  it("fails closed: unreadable, no app, no link, other link", () => {
-    expect(appBlocker(null, "https://apps.apple.com/app/id1")).toEqual({ blocker: "unreadable" });
-    expect(appBlocker([], "https://apps.apple.com/app/id1")).toEqual({ blocker: "no_app" });
-    expect(appBlocker([app], "")).toEqual({ blocker: "no_store_link" });
-    expect(appBlocker([app], undefined)).toEqual({ blocker: "no_store_link" });
-    expect(appBlocker([app], "not a url")).toEqual({ blocker: "no_store_link" });
-    expect(appBlocker([app], "javascript:alert(1)")).toEqual({ blocker: "no_store_link" });
-    expect(appBlocker([app], "https://apps.apple.com/app/id2")).toEqual({ blocker: "link_not_registered" });
-  });
-
-  it("refuses an http downgrade, a platform mismatch and two apps owning the same link", () => {
-    expect(appBlocker([app], "http://apps.apple.com/app/id1")).toEqual({ blocker: "no_store_link" });
-    expect(appBlocker([app], "https://apps.apple.com/app/id1", "android")).toEqual({ blocker: "link_not_registered" });
-    expect(appBlocker([app], "https://apps.apple.com/app/id1", "ios")).toEqual({ app });
+  it("one test per blocker", () => {
+    expect(appBlocker(null, pick())).toEqual({ blocker: "unreadable" });
+    expect(appBlocker([], pick())).toEqual({ blocker: "no_app" });
+    expect(appBlocker([app], pick({ storeUrl: "" }))).toEqual({ blocker: "no_store_link" });
+    expect(appBlocker([app], pick({ storeUrl: null }))).toEqual({ blocker: "no_store_link" });
+    expect(appBlocker([app], pick({ appId: "2" }))).toEqual({ blocker: "app_not_available" });
+    expect(appBlocker([app], pick({ storeUrl: "https://apps.apple.com/app/id2" }))).toEqual({ blocker: "link_not_registered" });
+    expect(appBlocker([app], pick({ os: "android" }))).toEqual({ blocker: "unsafe_link" });
+    expect(appBlocker([{ ...app, storeUrls: [{ os: "android", url: play }] }], pick({ os: "ios", storeUrl: ios }))).toEqual({ blocker: "link_not_registered" });
     const twin = { ...app, id: "2" };
-    expect(appBlocker([app, twin], "https://apps.apple.com/app/id1")).toEqual({ blocker: "ambiguous_app" });
-    expect(appBlocker([twin, app], "https://apps.apple.com/app/id1")).toEqual({ blocker: "ambiguous_app" });
+    expect(appBlocker([app, twin], pick())).toEqual({ blocker: "ambiguous" });
+    expect(appBlocker([twin, app], pick())).toEqual({ blocker: "ambiguous" });
   });
 
-  it("passes the registered link, ignoring host case, www and a trailing slash", () => {
-    expect(appBlocker([app], "HTTPS://Apps.Apple.com/app/id1")).toEqual({ app });
-    expect(normalizeStoreUrl("https://www.x.test/a/")).toBe("x.test/a");
+  it("os_mismatch: the app owns the link, but under the other OS", () => {
+    const swapped = { ...app, storeUrls: [{ os: "android" as const, url: "https://apps.apple.com/app/id1" }] };
+    expect(appBlocker([swapped], pick())).toEqual({ blocker: "os_mismatch" });
+  });
+
+  it.each([
+    "http://apps.apple.com/app/id1",
+    "https://user:pw@apps.apple.com/app/id1",
+    "https://apps.apple.com.evil.test/app/id1",
+    "https://evil.test/apps.apple.com/app/id1",
+    "javascript:alert(1)",
+    "not a url",
+  ])("unsafe_link: %s", (storeUrl) => {
+    expect(appBlocker([app], pick({ storeUrl }))).toEqual({ blocker: "unsafe_link" });
+  });
+
+  it("passes the selected app's own link for that OS, ignoring host case and a trailing slash", () => {
+    expect(appBlocker([app], pick({ storeUrl: "HTTPS://Apps.Apple.com/app/id1/" }))).toEqual({ app });
+    expect(appBlocker([app], pick({ os: "android", storeUrl: play }))).toEqual({ app });
   });
 });
 

@@ -3,23 +3,31 @@
  * the Meta adapter reads the ad account's registered apps; this rule decides from them. Fails closed: when the
  * apps couldn't be read, none is registered, or the link isn't one of a registered app's store pages, the answer is a blocker.
  */
-export type StorePlatform = "ios" | "android" | "amazon" | "windows";
-export type StoreLink = { platform: StorePlatform; url: string };
-export type RegisteredApp = { id: string; name: string; storeLinks: StoreLink[] };
+export type AppOs = "android" | "ios";
+export type StoreLink = { os: AppOs; url: string };
+export type RegisteredApp = { id: string; name: string; storeUrls: StoreLink[] };
 
 export type AppBlocker =
   | "unreadable"
   | "no_app"
   | "no_store_link"
+  | "unsafe_link"
+  | "app_not_available"
+  | "os_mismatch"
   | "link_not_registered"
-  | "ambiguous_app";
+  | "ambiguous";
 
-/** Only https links count (an http link never matches a registered https listing). Ignores host case, `www.` and a trailing slash. */
-export function normalizeStoreUrl(raw: string): string | null {
+export type AppChoice = { appId: string; os: AppOs; storeUrl: string | null | undefined };
+
+const STORE_HOSTS: Record<AppOs, string> = { android: "play.google.com", ios: "apps.apple.com" };
+
+/** The comparable form of an official store link, or null when it isn't one (https only, exact store host, no credentials). */
+export function normalizeStoreUrl(raw: string, os?: AppOs): string | null {
   try {
     const url = new URL(raw.trim());
-    if (url.protocol !== "https:") return null;
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    const host = url.hostname.toLowerCase();
+    if (os ? host !== STORE_HOSTS[os] : !Object.values(STORE_HOSTS).includes(host)) return null;
     return `${host}${url.pathname.replace(/\/+$/, "")}${url.search}`;
   } catch {
     return null;
@@ -27,15 +35,21 @@ export function normalizeStoreUrl(raw: string): string | null {
 }
 
 /**
- * The one registered app whose store page is this link (and, when given, on this platform), or why none is.
- * `apps` is null when Meta's read failed. Two apps owning the same link is ambiguous, never "the first one".
+ * Whether the selected app may be promoted with this store link on this OS. `apps` is null when Meta's read failed.
+ * Matches the selected app id, then that app's link for that OS; two apps owning the link is ambiguous, never "the first".
  */
-export function appBlocker(apps: RegisteredApp[] | null, storeUrl: string | null | undefined, platform?: StorePlatform): { blocker: AppBlocker } | { app: RegisteredApp } {
+export function appBlocker(apps: RegisteredApp[] | null, choice: AppChoice): { blocker: AppBlocker } | { app: RegisteredApp } {
   if (apps === null) return { blocker: "unreadable" };
   if (!apps.length) return { blocker: "no_app" };
-  const wanted = storeUrl ? normalizeStoreUrl(storeUrl) : null;
-  if (!wanted) return { blocker: "no_store_link" };
-  const owners = apps.filter((candidate) => candidate.storeLinks.some((link) => normalizeStoreUrl(link.url) === wanted && (!platform || link.platform === platform)));
-  if (owners.length > 1) return { blocker: "ambiguous_app" };
-  return owners.length ? { app: owners[0] } : { blocker: "link_not_registered" };
+  if (!choice.storeUrl?.trim()) return { blocker: "no_store_link" };
+  const wanted = normalizeStoreUrl(choice.storeUrl, choice.os);
+  if (!wanted) return { blocker: "unsafe_link" };
+  const app = apps.find((candidate) => candidate.id === choice.appId);
+  if (!app) return { blocker: "app_not_available" };
+  const owns = (candidate: RegisteredApp, os?: AppOs) =>
+    candidate.storeUrls.some((link) => (!os || link.os === os) && normalizeStoreUrl(link.url) === wanted);
+  if (!owns(app)) return { blocker: "link_not_registered" };
+  if (!owns(app, choice.os)) return { blocker: "os_mismatch" };
+  if (apps.filter((candidate) => owns(candidate, choice.os)).length > 1) return { blocker: "ambiguous" };
+  return { app };
 }
