@@ -408,7 +408,7 @@ function BusinessCampaigns({
   const [cardNotice, setCardNotice] = useState<{ id: string; message: string } | null>(null);
   const activationReviewRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [syncDetails, setSyncDetails] = useState<string[]>([]);
+  const [syncDetails, setSyncDetails] = useState<{ notice: string; lines: string[] } | null>(null);
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
@@ -936,9 +936,9 @@ function BusinessCampaigns({
           setLastSynced(completedAt);
           saveCampaignSyncTime(syncStorageKey, completedAt.getTime());
         }
-        const { count: skippedCount, named } = syncSkippedRef.current; setSyncDetails(skippedCount ? skippedCampaignLines(named, skippedCount, campaignWords) : []);
+        const { count: skippedCount, named } = syncSkippedRef.current;
         // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
-        if (!background || data.nextCursor || skippedCount) setNotice(`${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : ""}`);
+        if (!background || data.nextCursor || skippedCount) { const text = `${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : ""}`; setNotice(text); setSyncDetails(skippedCount ? { notice: text, lines: skippedCampaignLines(named, skippedCount, campaignWords) } : null); }
       } else {
         setSyncError(data.error ?? tc("sync.failed"));
       }
@@ -1594,7 +1594,7 @@ function BusinessCampaigns({
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
-      <CampaignSyncNotice ref={noticeRef} notice={notice} details={syncDetails} detailsLabel={tc("sync.details")} />
+      <CampaignSyncNotice ref={noticeRef} notice={notice} details={syncDetails?.notice === notice ? syncDetails.lines : []} detailsLabel={tc("sync.details")} />
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">

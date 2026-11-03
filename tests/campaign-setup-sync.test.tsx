@@ -816,6 +816,20 @@ describe("campaign sync feedback", () => {
     expect(screen.queryByText("Details")).not.toBeInTheDocument();
   });
 
+  it("drops the Details of an earlier sync when a later notice replaces it", async () => {
+    const sync = vi.fn()
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 1, skippedCampaigns: [{ name: "Diwali", reason: "lifetime_budget" }] }))
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: "p2", skipped: 0, skippedCampaigns: [] }));
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
+    expect(await screen.findByText(/"Diwali" was left unchanged/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
+    expect(await screen.findByText(/More campaigns are available/)).toBeInTheDocument();
+    expect(screen.queryByText("Details")).not.toBeInTheDocument();
+    expect(screen.queryByText(/"Diwali" was left unchanged/)).not.toBeInTheDocument();
+  });
+
   // #1286: a sync that fails reports beside Sync from Meta in a line that's always there, so nothing above the list moves.
   it("reports a failed automatic sync in the sync line under 'Your campaigns', not as a banner above the page", async () => {
     localStorage.clear();
