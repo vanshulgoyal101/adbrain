@@ -61,7 +61,7 @@ describe("Review binds the video (#781)", () => {
 
 describe("Go live with a video (#781)", () => {
   const say = translator("en", "review");
-  const ad = (video?: PreflightVideo) => [{ id: "c1", businessId, approved: true, imageUrl: "https://example.com/poster.jpg", headline: "Tour", video }];
+  const ad = (video?: Omit<PreflightVideo, "assetId">) => [{ id: "c1", businessId, approved: true, imageUrl: "https://example.com/poster.jpg", headline: "Tour", video: video && { ...video, assetId: "m1" } }];
   const blocker = (video?: Parameters<typeof ad>[0]) => creativesBlockerMessage({ businessId, creativeIds: ["c1"] }, ad(video), say);
 
   it("photos and ready videos pass", () => {
@@ -69,7 +69,7 @@ describe("Go live with a video (#781)", () => {
     expect(blocker({ state: "ready", reason: null })).toBeNull();
   });
   it("a video can't go to a website yet, said before Go live", () => {
-    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"], destination: "website" }, ad({ state: "ready", reason: null, assetId: "m1", videoId: "v1" }), say)!;
+    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"], destination: "website" }, ad({ state: "ready", reason: null, videoId: "v1" }), say)!;
     expect(words).toContain("can't go to a website");
   });
   it("a processing video blocks with the wait words", () => {
