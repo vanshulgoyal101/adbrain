@@ -53,6 +53,8 @@ const RATES_USD_PER_MILLION: Record<string, { input: number; output: number }> =
   "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
   "gemini-3.6-flash": { input: 0.75, output: 3.75 },
+  // #780: the vision model through OpenRouter (list price, Nov 2).
+  "google/gemini-3.6-flash": { input: 0.75, output: 3.75 },
   // #2649: OpenRouter list prices (Nov 3), the paid rate for Groq's free-tier assistant/planner model.
   "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
   "qwen/qwen3.8-27b": { input: 0.15, output: 1.875 },
