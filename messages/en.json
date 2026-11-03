@@ -1798,6 +1798,22 @@
     "moreIdeas": "Ideas for more ads",
     "yourPhotos": "Your photos ({n})",
     "photosNote": "Each photo becomes one ad’s picture. The words come from your business details and what the photo shows.",
-    "removePhoto": "Remove photo {n}"
+    "removePhoto": "Remove photo {n}",
+    "wordsChoice": "Who writes the words",
+    "wordsForMe": "Write the words for me",
+    "wordsMine": "I'll write them",
+    "ownNote": "Type the words for each photo’s ad. No AI is used.",
+    "ownFormLabel": "Your words for each ad",
+    "ownAd": "Ad {n}",
+    "ownHeadline": "Headline",
+    "ownMainText": "Main text",
+    "ownDescription": "Description (optional)",
+    "ownButton": "Button",
+    "ownOnPhoto": "Put the headline on the photo",
+    "ownSave": "{n, plural, one {Save ad} other {Save # ads}}",
+    "ownSaving": "Saving…",
+    "ownSaved": "{n, plural, one {# ad saved} other {# ads saved}}",
+    "ownSavedSome": "{saved} of {total} ads saved. Make the rest again from the library.",
+    "ownSaveFailed": "Couldn't save your ads. Try again."
   }
 }

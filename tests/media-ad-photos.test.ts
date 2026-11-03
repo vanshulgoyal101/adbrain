@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MediaRow } from "@/lib/media/store";
 
-const mocks = vi.hoisted(() => ({ views: vi.fn(), read: vi.fn(), describe: vi.fn(), update: vi.fn(), saveError: null as unknown }));
+const mocks = vi.hoisted(() => ({ own: vi.fn(), views: vi.fn(), read: vi.fn(), describe: vi.fn(), update: vi.fn(), saveError: null as unknown }));
 vi.mock("@/lib/media/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/media/store")>()),
   mediaViews: mocks.views,
+  ownMedia: mocks.own,
   readVerifiedMedia: mocks.read,
 }));
 vi.mock("@/lib/media/describe", async (importOriginal) => ({
@@ -16,7 +17,7 @@ vi.mock("@/lib/media/describe", async (importOriginal) => ({
 const admin = {
   from: () => ({ update: (row: unknown) => ({ eq: () => ({ is: async () => { mocks.update(row); return { error: mocks.saveError }; } }) }) }),
 } as unknown as SupabaseClient;
-const row = (id: string, extra: Partial<MediaRow> = {}) => ({ id, business_id: "b", mime: "image/jpeg", status: "ready", ...extra }) as MediaRow;
+const row = (id: string, extra: Partial<MediaRow> = {}) => ({ id, business_id: "b", kind: "image", mime: "image/jpeg", status: "ready", ...extra }) as MediaRow;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -26,6 +27,15 @@ beforeEach(() => {
 });
 
 describe("library photos for Create (#780)", () => {
+  it("picks only the owner's ready images, so a video can't become an ad picture", async () => {
+    const { pickedMedia } = await import("@/lib/media/ad-photos");
+    const client = {} as SupabaseClient;
+    mocks.own.mockImplementation(async (_client, id: string) => row(id, id === "clip" ? { kind: "video", mime: "video/mp4" } : {}));
+    await expect(pickedMedia(client, "b", ["a", "a", "c"])).resolves.toHaveLength(2);
+    await expect(pickedMedia(client, "b", ["a", "clip"])).rejects.toMatchObject({ status: 400, code: "MEDIA_NOT_IMAGE" });
+    await expect(pickedMedia(client, "other", ["a"])).rejects.toMatchObject({ code: "MEDIA_NOT_FOUND" });
+  });
+
   it("reads only never-described photos, and refuses an unreadable one before any AI call", async () => {
     const { readAdPhotos } = await import("@/lib/media/ad-photos");
     const read = await readAdPhotos(admin, [row("old", { description: "A cake.", visible_text: null }), row("new")]);

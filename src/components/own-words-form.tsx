@@ -1,0 +1,129 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input, Label, Textarea } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { createAdsTranslator, type Words } from "@/i18n/words";
+import { editableCopySchema, type EditableCopy } from "@/lib/creative/concept";
+import type { MediaView } from "@/lib/media/store";
+import { META_CTAS } from "@/lib/templates/ads";
+import type { Creative } from "@/lib/types";
+
+type Draft = EditableCopy & { offer: boolean };
+const EMPTY: Draft = { headline: "", primary_text: "", description: "", cta: META_CTAS[0], offer: false };
+const LIMITS = {
+  headline: editableCopySchema.shape.headline.maxLength ?? 40,
+  primary_text: editableCopySchema.shape.primary_text.maxLength ?? 900,
+  description: editableCopySchema.shape.description.maxLength ?? 100,
+};
+
+/** #780 slice 2b, "I'll write them": one card per picked photo for the owner's own words; saving calls no AI. */
+export function OwnWordsForm({ businessId, photos, words, onSaved }: {
+  businessId: string; photos: MediaView[]; words?: Words<"create">; onSaved: () => void;
+}) {
+  const t = createAdsTranslator(words), lang = words && words.locale !== "en" ? words.locale : undefined;
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<{ creatives: Creative[]; warnings: string[][]; failed: number } | null>(null);
+  const draft = (id: string) => drafts[id] ?? EMPTY;
+  const set = (id: string, change: Partial<Draft>) => setDrafts((current) => ({ ...current, [id]: { ...(current[id] ?? EMPTY), ...change } }));
+  const ready = photos.length > 0 && photos.every((photo) => draft(photo.id).headline.trim() && draft(photo.id).primary_text.trim());
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/creatives/own", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ businessId, items: photos.map((photo) => ({ mediaId: photo.id, ...draft(photo.id) })) }),
+      });
+      const body = await res.json().catch(() => null) as { creatives?: Creative[]; warnings?: string[][]; failed?: number; error?: string } | null;
+      if (!res.ok || !body?.creatives?.length) {
+        setError(body?.error ?? t("ownSaveFailed"));
+        return;
+      }
+      setSaved({ creatives: body.creatives, warnings: body.warnings ?? [], failed: body.failed ?? 0 });
+      onSaved();
+    } catch {
+      setError(t("ownSaveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (saved) {
+    const ids = saved.creatives.map((creative) => creative.id);
+    return (
+      <section aria-labelledby="own-saved" lang={lang} className="flex max-w-2xl flex-col gap-3">
+        <h2 id="own-saved" role="status" className="text-sm font-semibold text-slate-900">
+          {saved.failed ? t("ownSavedSome", { saved: ids.length, total: ids.length + saved.failed }) : t("ownSaved", { n: ids.length })}
+        </h2>
+        <ul className="flex flex-col gap-3">
+          {saved.creatives.map((creative, index) => (
+            <li key={creative.id} className="flex gap-3 rounded-md border border-slate-200 p-3">
+              {creative.image_url && <img src={creative.image_url} alt="" className="size-16 shrink-0 rounded object-cover" />}
+              <div className="min-w-0 text-sm">
+                <p className="break-words font-medium text-slate-900">{creative.headline}</p>
+                {(saved.warnings[index] ?? []).map((warning) => <p key={warning} className="mt-1 break-words text-xs text-amber-800">{warning}</p>)}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/campaigns?new=1&creatives=${ids.join(",")}&review=1`} className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
+            {t("nextCampaign")} <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+          <Link href="/studio" className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-blue-700 hover:bg-slate-100">{t("reviewAds")}</Link>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <form onSubmit={save} aria-label={t("ownFormLabel")} lang={lang} className="flex max-w-2xl flex-col gap-4">
+      {photos.map((photo, index) => {
+        const value = draft(photo.id), field = (key: string) => `own-${photo.id}-${key}`;
+        const counter = (key: keyof typeof LIMITS) => <span className="text-xs tabular-nums text-slate-400">{value[key].length}/{LIMITS[key]}</span>;
+        return (
+          <fieldset key={photo.id} className="flex flex-col gap-3 rounded-md border border-slate-200 p-3">
+            <legend className="flex items-center gap-2 px-1 text-sm font-semibold text-slate-900">
+              {photo.url && <img src={photo.url} alt="" className="size-10 rounded object-cover" />}
+              {t("ownAd", { n: index + 1 })}
+            </legend>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between"><Label htmlFor={field("headline")}>{t("ownHeadline")}</Label>{counter("headline")}</div>
+              <Input id={field("headline")} value={value.headline} maxLength={LIMITS.headline} required onChange={(e) => set(photo.id, { headline: e.target.value })} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between"><Label htmlFor={field("primary_text")}>{t("ownMainText")}</Label>{counter("primary_text")}</div>
+              <Textarea id={field("primary_text")} value={value.primary_text} maxLength={LIMITS.primary_text} rows={4} required onChange={(e) => set(photo.id, { primary_text: e.target.value })} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between"><Label htmlFor={field("description")}>{t("ownDescription")}</Label>{counter("description")}</div>
+              <Input id={field("description")} value={value.description} maxLength={LIMITS.description} onChange={(e) => set(photo.id, { description: e.target.value })} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={field("cta")}>{t("ownButton")}</Label>
+              <Select id={field("cta")} value={value.cta} onChange={(e) => set(photo.id, { cta: e.target.value as Draft["cta"] })}>
+                {META_CTAS.map((cta) => <option key={cta} value={cta}>{cta}</option>)}
+              </Select>
+            </div>
+            <label className="flex min-h-11 items-center gap-3 text-sm text-slate-700">
+              <input type="checkbox" checked={value.offer} onChange={(e) => set(photo.id, { offer: e.target.checked })} className="size-5 accent-primary" />
+              {t("ownOnPhoto")}
+            </label>
+          </fieldset>
+        );
+      })}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      <Button type="submit" disabled={!ready || saving} className="min-h-11 self-start">
+        {saving ? t("ownSaving") : t("ownSave", { n: photos.length })}
+      </Button>
+    </form>
+  );
+}

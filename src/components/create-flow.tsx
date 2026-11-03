@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { AdAssistant } from "@/components/ad-assistant";
+import { OwnWordsForm } from "@/components/own-words-form";
 import { PickedPhotos } from "@/components/picked-photos";
 import type { MediaView } from "@/lib/media/store";
 import type { OpeningLine } from "@/lib/campaign/result-evidence";
@@ -19,12 +20,18 @@ export function CreateFlow({ business, opening, occasions, words, photos: picked
 }) {
   const [step, setStep] = useState<AdFlowStep>("Brief");
   const [photos, setPhotos] = useState(picked);
+  const [own, setOwn] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const editable = step === "Brief" && !saved;
   return (
     <>
       <Stepper current={step} className="mt-4" labels={words?.messages} lang={words && words.locale !== "en" ? words.locale : undefined} />
       <div className="mt-6 flex flex-col gap-8 border-t border-slate-200 pt-6">
-        <PickedPhotos photos={photos} words={words} onRemove={step === "Brief" ? (id) => setPhotos((current) => current.filter((photo) => photo.id !== id)) : undefined} />
-        <AdAssistant business={business} opening={opening} occasions={occasions} onFlowStep={setStep} words={words} mediaIds={photos.map((photo) => photo.id)} />
+        <PickedPhotos photos={photos} words={words} own={own} onOwn={editable ? setOwn : undefined}
+          onRemove={editable && photos.length > (own ? 1 : 0) ? (id) => setPhotos((current) => current.filter((photo) => photo.id !== id)) : undefined} />
+        {own && photos.length
+          ? <OwnWordsForm businessId={business.id} photos={photos} words={words} onSaved={() => { setSaved(true); setStep("Create"); }} />
+          : <AdAssistant business={business} opening={opening} occasions={occasions} onFlowStep={setStep} words={words} mediaIds={photos.map((photo) => photo.id)} />}
         {children}
       </div>
     </>
