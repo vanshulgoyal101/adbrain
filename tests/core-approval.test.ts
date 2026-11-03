@@ -102,7 +102,10 @@ describe("money and migrations need QA and the CTO/Reviewer (#1083)", () => {
     expect(coreApproval({ ...pr, comments: [cto, qaOk] }).state).toBe("success");
   });
   it("a QA 'changes requested' at the head holds any core PR, whoever else approved", () => {
-    expect(coreApproval({ ...pr, comments: [cto, qaNo] })).toMatchObject({ state: "pending", description: "QA requested changes at 7612817" });
+    expect(coreApproval({ ...pr, comments: [cto, qaNo] })).toMatchObject({ state: "pending", description: 'QA\'s latest verdict at 7612817 is not an explicit "approved"' });
+    // #2735: the imperative "approve <sha>" isn't a verdict ("→ QA: approve …" must never pass); it holds without claiming changes were requested.
+    const qaImperative = at("QA 2: approve 7612817. Owner-read only.", "2026-10-27T10:06:00Z");
+    expect(coreApproval({ ...pr, comments: [cto, qaImperative] })).toMatchObject({ state: "pending", description: expect.not.stringMatching(/requested changes/) });
     expect(coreApproval({ files: ["src/lib/meta/client.ts"], head, headRef: "b", comments: [cto, qaNo] }).state).toBe("pending");
   });
   it("treats migrations like money", () => {
