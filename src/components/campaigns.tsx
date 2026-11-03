@@ -119,6 +119,7 @@ import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow }
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { ageText, campaignsTranslator, verdictTranslator, type Words } from "@/i18n/words";
 import { useNotices } from "@/i18n/notices";
+import { CampaignSyncNotice } from "@/components/campaign-sync-notice";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -407,7 +408,6 @@ function BusinessCampaigns({
   const [cardNotice, setCardNotice] = useState<{ id: string; message: string } | null>(null);
   const activationReviewRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // #2775: the per-campaign "left unchanged" sentences, behind a Details disclosure.
   const [syncDetails, setSyncDetails] = useState<string[]>([]);
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
@@ -936,11 +936,9 @@ function BusinessCampaigns({
           setLastSynced(completedAt);
           saveCampaignSyncTime(syncStorageKey, completedAt.getTime());
         }
-        const skippedCount = syncSkippedRef.current.count;
-        const skippedNotice = skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : "";
-        setSyncDetails(skippedCount ? skippedCampaignLines(syncSkippedRef.current.named, skippedCount, campaignWords) : []);
+        const { count: skippedCount, named } = syncSkippedRef.current; setSyncDetails(skippedCount ? skippedCampaignLines(named, skippedCount, campaignWords) : []);
         // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
-        if (!background || data.nextCursor || skippedNotice) setNotice(`${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedNotice}`);
+        if (!background || data.nextCursor || skippedCount) setNotice(`${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedCount ? ` ${tc("sync.unchangedCount", { n: skippedCount })}` : ""}`);
       } else {
         setSyncError(data.error ?? tc("sync.failed"));
       }
@@ -1596,14 +1594,7 @@ function BusinessCampaigns({
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
-      {/* #847: sync and save news is a quiet line, as on Enquiries, not a green box on every visit. */}
-      <p ref={noticeRef} aria-live="polite" className={notice ? "scroll-mt-20 text-sm text-slate-600" : "sr-only"}>{notice}</p>
-      {notice && syncDetails.length > 0 && (
-        <details className="-mt-2 text-sm text-slate-600">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center font-medium text-slate-700">{tc("sync.details")}</summary>
-          <ul className="list-disc space-y-1 pb-2 pl-5">{syncDetails.map((line) => <li key={line}>{line}</li>)}</ul>
-        </details>
-      )}
+      <CampaignSyncNotice ref={noticeRef} notice={notice} details={syncDetails} detailsLabel={tc("sync.details")} />
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
