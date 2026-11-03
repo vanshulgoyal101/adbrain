@@ -112,13 +112,13 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
           <section className="flex flex-col gap-2">
             <h3 className="text-sm font-medium text-slate-900">{t("audienceEdit.newArea")}</h3>
             <p className="text-xs text-slate-600">{t("audienceEdit.newAreaHelp")}</p>
-            <LocationPicker value={form.included} onChange={included => update({ included })} placeholder={t("audienceEdit.searchArea")} tone="include" />
+            <LocationPicker value={form.included} onChange={included => update({ included })} placeholder={t("audienceEdit.searchArea")} tone="include" words={words} />
           </section>
 
           <section className="flex flex-col gap-2">
             <h3 className="text-sm font-medium text-slate-900">{t("audienceEdit.alsoLeaveOut")}</h3>
             <p className="text-xs text-slate-600">{t("audienceEdit.alsoLeaveOutHelp")}</p>
-            <LocationPicker value={form.excluded} onChange={excluded => update({ excluded })} placeholder={t("audienceEdit.searchLeaveOut")} tone="exclude" />
+            <LocationPicker value={form.excluded} onChange={excluded => update({ excluded })} placeholder={t("audienceEdit.searchLeaveOut")} tone="exclude" words={words} />
             {!running && !form.included.length && (
               <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3 text-sm text-slate-800">
                 <input type="checkbox" className="mt-0.5 h-4 w-4" checked={form.areaExclusions} onChange={event => update({ areaExclusions: event.target.checked })} />
