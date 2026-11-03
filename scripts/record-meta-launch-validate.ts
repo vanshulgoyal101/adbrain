@@ -26,6 +26,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MetaClient, type AdDestination } from "@/lib/meta/client";
 import type { WebsiteGoal } from "@/lib/types/campaign";
+import { adSetReadbackLine } from "./meta-readback-log";
 
 const GRAPH = "https://graph.facebook.com/v26.0/";
 const VALIDATE = JSON.stringify(["validate_only"]);
@@ -122,7 +123,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (kind === "adsets" && goal) {
     const res = await realFetch(`${GRAPH}${real.body.id}?fields=promoted_object,optimization_goal,destination_type,billing_event&access_token=${encodeURIComponent(token)}`);
     adSetReadbacks.push({ goal, status: res.status, body: await res.json() });
-    console.log(goal, "ad set read-back", res.status, JSON.stringify(adSetReadbacks.at(-1)!.body));
+    console.log(adSetReadbackLine(goal, res.status, adSetReadbacks.at(-1)!.body));
   }
   scrubs.push([real.body.id, { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE" }[kind]!]);
   return Response.json({ id: real.body.id });
