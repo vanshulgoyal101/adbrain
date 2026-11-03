@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import type { MetaConnection } from "@/lib/meta/credentials";
-import { connectTrustLine } from "@/lib/trust-lines";
 import type { FundingMode } from "@/lib/payments/operator-funding";
 
 export function MetaConnectionPanel({
@@ -63,7 +62,7 @@ export function MetaConnectionPanel({
   }
 
   return (
-    <Card>
+    <Card lang={locale}>
       {confirmDialog}
       <CardHeader>
         <CardTitle as="h2" className="flex items-center gap-2">
@@ -92,7 +91,7 @@ export function MetaConnectionPanel({
         {!connection.ready && connection.source !== "env" && (
           <p className="text-sm text-slate-600">{t("meta.intro")}</p>
         )}
-        {businessId && fundingMode && <p className="text-sm text-slate-700">{connectTrustLine(fundingMode)}</p>}
+        {businessId && fundingMode && <p className="text-sm text-slate-700">{translator(locale, "setup")(fundingMode === "managed" ? "goLive.trustManaged" : "goLive.trustOwn")}</p>}
         {!businessId && <Alert variant="warning">{t("meta.noBusiness")}</Alert>}
         {businessId && !oauthConfigured && (
           <Alert variant="warning">{t("meta.notConfigured")}</Alert>

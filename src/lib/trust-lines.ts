@@ -1,19 +1,9 @@
-import type { FundingMode } from "@/lib/payments/operator-funding";
 import { formatMoney } from "@/lib/format";
-import en from "../../messages/en.json";
 
 /**
- * #1292 (#1285 WS4.3, CPO's exact words): three short lines at the moments an owner trusts AdBrain with
+ * #1292 (#1285 WS4.3, CPO's exact words): short lines at the moments an owner trusts AdBrain with
  * their Page, their money and their customers. Copy only: no money logic.
  */
-
-/**
- * At Connect. Only where the owner pays Meta directly does AdBrain say it never holds the ad money.
- * #1438: the words live in messages/ (`setup.goLive.trust*`), where step 3 reads them in the owner's language.
- */
-export function connectTrustLine(mode: FundingMode): string {
-  return mode === "managed" ? en.setup.goLive.trustManaged : en.setup.goLive.trustOwn;
-}
 
 /** At Activate, for a run with a total limit. */
 export function activateTrustLine(dailyRupees: number, capRupees: number): string {
