@@ -25,8 +25,8 @@ export type LaunchSnapshotInput = {
   storyFormat: boolean;
   /** #789: `media` is the library photo or video the ad was made from (`readCreativeMedia`), if any. */
   creatives: { id: string; angle: string | null; generation: unknown; media?: CreativeMedia | null }[];
-  /** #789: the media read failed or timed out, so a null `mediaAssetId` means unknown, not "no photo". */
-  mediaUnknown?: boolean;
+  /** #789: when the media read began, set only if it failed or timed out: a null `mediaAssetId` then means unknown, not "no photo". */
+  mediaUnknownAt?: string;
   /** #672: the ad sets' `targeting` forms as sent to Meta (from the plan check's payloads). */
   sentTargetings?: string[];
   /** #672: the Meta creative each ad runs on, in ad order. */
@@ -106,7 +106,7 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
     }),
     media: [...new Map(input.creatives.flatMap(({ media }) => media ? [[media.id, { mediaAssetId: media.id, kind: media.kind, source: media.source }] as const] : [])).values()],
     metaCreativeIds: input.metaCreativeIds ?? [],
-    ...(input.mediaUnknown ? { mediaUnknown: true as const } : {}),
+    ...(input.mediaUnknownAt ? { mediaUnknownAt: input.mediaUnknownAt } : {}),
     cap: null as null | { lifetimeRupees: number; days: number; endTime: string },
   };
 }

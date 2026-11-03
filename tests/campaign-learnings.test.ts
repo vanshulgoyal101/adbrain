@@ -131,9 +131,9 @@ describe("learning ledger snapshot (#588)", () => {
   });
 
   it("marks a launch whose photos couldn't be read as unknown, not photo-less (#789)", () => {
-    const unknown = buildLaunchSnapshot({ ...base, creatives: [{ id: "c2", angle: null, generation: null }], mediaUnknown: true });
-    expect(unknown).toMatchObject({ version: 3, mediaUnknown: true, media: [], creatives: [{ id: "c2", mediaAssetId: null }] });
-    expect(buildLaunchSnapshot({ ...base, creatives: [{ id: "c2", angle: null, generation: null }] })).not.toHaveProperty("mediaUnknown");
+    const unknown = buildLaunchSnapshot({ ...base, creatives: [{ id: "c2", angle: null, generation: null }], mediaUnknownAt: "2026-11-03T08:00:00.000Z" });
+    expect(unknown).toMatchObject({ version: 3, mediaUnknownAt: "2026-11-03T08:00:00.000Z", media: [], creatives: [{ id: "c2", mediaAssetId: null }] });
+    expect(buildLaunchSnapshot({ ...base, creatives: [{ id: "c2", angle: null, generation: null }] })).not.toHaveProperty("mediaUnknownAt");
   });
 
   it("copes with lead-form launches and old creatives without a receipt", () => {

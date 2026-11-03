@@ -117,28 +117,63 @@ describe("owner-scoped asset result storage", () => {
     expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "partial" }));
   });
 
-  it("recovers an unverified launch's photo on a later refresh, and writes nothing while it still can't be read (#789 QA hold)", async () => {
-    const creativeId = "00000000-0000-4000-8000-000000000001";
-    const mediaId = "00000000-0000-4000-8000-000000000002";
-    const tables = {
-      campaign_learnings: [{ business_id: "b1", campaign_id: "c1", snapshot: { version: 3, mediaUnknown: true, creatives: [{ id: creativeId, mediaAssetId: null }] } }],
-      creatives: [{ id: creativeId, business_id: "b1", media_asset_id: mediaId }],
-      media_assets: [{ id: mediaId, business_id: "b1", kind: "image", source: "upload" }],
-    };
+  describe("an unverified launch photo (#789 QA holds)", () => {
+    const [first, second, third] = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000003", "00000000-0000-4000-8000-000000000005"];
+    const [launchPhoto, newPhoto] = ["00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000004"];
+    const launchedAt = "2026-11-03T08:00:00.000Z";
+    const before = "2026-11-03T07:00:00.000Z";
+    const tables = (creatives: Record<string, unknown>[], assets = [launchPhoto, newPhoto]) => ({
+      campaign_learnings: [{ business_id: "b1", campaign_id: "c1", snapshot: { version: 3, mediaUnknownAt: launchedAt, creatives: [first, second, third].map(id => ({ id, mediaAssetId: null })) } }],
+      creatives: creatives.map(row => ({ business_id: "b1", ...row })),
+      media_assets: assets.map(id => ({ id, business_id: "b1", kind: "image", source: "upload" })),
+    });
     const input = {
-      businessId: "b1", campaign: { ...campaign, creative_ids: [creativeId], meta_campaign_id: "1", meta_adset_id: "2", meta_ad_ids: ["101"],
-        raw: { source: "campaign_operation", metaResult: { campaignId: "1", adSetIds: ["2"], adIds: ["101"] } } },
-      ads: [{ adId: "101", creativeId: "501", ...result }],
+      businessId: "b1", campaign: { ...campaign, creative_ids: [first, second, third], meta_campaign_id: "1", meta_adset_id: "2", meta_ad_ids: ["101", "102", "103"],
+        raw: { source: "campaign_operation", metaResult: { campaignId: "1", adSetIds: ["2"], adIds: ["101", "102", "103"] } } },
+      ads: ["101", "102", "103"].map(adId => ({ adId, creativeId: `5${adId}`, ...result })),
     };
-    const down = database(tables, "media_assets");
-    await refreshAdAssetResults(down.client as never, input as never);
-    expect(down.writes.filter(write => write.table === "campaign_ads")).toEqual([]);
-    expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "failed" }));
+    const links = (db: ReturnType<typeof database>) => db.writes.filter(write => write.table === "campaign_ads").flatMap(write => write.rows as { meta_ad_id: string; media_asset_id: string | null }[]);
 
-    const healthy = database(tables);
-    await refreshAdAssetResults(healthy.client as never, input as never);
-    expect(healthy.writes.find(write => write.table === "campaign_ads")?.rows).toEqual([expect.objectContaining({ meta_ad_id: "101", creative_id: creativeId, media_asset_id: mediaId })]);
-    expect(healthy.reads.filter(read => !["campaign_ads", "ad_results"].includes(read.table)).every(read => read.filters.some(([field, value]) => field === "business_id" && value === "b1"))).toBe(true);
+    it("writes nothing while the photos can't be read, then links only creatives untouched since launch", async () => {
+      const rows = [
+        { id: first, media_asset_id: launchPhoto, updated_at: before },
+        { id: second, media_asset_id: null, updated_at: before },
+        { id: third, media_asset_id: launchPhoto, updated_at: before },
+      ];
+      const down = database(tables(rows), "creatives");
+      await refreshAdAssetResults(down.client as never, input as never);
+      expect(links(down)).toEqual([]);
+      expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "failed" }));
+
+      const healthy = database(tables(rows));
+      await refreshAdAssetResults(healthy.client as never, input as never);
+      expect(links(healthy)).toEqual([
+        expect.objectContaining({ meta_ad_id: "101", creative_id: first, media_asset_id: launchPhoto }),
+        expect.objectContaining({ meta_ad_id: "102", creative_id: second, media_asset_id: null }),
+        expect.objectContaining({ meta_ad_id: "103", creative_id: third, media_asset_id: launchPhoto }),
+      ]);
+      expect(healthy.reads.filter(read => !["campaign_ads", "ad_results"].includes(read.table)).every(read => read.filters.some(([field, value]) => field === "business_id" && value === "b1"))).toBe(true);
+    });
+
+    it("keeps unknown an ad whose creative was relinked or edited after (or just before) launch, never giving it the new photo", async () => {
+      const db = database(tables([
+        { id: first, media_asset_id: launchPhoto, updated_at: before },
+        { id: second, media_asset_id: newPhoto, updated_at: "2026-11-03T09:00:00.000Z" },
+        { id: third, media_asset_id: newPhoto, updated_at: "2026-11-03T07:59:30.000Z" },
+      ]));
+      await refreshAdAssetResults(db.client as never, input as never);
+      expect(links(db)).toEqual([expect.objectContaining({ meta_ad_id: "101", media_asset_id: launchPhoto })]);
+      expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "partial", attributes: { errorCode: "media_unverified" } }));
+    });
+
+    it("keeps unknown an ad whose photo is missing from the asset read, instead of binding it to no photo", async () => {
+      const db = database(tables([
+        { id: first, media_asset_id: launchPhoto, updated_at: before },
+        { id: second, media_asset_id: newPhoto, updated_at: before },
+      ], [newPhoto]));
+      await refreshAdAssetResults(db.client as never, input as never);
+      expect(links(db)).toEqual([expect.objectContaining({ meta_ad_id: "102", creative_id: second, media_asset_id: newPhoto })]);
+    });
   });
 
   it("keeps historical media results when the creative or its photo was deleted or moved to another business", async () => {

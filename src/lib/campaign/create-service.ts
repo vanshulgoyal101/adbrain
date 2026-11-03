@@ -116,6 +116,7 @@ export async function executeReviewedCampaign(input: {
             throw new OperationPhaseError("Website signup and sales goals can't launch yet.", { transmitted: false });
           }
           // #789: for the ledger, read alongside Meta's create; never rejects.
+          const mediaReadAt = new Date().toISOString();
           const mediaRead = readCreativeMedia(database as unknown as SupabaseClient, actor.businessId, creativeInputs.map(creative => creative.id));
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
@@ -159,7 +160,7 @@ export async function executeReviewedCampaign(input: {
               whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill, prefillSource: message?.source,
               storyFormat: storyRendered, sentTargetings, metaCreativeIds: metaResult.creativeIds,
               creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation, media: media?.get(creative.id) ?? null })),
-              mediaUnknown: !media,
+              ...(media ? {} : { mediaUnknownAt: mediaReadAt }),
             });
           } catch {
             launchSnapshot = null;
@@ -195,7 +196,7 @@ export async function executeReviewedCampaign(input: {
       }
       // #789: an unverified photo is never stored as "no photo"; the next results refresh links these ads instead.
       if (adResultsEnabled()) {
-        if (!launchSnapshot || launchSnapshot.mediaUnknown) {
+        if (!launchSnapshot || launchSnapshot.mediaUnknownAt) {
           recordProductEvent({ kind: "workflow", name: "campaign.ad_attribution", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: "media_unverified" } });
         } else try {
           await recordAdAssetLinks(createAdminClient() as unknown as SupabaseClient, buildAdAssetLinks({

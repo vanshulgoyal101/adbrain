@@ -14,7 +14,7 @@ vi.mock("@/lib/creative/story", () => ({ renderStoriesWithin: (generations: unkn
 vi.mock("@/lib/campaign/operation-store", () => ({ createOperationCheckpoint: () => ({ checkpoint: async (operation: unknown) => operation }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: async () => ({ data: { id: "campaign-row" }, error: null }) }));
 vi.mock("@/lib/campaign/learnings", () => ({
-  buildLaunchSnapshot: (input: { mediaUnknown?: boolean }) => attribution.snapshot && { ...attribution.snapshot, ...(input.mediaUnknown ? { mediaUnknown: true } : {}) },
+  buildLaunchSnapshot: (input: { mediaUnknownAt?: string }) => attribution.snapshot && { ...attribution.snapshot, ...(input.mediaUnknownAt ? { mediaUnknownAt: input.mediaUnknownAt } : {}) },
   readCreativeMedia: async () => attribution.media, saveLaunchSnapshot: async () => true,
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { AD_RESULT_COLUMNS, adCreativeLinks, saveAdResults } from "@/lib/campaign/ad-results-store";
 import { poolAssetResults, type AssetAdLink, type AssetAdResult, type AssetCampaign, type AssetResults } from "@/lib/campaign/asset-results";
 import { readAllByCursor } from "@/lib/supabase/queries";
-import { readCreativeMedia } from "@/lib/campaign/learnings";
 import { recordProductEvent } from "@/lib/observability/logger";
 import type { AdResult } from "@/lib/meta/insights";
 import type { Campaign } from "@/lib/types";
@@ -19,8 +18,10 @@ type Layout = Pick<Campaign, "id" | "creative_ids" | "meta_campaign_id" | "meta_
 const mediaSnapshot = z.object({
   version: z.literal(3),
   creatives: z.array(z.object({ id: z.uuid(), mediaAssetId: z.uuid().nullable() })).max(100),
-  mediaUnknown: z.literal(true).optional(),
+  mediaUnknownAt: z.iso.datetime().optional(),
 });
+/** Allows for clock skew between the app server that stamped the launch and the database's `updated_at`. */
+const UNKNOWN_MEDIA_SKEW_MS = 60_000;
 
 /** Exact stored layouts only, including capped copies. Legacy runs without v3 media keep an unknown asset; an unverified v3 launch writes nothing until its photos read. */
 export async function backfillAdAssetLinks(database: SupabaseClient, input: {
@@ -39,18 +40,29 @@ export async function backfillAdAssetLinks(database: SupabaseClient, input: {
   const parsed = mediaSnapshot.safeParse(data?.snapshot);
   if (!parsed.success && data?.snapshot?.version === 3) throw new Error("Launch attribution is invalid.");
   const media = new Map(parsed.success ? parsed.data.creatives.map(row => [row.id, row.mediaAssetId]) : []);
-  if (parsed.success && parsed.data.mediaUnknown) {
-    // Launch couldn't verify the photos; creatives.media_asset_id is set once at creation, so a later read is the launch's.
-    const read = await readCreativeMedia(database, businessId, parsed.data.creatives.map(row => row.id));
-    if (!read) throw new Error("Launch photos could not be verified.");
-    for (const creative of media.keys()) media.set(creative, read.get(creative)?.id ?? null);
+  const unknownSince = parsed.success && parsed.data.mediaUnknownAt ? Date.parse(parsed.data.mediaUnknownAt) - UNKNOWN_MEDIA_SKEW_MS : null;
+  if (unknownSince !== null) {
+    // Launch couldn't read the photos. Owners can relink a creative later, and `creatives_set_updated_at` stamps every
+    // update (including a deleted photo's set-null), so only a creative untouched since before launch still shows its launch photo.
+    const { data: rows, error: readError } = await database.from("creatives").select("id, media_asset_id, updated_at")
+      .eq("business_id", businessId).in("id", [...media.keys()]);
+    if (readError || !Array.isArray(rows)) throw new Error("Launch photos could not be verified.");
+    media.clear();
+    for (const row of rows as { id: string; media_asset_id: string | null; updated_at: string }[]) {
+      if (Date.parse(row.updated_at) < unknownSince) media.set(row.id, row.media_asset_id);
+    }
   }
   const ids = [...new Set([...media.values()].filter((id): id is string => id !== null))];
   if (ids.length) {
     const { data: assets, error: assetError } = await database.from("media_assets").select("id").eq("business_id", businessId).in("id", ids);
     if (assetError || !assets) throw new Error("Launch photos could not be loaded.");
     const available = new Set(assets.map((asset: { id: string }) => asset.id));
-    for (const [creative, id] of media) if (id && !available.has(id)) media.set(creative, null);
+    // An unverified launch keeps a missing photo unknown; a verified one shows its deleted photo as none.
+    for (const [creative, id] of media) {
+      if (!id || available.has(id)) continue;
+      if (unknownSince === null) media.set(creative, null);
+      else media.delete(creative);
+    }
   }
   const { data: creatives, error: creativeError } = await database.from("creatives").select("id")
     .eq("business_id", businessId).in("id", [...new Set(campaign.creative_ids ?? [])]);
@@ -58,15 +70,18 @@ export async function backfillAdAssetLinks(database: SupabaseClient, input: {
   const availableCreatives = new Set(creatives.map((creative: { id: string }) => creative.id));
   const byAd = new Map(ads.map(ad => [ad.adId, ad]));
   const perSet = campaign.creative_ids?.length ?? 0;
+  let unverified = 0;
   const rows = [...links].flatMap(([adId, link], position): AssetAdLink[] => {
     const ad = byAd.get(adId);
-    return ad ? [{
+    if (ad && unknownSince !== null && !media.has(link.creativeId)) unverified++;
+    return ad && (unknownSince === null || media.has(link.creativeId)) ? [{
       business_id: businessId, campaign_id: campaign.id, meta_ad_id: adId, meta_creative_id: ad.creativeId,
       creative_id: availableCreatives.has(link.creativeId) ? link.creativeId : null, media_asset_id: media.get(link.creativeId) ?? null,
       variant_index: Math.floor(position / perSet), position,
     }] : [];
   });
   await recordAdAssetLinks(database, rows);
+  if (unverified) recordProductEvent({ kind: "workflow", name: "campaign.ad_attribution", outcome: "partial", businessId, attributes: { errorCode: "media_unverified" } });
 }
 
 /** Use the owner's RLS client, not the service role. Every page also names the business explicitly. */
