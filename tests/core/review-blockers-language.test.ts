@@ -89,6 +89,7 @@ const variants: [string, (v: PreflightInput) => void, string][] = [
   ["tracking quiet", (v) => toGoal(v, "leads", { state: "quiet", lastSeenAt: null, counts: { Lead: 0, Purchase: 0 }, totalEvents: 0 }), "REVIEW_TRACKING"],
   ["tracking quiet seen", (v) => toGoal(v, "sales", { state: "quiet", lastSeenAt: "2026-10-20T05:00:00+0000", counts: { Lead: 0, Purchase: 0 }, totalEvents: 0 }), "REVIEW_TRACKING"],
   ["tracking no sale", (v) => toGoal(v, "sales", { state: "event_missing" }), "REVIEW_TRACKING"],
+  ["tracking no lead", (v) => toGoal(v, "leads", { state: "event_missing", counts: { Lead: 0, Purchase: 4 } }), "REVIEW_TRACKING"],
   ["goal words leads", (v) => { toGoal(v, "leads", {}); v.creatives[0].cta = "Buy now"; }, "REVIEW_GOAL_WORDS"],
   ["goal words sales", (v) => { toGoal(v, "sales", { counts: { Lead: 0, Purchase: 3 } }); v.creatives[0].cta = "Sign up"; v.creatives[0].headline = null; }, "REVIEW_GOAL_WORDS"],
 ];
@@ -153,15 +154,16 @@ const ENGLISH: Record<string, string> = {
   "two interests": "Meta didn't recognise the interests \"Wellness\" and \"Yoga\". Edit or remove them.",
   "interests unnamed": "Meta didn't recognise some audience interests. Edit or remove them.",
   // #2714's website goal sentences.
-  "tracking none": "Your ad account has no website tracking (Meta pixel) yet, so Meta can't count signups from this ad. Add tracking to your site, or choose the visits goal.",
+  "tracking none": "No website tracking source is available to this ad account, so Meta can't count website leads from this ad. If your site already uses a Meta pixel, check that this ad account can use it; if not, set one up in Events Manager. Until then, choose the visits goal.",
   "tracking choose": "Choose which website tracking counts your sales on the Your business page, then review again.",
   "tracking unread": "AdBrain couldn't read your website tracking from Meta. Try reviewing again in a few minutes.",
   "tracking reconnect": "AdBrain couldn't read your website tracking from Meta. Connect Facebook again, then review again.",
   "tracking quiet": "Your website tracking reported nothing from 26 Oct to 2 Nov. Check that it is on your site, then review again, or choose the visits goal.",
   "tracking quiet seen": "Your website tracking reported nothing from 26 Oct to 2 Nov (last heard 20 Oct). Check that it is on your site, then review again, or choose the visits goal.",
   "tracking no sale": "Your website tracking works but reported no sale (Purchase) from 26 Oct to 2 Nov. Make sure your site sends it, then review again, or choose the visits goal.",
-  "goal words leads": "The ad \"New-Patient Exam\" asks people to buy, but this campaign looks for signups. Choose an ad that fits, or change the goal.",
-  "goal words sales": "The ad you chose asks people to sign up, but this campaign looks for sales. Choose an ad that fits, or change the goal.",
+  "tracking no lead": "Your website tracking works but reported no website lead (Lead) from 26 Oct to 2 Nov. Make sure your site sends it, then review again, or choose the visits goal.",
+  "goal words leads": "The ad \"New-Patient Exam\" has a Shop now button, but this campaign is for website leads. Choose an ad that fits, or change the goal.",
+  "goal words sales": "The ad you chose has a Sign up button, but this campaign is for sales. Choose an ad that fits, or change the goal.",
 };
 
 function message(locale: AppLocale | undefined, change: (v: PreflightInput) => void, reason: string): string | undefined {
@@ -199,6 +201,31 @@ describe("Review blockers in the owner's language (#2333)", () => {
       .toBe("आपकी वेबसाइट cedarridgechiro.com लोगों को parked.example पर भेज देती है। Your business पेज पर अपनी साइट का पता जोड़ें, ताकि विज्ञापन आपका बिज़नेस खोले।");
     expect(message("hi", (v) => { v.vertical = "coaching institute"; v.creatives[0].headline = "Guaranteed rank"; }, "REVIEW_AD_POLICY"))
       .toBe('विज्ञापन "Guaranteed rank" में "guaranteed" ऐसा वादा है जिसे Meta मना कर देता है। विज्ञापन बदलकर सेवा के बारे में बताएँ।');
+  });
+
+  // #2714 (CPO): website leads, never "signups"; an empty list may be missing access; Sign up only names the button.
+  it("says website leads, the empty-list access check and the button in Hindi", () => {
+    expect(message("hi", (v) => toGoal(v, "leads", { state: "none", pixelId: null, window: null, counts: null, totalEvents: null }), "REVIEW_TRACKING"))
+      .toBe("इस विज्ञापन खाते के लिए वेबसाइट ट्रैकिंग का कोई स्रोत उपलब्ध नहीं है, इसलिए Meta इस विज्ञापन से वेबसाइट लीड नहीं गिन सकता। अगर आपकी साइट पहले से Meta पिक्सेल इस्तेमाल करती है, तो देखें कि यह विज्ञापन खाता उसे इस्तेमाल कर सकता है; नहीं तो Events Manager में एक सेट करें। तब तक वेबसाइट विज़िट का लक्ष्य चुनें।");
+    expect(message("hi", (v) => toGoal(v, "leads", { state: "event_missing", counts: { Lead: 0, Purchase: 4 } }), "REVIEW_TRACKING"))
+      // The month short name comes from Node's ICU and differs by version (अक्टू॰ / अक्तू॰).
+      .toMatch(/^आपकी वेबसाइट ट्रैकिंग चल रही है, पर 26 \S+ से 2 \S+ तक कोई वेबसाइट लीड \(Lead\) नहीं बताई। पक्का करें कि आपकी साइट उसे भेजती है, फिर से रिव्यू करें, या वेबसाइट विज़िट का लक्ष्य चुनें।$/);
+    expect(message("hi", (v) => { toGoal(v, "sales", { counts: { Lead: 0, Purchase: 3 } }); v.creatives[0].cta = "Sign up"; v.creatives[0].headline = null; }, "REVIEW_GOAL_WORDS"))
+      .toBe("आपके चुने विज्ञापन पर साइन अप करें बटन है, पर यह campaign बिक्री के लिए है। सही विज्ञापन चुनें, या लक्ष्य बदलें।");
+    for (const locale of ["en", "hi"] as const) {
+      for (const [, change, reason] of variants.filter(([name]) => name.startsWith("tracking") || name.startsWith("goal words"))) {
+        expect(message(locale, change, reason)).not.toMatch(/signup|साइनअप/i);
+      }
+    }
+  });
+
+  it("never shows the tracking's any-event time as the chosen event's time", () => {
+    // toGoal's tracking last fired on 1 Nov, but not the goal's event; only "reported nothing at all" may name a last time.
+    for (const locale of ["en", "hi"] as const) {
+      for (const [name, change, reason] of variants.filter(([name]) => name === "tracking no sale" || name === "tracking no lead")) {
+        expect(message(locale, change, reason), name).not.toMatch(/1 Nov|1 नव|last heard|आख़िरी/);
+      }
+    }
   });
 
   it("names every fix button in the owner's language, English unchanged", () => {

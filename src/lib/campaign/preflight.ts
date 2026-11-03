@@ -320,6 +320,8 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     perAdSetDailyBudgetRupees, costPerResultRupees: input.costPerResultRupees,
     websiteGoal: payload.websiteGoal,
   });
+  // #2714: sales learn from purchases, which can be few; said in the owner's language, and the budget and goal stay as set.
+  if (payload.websiteGoal === "sales") planWarnings.push(say("salesFew"));
   if (input.pictureNotice) planWarnings.unshift(input.pictureNotice);
   // #418 rule 7: an ad that tells customers what to send should match what WhatsApp pre-types. Never a blocker.
   // #1198: with Quick questions there is no ready message, so a quoted ask can't match anything.
