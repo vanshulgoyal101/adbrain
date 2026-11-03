@@ -27,10 +27,19 @@ describe("video rules (#748, Designer on #744)", () => {
     expect(videoRefusal("video/mp4", 20 * MB, 61_000)).toMatchObject({ status: 422, code: "MEDIA_TOO_LONG", message: expect.stringContaining("limit 60") });
   });
 
-  it("works out the trim length in 5-second steps, never below 5 or past the cap", () => {
+  it("works out the trim length in 5-second steps, never past the cap, and says so when no trim can fit", () => {
     expect(videoTrimSeconds(45_000, 82 * MB)).toBe(25);
-    expect(videoTrimSeconds(10_000, 400 * MB)).toBe(5);
     expect(videoTrimSeconds(300_000, 60 * MB)).toBe(60);
+    expect(videoTrimSeconds(15_000, 150 * MB)).toBe(5);
+    expect(videoTrimSeconds(10_000, 400 * MB)).toBeNull();
+    expect(videoTrimSeconds(2_000, 100 * MB)).toBeNull();
+  });
+
+  it("never promises a trim that can't fit: a 2-second 100 MB clip is told to save a smaller copy (CPO, #744)", () => {
+    const refusal = videoRefusal("video/mp4", 100 * MB, 2_000);
+    expect(refusal).toMatchObject({ status: 413, code: "MEDIA_TOO_LARGE" });
+    expect(refusal?.message).toBe("100 MB, limit 50 MB. Trimming won't be enough: save a smaller, lower-resolution copy (for example 720p) in your Gallery.");
+    expect(refusal?.message).not.toMatch(/Trim it to/);
   });
 
   it("judges a video by its shape only: small clips aren't refused, wide is Feed only", () => {
