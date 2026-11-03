@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditBudgetDialog, META_WAIT_MS } from "@/components/edit-budget-dialog";
 import { applyBudget, budgetChangeFromForm, budgetFormStart, initialBudgetForm, localDay } from "@/lib/campaign/budget-edit-form";
+import hi from "../messages/hi.json";
 
 // #774: Manage → Edit budget. Meta checks the change first (nothing written), the owner reads it and
 // confirms anything above what they approved, waits out Meta's 30 s limit, then saves with the same key.
@@ -24,10 +25,10 @@ describe("budget form", () => {
     end.setDate(end.getDate() + 2);
     expect(budgetChangeFromForm(start, { ...initialBudgetForm(start), cap: "900", endDate: localDay(end.toISOString()) }))
       .toEqual({ change: { capRupees: 900, endTime: end.toISOString() } });
-    expect(budgetChangeFromForm(start, initialBudgetForm(start))).toEqual({ error: "Change the total cap or the end date." });
+    expect(budgetChangeFromForm(start, initialBudgetForm(start))).toEqual({ error: "nothingCapped" });
     const daily = budgetFormStart(uncapped as never, NOW)!;
     expect(budgetChangeFromForm(daily, { ...initialBudgetForm(daily), daily: "₹1,000" })).toEqual({ change: { dailyRupees: 1000 } });
-    expect(budgetChangeFromForm(daily, { ...initialBudgetForm(daily), daily: "0" })).toEqual({ error: "Enter the daily budget in rupees." });
+    expect(budgetChangeFromForm(daily, { ...initialBudgetForm(daily), daily: "0" })).toEqual({ error: "dailyMissing" });
   });
 
   it("applies the saved budget to the card", () => {
@@ -64,7 +65,7 @@ describe("EditBudgetDialog", () => {
     fireEvent.change(screen.getByLabelText("Daily budget (₹)"), { target: { value: "250" } });
     fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent("₹200 → ₹250 a day");
+    expect(status).toHaveTextContent("₹200 → ₹250 a day. Meta accepted it; budget changes don't go back to review.");
     expect(status).toHaveTextContent("than you approved before");
     expect(sent(0)).toMatchObject({ change: { dailyRupees: 250 }, preview: true });
 
@@ -94,5 +95,26 @@ describe("EditBudgetDialog", () => {
     expect(screen.getByLabelText("Total cap (₹)")).toHaveValue(600);
     expect(screen.getByLabelText("Ends on")).toHaveValue(localDay("2026-10-29T14:27:07.000Z"));
     expect(screen.queryByLabelText("Daily budget (₹)")).toBeNull();
+  });
+  // #1438: a Hindi owner reads the dialog, its form errors and the change in Hindi; what is sent doesn't change.
+  it("speaks the owner's language", async () => {
+    const onSaved = vi.fn();
+    render(<EditBudgetDialog campaignId="c-1" campaignName="Rooftop solar" start={budgetFormStart(uncapped as never, NOW)!} onClose={vi.fn()} onSaved={onSaved} words={{ locale: "hi", messages: hi.campaigns }} />);
+    expect(screen.getByRole("dialog", { name: "बजट बदलें" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("रोज़ का बजट (₹)"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Meta से जाँचें/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("रोज़ का बजट रुपयों में डालें।");
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("रोज़ का बजट (₹)"), { target: { value: "250" } });
+    fireEvent.click(screen.getByRole("button", { name: /Meta से जाँचें/ }));
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("₹200 → ₹250 रोज़. Meta ने इसे मान लिया");
+    expect(status).toHaveTextContent("आपकी पुष्टि चाहिए");
+    expect(screen.getByRole("button", { name: /Meta को थोड़ा समय चाहिए… \d+ सेकंड/ })).toBeDisabled();
+    await act(async () => {});
+    await act(async () => { vi.setSystemTime(NOW + META_WAIT_MS); vi.advanceTimersByTime(1000); });
+    fireEvent.click(await screen.findByRole("button", { name: "₹250 रोज़ की पुष्टि करें" }));
+    await vi.waitFor(() => expect(onSaved).toHaveBeenCalledWith("Meta में बजट बदल गया।", after));
+    expect(sent(1)).toEqual({ change: { dailyRupees: 250 }, idempotencyKey: sent(0).idempotencyKey, confirmationDigest: "d".repeat(64) });
   });
 });

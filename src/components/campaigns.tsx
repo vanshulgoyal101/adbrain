@@ -2377,6 +2377,7 @@ function BusinessCampaigns({
                   setCardNotice({ id, message });
                   setBudgetEdit(null);
                 }}
+                words={campaignWords}
               />
             )}
             {adEdit && (
