@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requestWords, setupWords } from "@/i18n/request-locale";
+import { createAdsTranslator } from "@/i18n/words";
 import { Building2 } from "lucide-react";
 import { openingLine } from "@/lib/campaign/result-evidence";
 import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
@@ -17,7 +18,6 @@ import { madeForSetup } from "@/lib/creative/setup-picks";
 import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
 import { mediaUploadsEnabled } from "@/lib/media/store";
-import { mediaTranslator } from "@/i18n/words";
 
 export const metadata = {
   title: "Create ads",
@@ -26,25 +26,23 @@ export const metadata = {
 };
 
 export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[]; again?: string | string[] }> } = {}) {
-  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[] })]);
+  const [business, params, words] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[] }), requestWords("create")]);
+  const t = createAdsTranslator(words), lang = words.locale === "en" ? undefined : words.locale;
   // #1934: a returning owner's "New campaign" runs step 2 again.
   const again = params.again === "1";
 
   if (!business) {
     return (
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Create ads</h1>
+        <h1 lang={lang} className="text-2xl font-semibold text-slate-900">{t("title")}</h1>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Building2 className="h-6 w-6" />
             </span>
-            <p className="max-w-md text-slate-600">
-              Set up your business first: the assistant uses it to make
-              ads that reflect your business.
-            </p>
+            <p lang={lang} className="max-w-md text-slate-600">{t("noBusiness")}</p>
             <Link href="/brand">
-              <Button>Set up your business</Button>
+              <Button lang={lang}>{t("setUp")}</Button>
             </Link>
           </CardContent>
         </Card>
@@ -75,46 +73,41 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
   }
 
   const missing = [
-    [business.offers?.length, "offers or prices"],
-    [business.locations?.length, "service areas"],
+    [business.offers?.length, t("missingOffers")],
+    [business.locations?.length, t("missingAreas")],
     // #2646: a website business needs no phone; its link is checked by brandUsable instead.
-    [business.phone || brandDestination(business) === "website", "phone number"],
+    [business.phone || brandDestination(business) === "website", t("missingPhone")],
   ].filter(([present]) => !present).map(([, label]) => label);
   // #371: Create opens on what the business's own campaigns achieved; a failed read just skips the line.
-  const [assets, evidence, choice] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => []),
-    // #778: the entry choice shows with uploads on, in the owner's language.
-    mediaUploadsEnabled() ? requestWords("media").then(mediaTranslator) : null]);
+  const [assets, evidence] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => [])]);
   const hasPhotos = assets.some((a) => a.type === "product_photo");
-  const visualsMissing = [!business.logo_url && "your logo", !hasPhotos && "1–3 real photos (team, premises or finished work)"].filter(Boolean);
+  const visualsMissing = [!business.logo_url && t("logo"), !hasPhotos && t("photos")].filter(Boolean);
 
   return (
     <div>
-      <PageHeader
-        title="Create ads"
-        description="Say who you want to reach. You check every ad before it runs."
-      />
+      <PageHeader title={t("title")} description={t("description")} lang={lang} />
       {/* #778 slice 3a: the entry choice (CPO #1868) as two equal rows (Designer, #1973 review 6). */}
-      {choice && (
-        <nav aria-label={choice("choice.label")} className="mb-4 mt-4 grid max-w-2xl grid-cols-2 gap-2 text-sm">
-          <a href="#create-flow" aria-current="page" className="inline-flex min-h-11 items-center justify-center rounded-md border border-primary bg-primary/10 px-3 text-center font-medium text-primary">{choice("choice.ai")}</a>
-          <Link href="/assets" className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-3 text-center font-medium text-slate-700 hover:bg-slate-50">{choice("choice.mine")}</Link>
+      {mediaUploadsEnabled() && (
+        <nav aria-label={t("howToMake")} lang={lang} className="mb-4 mt-4 grid max-w-2xl grid-cols-2 gap-2 text-sm">
+          <a href="#create-flow" aria-current="page" className="inline-flex min-h-11 items-center justify-center rounded-md border border-primary bg-primary/10 px-3 text-center font-medium text-primary">{t("withAi")}</a>
+          <Link href="/assets" className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-3 text-center font-medium text-slate-700 hover:bg-slate-50">{t("myPhotos")}</Link>
         </nav>
       )}
       <div id="create-flow" className="scroll-mt-4">
-      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)}>
-        <aside aria-label="Your business details" className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
+      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)} words={words}>
+        <aside aria-label={t("details")} className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
-            Using {business.name}&apos;s details.{" "}
-            <Link href="/brand" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline-offset-2 hover:underline">Edit your business</Link>
+            <span lang={lang}>{t("using", { name: business.name })}</span>{" "}
+            <Link href="/brand" lang={lang} className="inline-flex min-h-11 items-center font-medium text-blue-700 underline-offset-2 hover:underline">{t("editBusiness")}</Link>
           </p>
           {missing.length > 0 && (
-            <p className="mt-1">Not added yet: {missing.join(", ")}. Ads leave these out.</p>
+            <p lang={lang} className="mt-1">{t("missing", { items: missing.join(", ") })}</p>
           )}
           {visualsMissing.length > 0 && (
-            <p className="mt-1">
-              Add {visualsMissing.join(" and ")} so ads look like your business.{" "}
-              <Link href="/brand#brand-assets" className="font-medium text-blue-700 underline-offset-2 hover:underline">Add photos</Link>{" "}
-              or skip for now.
+            <p lang={lang} className="mt-1">
+              {t("visuals", { items: visualsMissing.join(t("and")) })}{" "}
+              <Link href="/brand#brand-assets" className="font-medium text-blue-700 underline-offset-2 hover:underline">{t("addPhotos")}</Link>{" "}
+              {t("skip")}
             </p>
           )}
         </aside>
