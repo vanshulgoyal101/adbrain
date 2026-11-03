@@ -3,8 +3,12 @@ import { render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResultBadge, AssetResultsNotice } from "@/components/asset-result-badge";
+import { MediaLibrary } from "@/components/media-library";
+import type { MediaView } from "@/lib/media/store";
 import type { AssetResults, AssetTotals } from "@/lib/campaign/asset-results";
 import hi from "../messages/hi.json";
+
+vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
 const totals: AssetTotals = { destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT", results: 3, spendPaise: 28_800, delivered: true, syncedAt: "2026-11-02T10:00:00Z" };
 const ready = (groups: AssetTotals[] = [totals]): Extract<AssetResults, { state: "ready" }> => ({
@@ -52,5 +56,12 @@ describe("quiet lifetime asset result badges", () => {
       expect(screen.getByText("3 मिनट पहले अपडेट हुआ")).toBeInTheDocument();
       expect(screen.getByText(/3 चैट/).closest("[lang]")).toHaveAttribute("lang", "hi");
     } finally { vi.useRealTimers(); }
+  });
+  it("keeps the photo library's own words and the result words apart (#2759 merge)", () => {
+    const photo: MediaView = { id: "photo", kind: "image", durationMs: null, name: "Kitchen", tags: [], width: 1080, height: 1080, bytes: 1, fit: { level: "feed", ratio: "1:1", message: "Square: fine for Feed." }, url: "https://example.com/m1.jpg", createdAt: "2026-10-29T10:00:00Z" };
+    render(<MediaLibrary words={{ locale: "hi", messages: hi.media }} resultWords={{ locale: "hi", messages: hi.verdict }} results={ready()}
+      business={{ id: "b1", vertical: null }} media={[photo]} creatives={[]} brandAssets={[]} consented />);
+    expect(screen.getByRole("button", { name: "फ़ोटो जोड़ें" })).toBeInTheDocument();
+    expect(screen.getByText(/3 चैट/).closest("[lang]")).toHaveAttribute("lang", "hi");
   });
 });

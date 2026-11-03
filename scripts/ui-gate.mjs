@@ -33,7 +33,7 @@ const { values: args } = parseArgs({
 const origin = new URL(args.origin).origin;
 assert.ok(origin === "https://adbrain.vanshul.com" || new URL(origin).hostname === "localhost", "The gate runs against production or localhost only.");
 
-const PUBLIC_PAGES = [["home", "/"], ["login", "/login"], ["ideas", "/ideas"], ["idea", "/ideas/rooftop-solar"]];
+const PUBLIC_PAGES = [["home", "/"], ["login", "/login"], ["ideas", "/ideas"], ["idea", "/ideas/rooftop-solar"], ["privacy", "/privacy"], ["terms", "/terms"], ["guides", "/guides"]];
 const OWNER_PAGES = [["dashboard", "/dashboard"], ["brand", "/brand"], ["create", "/create"], ["review", "/studio"], ["campaigns", "/campaigns"], ["enquiries", "/leads"]];
 // #1226 (7): --low-end walks a 360 px budget Android on slow 4G with a 4x slower CPU (Lighthouse's mobile profile).
 const VIEWPORTS = args["low-end"] ? [[360, 740]] : [[390, 844], [1440, 900]];
@@ -84,17 +84,19 @@ async function measure(page, path, file) {
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   const violations = axe.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length, targets: v.nodes.slice(0, 10).map((n) => n.target.join(" ")) }));
   const small = (page.viewportSize()?.width ?? 1440) < 500 ? await smallTargets(page) : [];
-  return { lcpMs: Math.round(vitals.lcp), cls: Number(vitals.cls.toFixed(3)), axe: violations.reduce((sum, v) => sum + v.nodes, 0), violations, under44: small.length, smallTargets: small.slice(0, 10) };
+  // #2748: a page that scrolls sideways at phone width is a bug.
+  const overflowPx = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
+  return { lcpMs: Math.round(vitals.lcp), cls: Number(vitals.cls.toFixed(3)), axe: violations.reduce((sum, v) => sum + v.nodes, 0), violations, under44: small.length, smallTargets: small.slice(0, 10), overflowPx };
 }
 
 /**
  * #1226 (7): tap targets under 44 px on a phone, hit-tested (a 36 px icon with a 44 px hit area passes; an input
- * inside a 44 px label passes). Report-only: --compare doesn't fail on it yet.
+ * inside a 44 px label passes). --compare fails when a page gets more of them or starts to overflow sideways (#2748).
  */
 function smallTargets(page) {
   return page.evaluate(() => {
     const out = [];
-    for (const el of document.querySelectorAll("main button, main a[href], main input:not([type=hidden]), main select, main summary, main [role=button]")) {
+    for (const el of document.querySelectorAll("main button, main a[href], main input:not([type=hidden]), main select, main summary, main [role=button], header a[href], footer a[href]")) {
       let r = el.getBoundingClientRect();
       if (!r.width || !r.height || getComputedStyle(el).visibility === "hidden" || (r.height >= 44 && r.width >= 24)) continue;
       const label = el.closest("label");
@@ -159,6 +161,8 @@ function compare(before, after) {
     if (a.axe > b.axe) worse.push("axe");
     if (a.lcpMs > b.lcpMs * 1.2 && a.lcpMs - b.lcpMs > 250) worse.push("LCP");
     if (a.cls > b.cls + 0.05) worse.push("CLS");
+    if (a.under44 > (b.under44 ?? 0)) worse.push("tap targets");
+    if (a.overflowPx > (b.overflowPx ?? 0)) worse.push("overflow");
     if (worse.length) failed = true;
     console.log(key.padEnd(20), `${b.axe}→${a.axe}`.padEnd(18), `${b.lcpMs}→${a.lcpMs}`.padEnd(22), `${b.cls}→${a.cls}`, worse.length ? `WORSE: ${worse.join(", ")}` : "");
   }

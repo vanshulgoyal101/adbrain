@@ -618,9 +618,9 @@ export function Studio({
               const list = adList(batch.items);
               const label = `${batch.made ? `Made ${formatBatchDate(batch.made)}` : "Earlier ads"} · ${batch.items.length} ${batch.items.length === 1 ? "ad" : "ads"}`;
               return index === 0
-                ? <div key={batch.key}><p className="px-1 pb-1 text-xs font-medium text-slate-500">{label}</p>{list}</div>
+                ? <div key={batch.key}><p suppressHydrationWarning className="px-1 pb-1 text-xs font-medium text-slate-500">{label}</p>{list}</div>
                 : <details key={batch.key} open={batch.items.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                    <summary className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
+                    <summary suppressHydrationWarning className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
                     {list}
                   </details>;
             })}
