@@ -182,7 +182,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
 
   it.each([
     ["REVIEW_NO_WEBSITE", "/brand"],
-    ["REVIEW_MEDIA_RIGHTS", "/assets?add=1"],
+    ["REVIEW_MEDIA_RIGHTS", "/assets?confirm=rights"],
     // #681 (#847): linking a WhatsApp number lives in Settings' WhatsApp card, not on Your business.
     ["REVIEW_WHATSAPP_NOT_LINKED", "/settings#whatsapp-status-title"],
   ] as const)("%s: the fix opens %s", async (reason, href) => {

@@ -56,7 +56,8 @@ export function buildCampaignPreflightLoaders(
         storyReady: hasStoryDesign(creative.generation),
         asksWhatsApp: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.contact === "whatsapp",
         printedPhone: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.phone ?? null,
-        ownMedia: Boolean(creative.media_asset_id),
+        // A library photo, or a Brand product photo (recorded as `generation.ownerPhoto` without the library link).
+        ownMedia: Boolean(creative.media_asset_id) || Boolean((creative.generation as { ownerPhoto?: unknown } | null)?.ownerPhoto),
       }));
     },
     redrawPictureNumber: (actor, creativeId, phone) => redrawPictureNumber(supabase, actor.businessId, creativeId, phone),
