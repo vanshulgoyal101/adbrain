@@ -1,5 +1,6 @@
 "use client";
 import { useNotices } from "@/i18n/notices";
+import { createAdsTranslator, type Words } from "@/i18n/words";
 import { takePendingIdea } from "@/lib/ideas/pending";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
@@ -140,15 +141,16 @@ function createFactsLine(business: Pick<Business, "locations" | "offers" | "usps
   return `Your 3 ads will use: ${facts}`;
 }
 
-export function AdAssistant({ business, opening = null, occasions = [], onFlowStep }: {
+export function AdAssistant({ business, opening = null, occasions = [], onFlowStep, words }: {
   business: Business;
   opening?: OpeningLine | null;
   /** #700: today's festivals and seasons (IST), worked out on the server. */
   occasions?: Suggestion[];
   /** #760: "Brief" while the owner answers, "Create" once ads are being or have been made. */
   onFlowStep?: (step: "Brief" | "Create") => void;
+  words?: Words<"create">;
 }) {
-  const tn = useNotices();
+  const tn = useNotices(), t = createAdsTranslator(words), lang = words && words.locale !== "en" ? words.locale : undefined;
   const [goal, setGoal] = useState("");
   const [started, setStarted] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -613,31 +615,29 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
     const suggestions = creativeRecommendations(business, goal, recentGoals);
     const quick = Boolean(goal.trim()) && hasCreateFacts(business);
     return (
-      <section aria-label="Campaign brief" className="min-w-0 max-w-2xl">
+      <section aria-label={t("brief")} className="min-w-0 max-w-2xl">
         <div>
           <div className="flex flex-col gap-6">
-            <h2 className="text-xl font-semibold tracking-normal text-slate-950">
-              What would you like to achieve?
-            </h2>
+            <h2 lang={lang} className="text-xl font-semibold tracking-normal text-slate-950">{t("question")}</h2>
             {opening && (
               <div className="rounded-lg bg-slate-50 p-4">
                 <p className="text-sm text-slate-800">{opening.text}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {opening.moreLikeThis && (
-                    <Button size="sm" variant="outline" onClick={() => { setGoal(opening.moreLikeThis!.goal); setReferenceBrief(opening.moreLikeThis!.referenceBrief); }}>
-                      More like this
+                    <Button size="sm" variant="outline" lang={lang} onClick={() => { setGoal(opening.moreLikeThis!.goal); setReferenceBrief(opening.moreLikeThis!.referenceBrief); }}>
+                      {t("moreLikeThis")}
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" onClick={() => { setGoal(opening.newAngle.goal); setReferenceBrief(undefined); }}>
-                    New angle
+                  <Button size="sm" variant="outline" lang={lang} onClick={() => { setGoal(opening.newAngle.goal); setReferenceBrief(undefined); }}>
+                    {t("newAngle")}
                   </Button>
                 </div>
               </div>
             )}
             {occasions.length > 0 && (
               <div role="group" aria-labelledby="assistant-occasions" className="flex flex-wrap items-center gap-2">
-                <span id="assistant-occasions" className="flex items-center gap-1.5 text-sm text-slate-600">
-                  <CalendarDays size={15} aria-hidden="true" /> Coming up
+                <span id="assistant-occasions" lang={lang} className="flex items-center gap-1.5 text-sm text-slate-600">
+                  <CalendarDays size={15} aria-hidden="true" /> {t("comingUp")}
                 </span>
                 {occasions.map((o) => (
                   <Button key={o.id} size="sm" variant="outline" className="min-h-11" onClick={() => { setGoal(o.prompt); setReferenceBrief(undefined); }}>
@@ -648,9 +648,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
             )}
             <div className="min-w-0">
               {/* The question above is the visible label; this keeps the field's own name. */}
-              <label htmlFor="assistant-goal" className="sr-only">
-                Campaign goal
-              </label>
+              <label htmlFor="assistant-goal" lang={lang} className="sr-only">{t("goal")}</label>
               <Textarea
                 id="assistant-goal"
                 value={goal}
@@ -658,9 +656,9 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
                 rows={6}
                 maxLength={500}
                 className="rounded-md bg-slate-50/50 p-4 text-base leading-7 focus:bg-white"
-                placeholder="Who do you want to reach, and what would you like them to do?"
+                placeholder={t("goalPlaceholder")}
               />
-              <p className="mt-2 text-right text-xs tabular-nums text-slate-400" aria-label="Campaign goal length">{goal.length}/500</p>
+              <p className="mt-2 text-right text-xs tabular-nums text-slate-400" aria-label={t("goalLength")}>{goal.length}/500</p>
               <div className="mt-5 flex flex-col divide-y divide-slate-100 border-y border-slate-200">
                 {suggestions.map((s) => (
                   <button
@@ -674,22 +672,22 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
                 ))}
               </div>
               <div className="mt-5">
-                <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} />
+                <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} label={t("adLanguage")} lang={lang} />
               </div>
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {quick ? (
                   // #1004: the tap below starts the paid run, so say what it will use, with a way to check the brief first.
                   <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm text-slate-600">
                     <span className="min-w-0 break-words">{createFactsLine(business)}</span>
-                    <button type="button" onClick={() => start(true)} disabled={loading} className="min-h-11 font-medium text-blue-700 hover:underline">Edit brief</button>
+                    <button type="button" onClick={() => start(true)} disabled={loading} lang={lang} className="min-h-11 font-medium text-blue-700 hover:underline">{t("editBrief")}</button>
                   </p>
                 ) : <span aria-hidden="true" />}
                 <div className="flex flex-col items-end gap-1 self-end sm:self-auto">
-                  <Button onClick={() => start()} disabled={!goal.trim()}>
+                  <Button onClick={() => start()} disabled={!goal.trim()} lang={lang}>
                     {/* #858: this tap starts the 3 ads straight away, so it says so. */}
-                    {quick ? "Make 3 ads" : "Start creating"}
+                    {quick ? t("makeThree") : t("start")}
                   </Button>
-                  {quick && <p className="text-xs text-slate-500">About 2 minutes. Nothing is published.</p>}
+                  {quick && <p lang={lang} className="text-xs text-slate-500">{t("aboutTwoMinutes")}</p>}
                 </div>
               </div>
             </div>
@@ -763,7 +761,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
             <label htmlFor="prepared-brief" className="text-sm font-semibold text-slate-900">Creative brief</label>
             <Textarea id="prepared-brief" value={prepared.brief} onChange={(event) => setPrepared({ ...prepared, brief: event.target.value, recommendations: undefined })} maxLength={2000} rows={7} className="mt-3 w-full" />
             <div className="mt-3">
-              <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} />
+              <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} label={t("adLanguage")} lang={lang} />
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <Button variant="outline" onClick={() => reset(goal, prepared.brief)} disabled={loading}><Pencil className="h-4 w-4" /> Revise goal</Button>

@@ -8,15 +8,20 @@ export function AdLanguagePicker({
   value,
   onChange,
   disabled,
+  label = "Ad language",
+  lang,
 }: {
   value: CreateLanguageId;
   onChange: (id: CreateLanguageId) => void;
   disabled?: boolean;
+  /** #1438: the owner's language for the label; the language names stay as they are. */
+  label?: string;
+  lang?: string;
 }) {
   const id = useId();
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <span id={`${id}-label`} className="text-sm font-medium text-slate-800">Ad language</span>
+      <span id={`${id}-label`} lang={lang} className="text-sm font-medium text-slate-800">{label}</span>
       <div role="radiogroup" aria-labelledby={`${id}-label`} className="flex flex-wrap gap-1.5">
         {CREATE_LANGUAGES.map((language) => (
           <label key={language.id} className={disabled ? "cursor-not-allowed" : "cursor-pointer"}>
