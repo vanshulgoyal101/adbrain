@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { pictureSource } from "@/lib/creative/picture-source";
 import { hasStoryDesign, savedBackground, storedPictureDesign } from "@/lib/creative/picture-words";
 import { renderAndPersistDesign } from "@/lib/creative/persist";
 import { logEvent } from "@/lib/audit";
@@ -56,8 +57,8 @@ export function buildCampaignPreflightLoaders(
         storyReady: hasStoryDesign(creative.generation),
         asksWhatsApp: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.contact === "whatsapp",
         printedPhone: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.phone ?? null,
-        // A library photo, or a Brand product photo (recorded as `generation.ownerPhoto` without the library link).
-        ownMedia: Boolean(creative.media_asset_id) || Boolean((creative.generation as { ownerPhoto?: unknown } | null)?.ownerPhoto),
+        // A library photo, a Brand product photo (`generation.ownerPhoto`, no library link), or a receipt that only names the owner-photo provider.
+        ownMedia: Boolean(creative.media_asset_id) || Boolean((creative.generation as { ownerPhoto?: unknown } | null)?.ownerPhoto) || pictureSource(creative.generation) === "yours",
       }));
     },
     redrawPictureNumber: (actor, creativeId, phone) => redrawPictureNumber(supabase, actor.businessId, creativeId, phone),

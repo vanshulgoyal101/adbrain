@@ -1553,6 +1553,10 @@
       "confirmTitle": "Confirm your rights to the photos in your ads",
       "confirmAction": "Confirm",
       "confirmSaving": "Saving…",
+      "rightsLegend": "Your rights to these files",
+      "rightsText": "I own these photos and videos, or have permission to use them, including any music and the people shown.",
+      "peopleText": "Everyone recognisable has agreed to appear in your ads.",
+      "musicNote": "Music from films or popular songs can get your ad muted or rejected. Use your own audio or royalty-free music.",
       "format": "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
       "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again."
     },

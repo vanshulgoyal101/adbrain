@@ -42,7 +42,7 @@ export function MediaRightsConfirm({ businessId, vertical, words }: { businessId
   return (
     <section aria-labelledby="media-rights-confirm-title" className="mt-6 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
       <h2 id="media-rights-confirm-title" className="text-base font-semibold text-slate-900">{t("upload.confirmTitle")}</h2>
-      <MediaRightsConsent vertical={vertical} value={consent} onChange={setConsent} />
+      <MediaRightsConsent t={t} vertical={vertical} value={consent} onChange={setConsent} />
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <div>
         <Button onClick={confirm} disabled={saving || !mediaConsentComplete(consent, vertical)}>{saving ? t("upload.confirmSaving") : t("upload.confirmAction")}</Button>
