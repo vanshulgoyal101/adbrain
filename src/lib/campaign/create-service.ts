@@ -77,7 +77,7 @@ export async function executeReviewedCampaign(input: {
           if (businessError || !business) throw new OperationPhaseError("Business could not be loaded before execution.", { transmitted: false });
           const location = review.resolvedLocation!;
           const excludedLocation = review.resolvedExcludedLocation;
-          const { data: creatives, error: creativeError } = await database.from("creatives").select("id, image_url, headline, primary_text, cta, generation, angle")
+          const { data: creatives, error: creativeError } = await database.from("creatives").select("id, image_url, headline, primary_text, cta, generation, angle, updated_at")
             .in("id", draft.input.creativeIds).eq("business_id", actor.businessId).eq("status", "approved");
           if (creativeError) throw new OperationPhaseError("Creatives could not be loaded before execution.", { transmitted: false });
           const byId = new Map((creatives ?? []).map(creative => [creative.id, creative]));
@@ -117,7 +117,9 @@ export async function executeReviewedCampaign(input: {
           }
           // #789: for the ledger, read alongside Meta's create; never rejects.
           const mediaReadAt = new Date().toISOString();
-          const mediaRead = readCreativeMedia(database as unknown as SupabaseClient, actor.businessId, creativeInputs.map(creative => creative.id));
+          const mediaRead = readCreativeMedia(database as unknown as SupabaseClient, actor.businessId, creativeInputs.map(creative => creative.id), {
+            readAt: new Map(creativeInputs.map(creative => [creative.id, creative.updated_at])),
+          });
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: (draft.input.destination ?? "instant_form") === "instant_form" ? draft.input.leadFormId ?? undefined : undefined,

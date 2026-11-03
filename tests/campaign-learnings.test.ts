@@ -107,13 +107,23 @@ describe("learning ledger snapshot (#588)", () => {
         return query;
       },
     });
-    const creatives = { data: [{ id: "c1", media_asset_id: "m1" }, { id: "c2", media_asset_id: null }, { id: "c3", media_asset_id: "m1" }, { id: "c4", media_asset_id: "gone" }], error: null };
-    const media = await readCreativeMedia(database({ creatives, media_assets: { data: [{ id: "m1", kind: "image", source: "upload" }], error: null } }) as never, "b1", ["c1", "c2", "c3", "c4"]);
-    expect([...media!]).toEqual([["c1", { id: "m1", kind: "image", source: "upload" }], ["c3", { id: "m1", kind: "image", source: "upload" }]]);
+    const creatives = { data: [{ id: "c1", media_asset_id: "m1" }, { id: "c2", media_asset_id: null }, { id: "c3", media_asset_id: "m1" }, { id: "c4", media_asset_id: "m2" }], error: null };
+    const assets = { data: [{ id: "m1", kind: "image", source: "upload" }, { id: "m2", kind: "image", source: "brand" }], error: null };
+    const media = await readCreativeMedia(database({ creatives, media_assets: assets }) as never, "b1", ["c1", "c2", "c3", "c4"]);
+    expect([...media!]).toEqual([["c1", { id: "m1", kind: "image", source: "upload" }], ["c3", { id: "m1", kind: "image", source: "upload" }], ["c4", { id: "m2", kind: "image", source: "brand" }]]);
     expect(calls).toEqual([
-      { table: "creatives", columns: "id, media_asset_id", filters: [["in", "id", ["c1", "c2", "c3", "c4"]], ["eq", "business_id", "b1"]] },
-      { table: "media_assets", columns: "id, kind, source", filters: [["in", "id", ["m1", "gone"]], ["eq", "business_id", "b1"]] },
+      { table: "creatives", columns: "id, media_asset_id, updated_at", filters: [["in", "id", ["c1", "c2", "c3", "c4"]], ["eq", "business_id", "b1"]] },
+      { table: "media_assets", columns: "id, kind, source", filters: [["in", "id", ["m1", "m2"]], ["eq", "business_id", "b1"]] },
     ]);
+    // QA #2753: a linked photo missing from a successful read is unknown, never "no photo".
+    const gone = { data: [{ id: "c1", media_asset_id: "m1" }, { id: "c4", media_asset_id: "gone" }], error: null };
+    expect(await readCreativeMedia(database({ creatives: gone, media_assets: assets }) as never, "b1", ["c1", "c4"])).toBeNull();
+    // QA #2753: a creative changed (e.g. relinked) since the read whose image Meta was sent is unknown, never the new photo.
+    const stamped = { data: [{ id: "c1", media_asset_id: "m2", updated_at: "2026-11-03T10:00:05.000000+00:00" }], error: null };
+    expect(await readCreativeMedia(database({ creatives: stamped, media_assets: assets }) as never, "b1", ["c1"], { readAt: new Map([["c1", "2026-11-03T10:00:00+00:00"]]) })).toBeNull();
+    expect(await readCreativeMedia(database({ creatives: { data: [{ id: "c1", media_asset_id: "m1" }], error: null }, media_assets: assets }) as never, "b1", ["c1"], { readAt: new Map([["c1", "2026-11-03T10:00:00+00:00"]]) })).toBeNull();
+    const same = await readCreativeMedia(database({ creatives: stamped, media_assets: assets }) as never, "b1", ["c1"], { readAt: new Map([["c1", "2026-11-03T10:00:05Z"]]) });
+    expect([...same!]).toEqual([["c1", { id: "m2", kind: "image", source: "brand" }]]);
 
     calls.length = 0;
     // No library photos: one read, nothing else asked.
@@ -127,7 +137,7 @@ describe("learning ledger snapshot (#588)", () => {
     expect((await readCreativeMedia(database({}) as never, "b1", []))?.size).toBe(0);
     // A stalled read gives up rather than hold the launch.
     const hung = { from: () => ({ select: () => ({ in: () => ({ eq: () => new Promise(() => {}) }) }) }) };
-    expect(await readCreativeMedia(hung as never, "b1", ["c1"], 20)).toBeNull();
+    expect(await readCreativeMedia(hung as never, "b1", ["c1"], { timeoutMs: 20 })).toBeNull();
   });
 
   it("marks a launch whose photos couldn't be read as unknown, not photo-less (#789)", () => {

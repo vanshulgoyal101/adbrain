@@ -115,13 +115,18 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
  * #789: the library asset each creative was made from, for the ledger. Best effort like the ledger itself:
  * any error or a read slower than 1.5 s (including a database without #2625's `media_asset_id` yet) gives
  * `null` (unknown, distinct from an empty map meaning no photos), never a failed launch.
+ * QA #2753: also unknown when a linked photo is missing from the read, or when a creative changed (its `updated_at`,
+ * stamped by every update) since `readAt`, the read whose image Meta was sent, so a relink is never recorded as sent.
  */
-export async function readCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[], timeoutMs = MEDIA_READ_TIMEOUT_MS): Promise<Map<string, CreativeMedia> | null> {
+export async function readCreativeMedia(
+  database: SupabaseClient, businessId: string, creativeIds: string[],
+  options: { readAt?: ReadonlyMap<string, string>; timeoutMs?: number } = {},
+): Promise<Map<string, CreativeMedia> | null> {
   // Launch awaits this after Meta's create and before the campaign row is saved, so a stalled read must not hold it.
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timedOut = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); });
+  const timedOut = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), options.timeoutMs ?? MEDIA_READ_TIMEOUT_MS); });
   try {
-    return await Promise.race([lookupCreativeMedia(database, businessId, creativeIds), timedOut]);
+    return await Promise.race([lookupCreativeMedia(database, businessId, creativeIds, options.readAt), timedOut]);
   } finally {
     clearTimeout(timer);
   }
@@ -129,13 +134,18 @@ export async function readCreativeMedia(database: SupabaseClient, businessId: st
 
 const MEDIA_READ_TIMEOUT_MS = 1500;
 
-async function lookupCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[]): Promise<Map<string, CreativeMedia> | null> {
+async function lookupCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[], readAt?: ReadonlyMap<string, string>): Promise<Map<string, CreativeMedia> | null> {
   const media = new Map<string, CreativeMedia>();
   try {
     if (!creativeIds.length) return media;
-    const { data: links, error } = await database.from("creatives").select("id, media_asset_id").in("id", creativeIds).eq("business_id", businessId);
+    const { data: links, error } = await database.from("creatives").select("id, media_asset_id, updated_at").in("id", creativeIds).eq("business_id", businessId);
     if (error || !Array.isArray(links)) return null;
-    const linked = (links as { id: string; media_asset_id: string | null }[]).filter(link => link.media_asset_id);
+    const rows = links as { id: string; media_asset_id: string | null; updated_at?: string | null }[];
+    if (readAt && [...readAt].some(([id, at]) => {
+      const row = rows.find(link => link.id === id);
+      return !row?.updated_at || Date.parse(row.updated_at) !== Date.parse(at);
+    })) return null;
+    const linked = rows.filter(link => link.media_asset_id);
     if (!linked.length) return media;
     const { data: assets, error: assetError } = await database.from("media_assets").select("id, kind, source")
       .in("id", [...new Set(linked.map(link => link.media_asset_id!))]).eq("business_id", businessId);
@@ -143,7 +153,8 @@ async function lookupCreativeMedia(database: SupabaseClient, businessId: string,
     const byId = new Map((assets as CreativeMedia[]).map(asset => [asset.id, { id: asset.id, kind: asset.kind, source: asset.source }]));
     for (const link of linked) {
       const asset = byId.get(link.media_asset_id!);
-      if (asset) media.set(link.id, asset);
+      if (!asset) return null;
+      media.set(link.id, asset);
     }
     return media;
   } catch {

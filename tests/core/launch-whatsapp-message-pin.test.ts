@@ -15,7 +15,7 @@ vi.mock("@/lib/campaign/operation-store", () => ({ createOperationCheckpoint: ()
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: async () => ({ data: { id: "campaign-row" }, error: null }) }));
 vi.mock("@/lib/campaign/learnings", () => ({
   buildLaunchSnapshot: (input: { mediaUnknownAt?: string }) => attribution.snapshot && { ...attribution.snapshot, ...(input.mediaUnknownAt ? { mediaUnknownAt: input.mediaUnknownAt } : {}) },
-  readCreativeMedia: async () => attribution.media, saveLaunchSnapshot: async () => true,
+  readCreativeMedia: async (...args: unknown[]) => { attribution.mediaReads.push(args); return attribution.media; }, saveLaunchSnapshot: async () => true,
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: attribution.events }));
@@ -26,13 +26,13 @@ import type { ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { OperationRecord } from "@/lib/campaign/operations";
 import type { CampaignMutationCheckpoint } from "@/lib/meta/client";
 
-const attribution = vi.hoisted(() => ({ record: vi.fn(), events: vi.fn(), media: new Map() as Map<string, unknown> | null, snapshot: null as null | { creatives: { id: string; mediaAssetId: string | null }[] } }));
+const attribution = vi.hoisted(() => ({ record: vi.fn(), events: vi.fn(), mediaReads: [] as unknown[][], media: new Map() as Map<string, unknown> | null, snapshot: null as null | { creatives: { id: string; mediaAssetId: string | null }[] } }));
 vi.mock("@/lib/campaign/asset-results-store", () => ({ recordAdAssetLinks: attribution.record }));
 
 const solaride = { name: "Solaride", website: "https://solaride.in", locations: ["Chandigarh", "Panchkula", "Mohali"],
   offers: ["Free site survey", "PM Surya Ghar subsidy help", "Diwali offer: 10% off rooftop solar installation"], whatsapp_template: null as unknown };
 const creative = {
-  id: "8a5e19e9-0000-4000-8000-000000000001", image_url: "https://example.com/ad.png", cta: null, angle: null, generation: {},
+  id: "8a5e19e9-0000-4000-8000-000000000001", image_url: "https://example.com/ad.png", cta: null, angle: null, generation: {}, updated_at: "2026-11-03T10:00:00.123456+00:00",
   headline: "Wondering Whether Your Roof Is Ready?",
   primary_text: "Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\nMessage Solaride on WhatsApp to book your free site survey.",
 };
@@ -63,6 +63,7 @@ beforeEach(() => {
   attribution.events.mockClear();
   attribution.snapshot = null;
   attribution.media = new Map();
+  attribution.mediaReads = [];
   meta.createLeadCampaign.mockReset().mockResolvedValue({ destination: "whatsapp", campaignId: "c1", adSetId: "s1", adSetIds: ["s1"], adIds: ["a1"], creativeIds: ["cr1"] });
 });
 
@@ -111,6 +112,11 @@ describe("core: an unverified launch photo is never stored as no photo (#789 QA 
       expect(attribution.record).not.toHaveBeenCalled();
       expect(attribution.events).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "partial", attributes: { errorCode: "media_unverified" } }));
     } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("reads the photo link against the same creative row whose image Meta was sent, so a relink reads as unknown (QA #2753)", async () => {
+    expect((await checkpointLaunch()).kind).toBe("succeeded");
+    expect(attribution.mediaReads).toEqual([[expect.anything(), "b1", [creative.id], { readAt: new Map([[creative.id, creative.updated_at]]) }]]);
   });
 
   it("writes no ad links when the launch snapshot couldn't be built", async () => {
