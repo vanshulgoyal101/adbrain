@@ -30,8 +30,8 @@ change Meta payloads, campaign objectives at create, budgets or spend.
 | PUT | `/api/campaign-drafts/[id]` | Version + input -> envelope draft | Versioned write |
 | DELETE | `/api/campaign-drafts/[id]` | `version` query -> envelope `{deleted:true}` | Retention-aware delete |
 | POST | `/api/campaigns/plan` | Goal/answers/optional audience draft -> plain result | Model; can save a draft |
-| POST | `/api/campaigns/preflight` | Draft ID/version/business -> envelope review | Provider verification, no campaign creation; a failed Meta read (e.g. the Page's WhatsApp number) is a retryable 503, never a setup blocker (#681) |
-| POST | `/api/campaigns/create` | Reviewed identifiers -> envelope operation | Worker mode enqueues (202); inline mode creates paused remote objects; a Meta read failing during the re-review is a retryable 503 with nothing sent (#681) |
+| POST | `/api/campaigns/preflight` | Draft ID/version/business -> envelope review | Provider verification, no campaign creation; a failed Meta read (e.g. the Page's WhatsApp number) is a retryable 503, never a setup blocker (#681). With `MEDIA_UPLOADS_ENABLED`, an ad made from an owner's video blocks Go live while Meta is still preparing it or after it failed (the reason is in the sentence), and on a website campaign (#781) |
+| POST | `/api/campaigns/create` | Reviewed identifiers -> envelope operation | Worker mode enqueues (202); inline mode creates paused remote objects; a Meta read failing during the re-review is a retryable 503 with nothing sent (#681). A ready owner video is sent as `video_data` beside photos (instant form or WhatsApp); one that isn't ready, or a website campaign, stops before any Meta call (#781) |
 | GET | `/api/campaigns/list` | `businessId`, optional opaque `cursor`, `query` (max 200), `status` -> `{campaigns,results,nextCursor}` | Owner-scoped, at most 50 rows; latest stored result per returned campaign |
 | GET | `/api/campaigns/operations` | Business/key -> envelope operation or null | Recovery read; can expire stale leases |
 | GET | `/api/campaigns/operations/[id]` | Path ID -> envelope operation | Recovery read; can expire stale leases |

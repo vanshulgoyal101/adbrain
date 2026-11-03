@@ -15,7 +15,7 @@ export type PreflightVideo = { state: "ready" | "processing" | "error"; reason: 
 export async function readCreativeVideos(
   store: Pick<MetaMediaStore, "asset" | "upload">,
   businessId: string,
-  adAccountId: string,
+  adAccountId: string | undefined,
   links: { creativeId: string; mediaAssetId: string | null }[],
 ): Promise<Map<string, PreflightVideo>> {
   const videos = new Map<string, PreflightVideo>();
@@ -23,7 +23,8 @@ export async function readCreativeVideos(
     if (!mediaAssetId) return;
     const asset = await store.asset(businessId, mediaAssetId);
     if (asset?.kind !== "video") return;
-    const upload = await store.upload(asset.id, adAccountId);
+    // Without an ad account there is nothing to launch with: wait, never send the poster as a picture.
+    const upload = adAccountId ? await store.upload(asset.id, adAccountId) : null;
     if (!upload || upload.status === "starting" || upload.status === "processing") videos.set(creativeId, { state: "processing", reason: null });
     else if (upload.status === "error") videos.set(creativeId, { state: "error", reason: VIDEO_PROBLEM_WORDS[upload.problem ?? "unknown"] });
     else videos.set(creativeId, upload.videoId ? { state: "ready", reason: null, videoId: upload.videoId } : { state: "processing", reason: null });
@@ -45,6 +46,6 @@ export async function loadCreativeVideos(
   const { data, error } = await database.from("creatives").select("id, media_asset_id").in("id", creativeIds).eq("business_id", businessId);
   if (error) throw new Error("Creatives could not be read.");
   const links = (data ?? []).map((row: { id: string; media_asset_id: string | null }) => ({ creativeId: row.id, mediaAssetId: row.media_asset_id ?? null }));
-  const account = links.some((link) => link.mediaAssetId) ? await adAccountId() : undefined;
-  return account ? readCreativeVideos(supabaseMetaMediaStore(createAdminClient()), businessId, account, links) : new Map();
+  if (!links.some((link) => link.mediaAssetId)) return new Map();
+  return readCreativeVideos(supabaseMetaMediaStore(createAdminClient()), businessId, await adAccountId(), links);
 }

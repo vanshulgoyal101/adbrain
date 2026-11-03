@@ -29,6 +29,10 @@ describe("readCreativeVideos (#781)", () => {
     expect((await read("video", upload({ status: "ready", videoId: "v1" }))).get("c1")?.state).toBe("ready");
     expect((await read("video", upload({ status: "ready" }))).get("c1")?.state).toBe("processing");
   });
+  it("a video with no ad account to launch in waits, never goes as a picture", async () => {
+    const videos = await readCreativeVideos(store("video", upload({ status: "ready", videoId: "v1" })), businessId, undefined, [{ creativeId: "c1", mediaAssetId: "m1" }]);
+    expect(videos.get("c1")?.state).toBe("processing");
+  });
   it("an error carries Meta's reason in plain words", async () => {
     expect((await read("video", upload({ status: "error", problem: "format" }))).get("c1")).toEqual({ state: "error", reason: expect.stringContaining("MP4 or MOV") });
   });
@@ -42,6 +46,10 @@ describe("Go live with a video (#781)", () => {
   it("photos and ready videos pass", () => {
     expect(blocker()).toBeNull();
     expect(blocker({ state: "ready", reason: null })).toBeNull();
+  });
+  it("a video can't go to a website yet, said before Go live", () => {
+    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"], destination: "website" }, ad({ state: "ready", reason: null, videoId: "v1" }), say)!;
+    expect(words).toContain("can't go to a website");
   });
   it("a processing video blocks with the wait words", () => {
     expect(blocker({ state: "processing", reason: null })).toContain("still being prepared by Facebook");
