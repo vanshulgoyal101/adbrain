@@ -6,6 +6,7 @@ export function fakeSupabase() {
   const tables: Record<string, Row[]> = { media_assets: [], media_consents: [], creatives: [], campaigns: [] };
   const objects = new Map<string, Uint8Array>();
   const uploadOptions: { path: string; upsert?: boolean }[] = [];
+  const storageCalls: { op: "sign" | "upload" | "read"; bucket: string; path: string }[] = [];
   const removed: string[] = [];
   const insertErrors: { code: string; message: string }[] = [];
   const query = (table: string) => {
@@ -52,19 +53,23 @@ export function fakeSupabase() {
   const client = {
     from: query,
     storage: {
-      from: () => ({
+      from: (bucket: string) => ({
         createSignedUploadUrl: async (path: string, options?: { upsert?: boolean }) => {
           uploadOptions.push({ path, upsert: options?.upsert });
+          storageCalls.push({ op: "sign", bucket, path });
           return { data: { path, token: `token-${path}`, signedUrl: `https://storage.test/upload/${path}` }, error: null };
         },
-        upload: async (path: string, body: Uint8Array) => { objects.set(path, new Uint8Array(body)); return { data: { path }, error: null }; },
+        upload: async (path: string, body: Uint8Array) => { storageCalls.push({ op: "upload", bucket, path }); objects.set(path, new Uint8Array(body)); return { data: { path }, error: null }; },
         download: async (path: string) => objects.has(path)
           ? { data: new Blob([objects.get(path)! as BlobPart]), error: null }
           : { data: null, error: { message: "Object not found" } },
         remove: async (paths: string[]) => { for (const path of paths) { objects.delete(path); removed.push(path); } return { data: [], error: null }; },
-        createSignedUrls: async (paths: string[]) => ({ data: paths.map((path) => ({ path, signedUrl: `https://storage.test/sign/${path}` })), error: null }),
+        createSignedUrls: async (paths: string[]) => {
+          for (const path of paths) storageCalls.push({ op: "read", bucket, path });
+          return { data: paths.map((path) => ({ path, signedUrl: `https://storage.test/sign/${path}` })), error: null };
+        },
       }),
     },
   };
-  return { client: client as unknown as SupabaseClient, tables, objects, removed, uploadOptions, insertErrors };
+  return { client: client as unknown as SupabaseClient, tables, objects, removed, uploadOptions, insertErrors, storageCalls };
 }

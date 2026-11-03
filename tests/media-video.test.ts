@@ -97,7 +97,9 @@ describe("video uploads (#748)", () => {
   }
 
   it("signs a video row with its length; refusals at sign leave nothing behind and use none of the 3", async () => {
-    const row = await uploaded(tall);
+    const result = await sign(tall);
+    expect(result).toMatchObject({ duplicate: false, bucket: "media-video" });
+    const row = db.tables.media_assets[0] as MediaRow;
     expect(row).toMatchObject({ kind: "video", mime: "video/mp4", duration_ms: 2000, status: "pending" });
     expect(row.path).toMatch(/\.mp4$/);
     await expect(sign(long)).rejects.toMatchObject({ status: 422, code: "MEDIA_TOO_LONG" });
@@ -121,7 +123,8 @@ describe("video uploads (#748)", () => {
     db.tables.media_assets.length = 0;
     await expect(sign(tall)).rejects.toMatchObject({ status: 429, message: expect.stringContaining("videos this month") });
     const photo = await signUpload(db.client, { businessId: BUSINESS, userId: "u", mime: "image/jpeg", bytes: 1000, sha256: "c".repeat(64), width: 1080, height: 1350, rightsConfirmedAt: "x" });
-    expect(photo).toMatchObject({ duplicate: false });
+    expect(photo).toMatchObject({ duplicate: false, bucket: "media" });
+    expect(db.storageCalls).toEqual([expect.objectContaining({ op: "sign", bucket: "media" })]);
   });
 
   it("finalize keeps a checked video as it is, minus its location, at a fresh path", async () => {
@@ -137,6 +140,9 @@ describe("video uploads (#748)", () => {
     expect(Buffer.from(stored).includes(GPS)).toBe(false);
     expect(saved.path).not.toBe(uploadPath);
     expect(db.objects.has(uploadPath)).toBe(false);
+    // QA 2 on #2735: videos live in their own bucket, so a photo token stays bounded by the 8 MB `media` bucket.
+    expect(new Set(db.storageCalls.map((call) => call.bucket))).toEqual(new Set(["media-video"]));
+    expect(db.storageCalls.map((call) => call.op)).toEqual(["sign", "upload", "read"]);
   });
 
   it("finalize reads the real length and type: a browser that lied is refused and the row still counts", async () => {

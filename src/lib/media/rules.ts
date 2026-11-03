@@ -3,6 +3,9 @@
  * upload screen (instant feedback before any bytes move) and the server (re-checked on the stored object).
  */
 export const MEDIA_BUCKET = "media";
+/** #748 (QA 2 on #2735): videos get their own private bucket, so a photo upload token stays bounded at 8 MB. */
+export const MEDIA_VIDEO_BUCKET = "media-video";
+export const mediaBucket = (kind: "image" | "video" | null | undefined) => (kind === "video" ? MEDIA_VIDEO_BUCKET : MEDIA_BUCKET);
 export const MEDIA_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export type MediaMime = (typeof MEDIA_MIME_TYPES)[number];
 /** The browser re-encodes to at most this long side and size (fixes phone EXIF rotation, shrinks 12 MP photos). */
