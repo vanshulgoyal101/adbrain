@@ -909,7 +909,7 @@
         "who": "किसे",
         "destination": "कहाँ जाएँगे",
         "metaAccount": "Meta अकाउंट",
-        "perAdSet": "(हर ऐड सेट {money})",
+        "perAdSet": "(हर ऐड सेट पर {money})",
         "needsReview": "जाँचना बाकी",
         "cityOnly": "सिर्फ़ शहर (कोई अतिरिक्त दायरा नहीं)",
         "radius": "{km} किमी दायरा",
@@ -925,9 +925,9 @@
         "noInterests": "रुचि से कोई सीमा नहीं",
         "whatsappUnverified": "WhatsApp चैट (नंबर की पुष्टि नहीं हुई)",
         "instantForm": "इंस्टेंट लीड फ़ॉर्म",
-        "whatsappUnverifiedStep": "Meta ने आपके Page पर कोई WhatsApp Business नंबर कन्फ़र्म नहीं किया है। इसे Meta Business Suite में लिंक करें, फिर दोबारा जाँचें।",
+        "whatsappUnverifiedStep": "Meta ने आपके पेज पर कोई WhatsApp Business नंबर कन्फ़र्म नहीं किया है। इसे Meta Business Suite में लिंक करें, फिर दोबारा जाँचें।",
         "openWhatsAppSettings": "WhatsApp सेटिंग खोलें",
-        "account": "{account}, Page {page} ({currency})",
+        "account": "{account}, पेज {page} ({currency})",
         "unavailable": "उपलब्ध नहीं"
       },
       "fix": {

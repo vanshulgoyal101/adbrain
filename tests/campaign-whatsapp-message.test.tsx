@@ -167,7 +167,7 @@ describe("Review in the owner's language (#1438)", () => {
     expect(within(region).getByText("बजट")).toBeInTheDocument();
     expect(within(region).getByText("₹300 प्रतिदिन")).toBeInTheDocument();
     expect(within(region).getByText(/^उम्र 25–55, सभी लिंग, /)).toBeInTheDocument();
-    expect(within(region).getByText("Solar account, Page Solaride Energy (INR)")).toBeInTheDocument();
+    expect(within(region).getByText("Solar account, पेज Solaride Energy (INR)")).toBeInTheDocument();
     expect(within(region).getByRole("link", { name: "WhatsApp सेटिंग खोलें" })).toBeInTheDocument();
     expect(within(region).getByRole("button", { name: "फिर से जाँचें" })).toBeInTheDocument();
     expect(within(region).queryByText(/Ages |Open WhatsApp settings|Location includes residents/)).toBeNull();
