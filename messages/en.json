@@ -823,7 +823,15 @@
       "start": "Pick your approved ads and a daily budget. Nothing spends until you go live."
     },
     "picker": {
-      "yourPhoto": "Your photo"
+      "yourPhoto": "Your photo",
+      "selectAd": "Select ad",
+      "adPreview": "Ad preview",
+      "edit": "Edit",
+      "editAd": "Edit {headline}",
+      "thisAd": "ad",
+      "preparing": "Getting your photos and videos ready at Facebook…",
+      "prepared": "Your photos and videos are ready at Facebook.",
+      "prepareFailed": "Facebook couldn't take one of your files. Untick it, or try again later."
     },
     "list": {
       "deleted": "Deleted ({n})",

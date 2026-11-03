@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readCreativeVideos } from "@/lib/campaign/creative-video";
+import { readCreativeVideos, type PreflightVideo } from "@/lib/campaign/creative-video";
+import { buildCreativeReviewPayload } from "@/lib/campaign/preflight";
 import { creativesBlockerMessage } from "@/lib/campaign/review-blocker-words";
 import { translator } from "@/i18n/locale";
 import type { MediaAsset, MetaUploadRow } from "@/services/meta-media";
@@ -23,7 +24,7 @@ describe("readCreativeVideos (#781)", () => {
     expect((await read("video", null, null)).size).toBe(0);
   });
   it("a video not yet sent, starting or processing is processing", async () => {
-    for (const row of [null, upload({ status: "starting" }), upload({ status: "processing" })]) expect((await read("video", row)).get("c1")).toEqual({ state: "processing", reason: null });
+    for (const row of [null, upload({ status: "starting" }), upload({ status: "processing" })]) expect((await read("video", row)).get("c1")).toEqual({ state: "processing", reason: null, assetId: "m1" });
   });
   it("ready needs the Meta video id", async () => {
     expect((await read("video", upload({ status: "ready", videoId: "v1" }))).get("c1")?.state).toBe("ready");
@@ -34,13 +35,33 @@ describe("readCreativeVideos (#781)", () => {
     expect(videos.get("c1")?.state).toBe("processing");
   });
   it("an error carries Meta's reason in plain words", async () => {
-    expect((await read("video", upload({ status: "error", problem: "format" }))).get("c1")).toEqual({ state: "error", reason: expect.stringContaining("MP4 or MOV") });
+    expect((await read("video", upload({ status: "error", problem: "format" }))).get("c1")).toEqual({ state: "error", assetId: "m1", reason: expect.stringContaining("MP4 or MOV") });
+  });
+});
+
+describe("fail closed on linked media (#781)", () => {
+  const gone = [{ id: "m1", businessId, kind: "video", status: "ready", deletedAt: "2026-11-03T00:00:00Z", path: "p" }, { id: "m1", businessId, kind: "video", status: "pending", deletedAt: null, path: "p" }, null];
+  it("a deleted, not-ready or missing file is an error, never the poster", async () => {
+    for (const asset of gone) {
+      const videos = await readCreativeVideos({ asset: async () => asset as MediaAsset | null, upload: async () => upload({ status: "ready", videoId: "v1" }) }, businessId, "act_1", [{ creativeId: "c1", mediaAssetId: "m1" }]);
+      expect(videos.get("c1")?.state).toBe("error");
+    }
+  });
+});
+
+describe("Review binds the video (#781)", () => {
+  const base = { id: "c1", businessId, approved: true, imageUrl: "https://example.com/p.jpg", headline: "Tour" };
+  const hash = (assetId: string, videoId: string) => JSON.stringify(buildCreativeReviewPayload([{ ...base, video: { state: "ready", reason: null, assetId, videoId } }]));
+  it("a swapped video changes the review, a photo keeps its old shape", () => {
+    expect(hash("a", "v1")).not.toBe(hash("b", "v2"));
+    expect(hash("a", "v1")).not.toBe(hash("a", "v2"));
+    expect(JSON.stringify(buildCreativeReviewPayload([base]))).not.toContain("video");
   });
 });
 
 describe("Go live with a video (#781)", () => {
   const say = translator("en", "review");
-  const ad = (video?: { state: "ready" | "processing" | "error"; reason: string | null }) => [{ id: "c1", businessId, approved: true, imageUrl: "https://example.com/poster.jpg", headline: "Tour", video }];
+  const ad = (video?: PreflightVideo) => [{ id: "c1", businessId, approved: true, imageUrl: "https://example.com/poster.jpg", headline: "Tour", video }];
   const blocker = (video?: Parameters<typeof ad>[0]) => creativesBlockerMessage({ businessId, creativeIds: ["c1"] }, ad(video), say);
 
   it("photos and ready videos pass", () => {
@@ -48,7 +69,7 @@ describe("Go live with a video (#781)", () => {
     expect(blocker({ state: "ready", reason: null })).toBeNull();
   });
   it("a video can't go to a website yet, said before Go live", () => {
-    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"], destination: "website" }, ad({ state: "ready", reason: null, videoId: "v1" }), say)!;
+    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"], destination: "website" }, ad({ state: "ready", reason: null, assetId: "m1", videoId: "v1" }), say)!;
     expect(words).toContain("can't go to a website");
   });
   it("a processing video blocks with the wait words", () => {

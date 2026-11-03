@@ -10,7 +10,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { MetaMediaStore } from "@/services/meta-media";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PreflightVideo = { state: "ready" | "processing" | "error"; reason: string | null; videoId?: string };
+export type PreflightVideo = { state: "ready" | "processing" | "error"; reason: string | null; assetId: string; videoId?: string };
+
+const MEDIA_GONE = "This file was removed or isn't ready. Take it out of this campaign or choose another.";
 
 export async function readCreativeVideos(
   store: Pick<MetaMediaStore, "asset" | "upload">,
@@ -22,12 +24,14 @@ export async function readCreativeVideos(
   await Promise.all(links.map(async ({ creativeId, mediaAssetId }) => {
     if (!mediaAssetId) return;
     const asset = await store.asset(businessId, mediaAssetId);
-    if (asset?.kind !== "video") return;
+    // Fail closed: a linked file that is missing, deleted or not ready never falls back to the poster.
+    if (!asset || asset.deletedAt || asset.status !== "ready") { videos.set(creativeId, { state: "error", reason: MEDIA_GONE, assetId: mediaAssetId }); return; }
+    if (asset.kind !== "video") return;
     // Without an ad account there is nothing to launch with: wait, never send the poster as a picture.
     const upload = adAccountId ? await store.upload(asset.id, adAccountId) : null;
-    if (!upload || upload.status === "starting" || upload.status === "processing") videos.set(creativeId, { state: "processing", reason: null });
-    else if (upload.status === "error") videos.set(creativeId, { state: "error", reason: VIDEO_PROBLEM_WORDS[upload.problem ?? "unknown"] });
-    else videos.set(creativeId, upload.videoId ? { state: "ready", reason: null, videoId: upload.videoId } : { state: "processing", reason: null });
+    if (!upload || upload.status === "starting" || upload.status === "processing") videos.set(creativeId, { state: "processing", reason: null, assetId: asset.id });
+    else if (upload.status === "error") videos.set(creativeId, { state: "error", reason: VIDEO_PROBLEM_WORDS[upload.problem ?? "unknown"], assetId: asset.id });
+    else videos.set(creativeId, upload.videoId ? { state: "ready", reason: null, assetId: asset.id, videoId: upload.videoId } : { state: "processing", reason: null, assetId: asset.id });
   }));
   return videos;
 }
