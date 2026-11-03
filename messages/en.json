@@ -654,11 +654,6 @@
       "whenTap": "When they tap",
       "messageAt": "They message you on WhatsApp at {number}",
       "message": "They message you on WhatsApp",
-      "tapQuestions": "Customers see your welcome and {n, plural, one {a question} other {# questions}} to tap: {questions}.",
-      "tapCallReady": "Customers see your welcome, a Call now button, and {text} ready to send.",
-      "tapCall": "Customers see your welcome and a Call now button.",
-      "tapReady": "Customers see your welcome and {text} ready to send.",
-      "tapWelcome": "Customers see your welcome.",
       "changeWho": "Change who sees it",
       "before": "Before you go live",
       "done": "Done",
@@ -1725,6 +1720,23 @@
         "prefill": "Write a pre-typed message of up to 300 characters.",
         "questions": "Use 1 to 3 different questions of up to 40 characters."
       }
+    },
+    "tap": {
+      "title": "When they tap",
+      "source": {
+        "edited": "Edited for this campaign",
+        "saved": "Your saved message",
+        "suggested": "Suggested by AdBrain"
+      },
+      "handoff": "Your past WhatsApp ads: {opens} taps on the WhatsApp button, {messages} sent a message ({percent}%).",
+      "generic": "‘{ask}’ is general. People send a concrete, local ask more often, like your offer and your city.",
+      "mismatch": "Your ads are in {ads}; your WhatsApp message is in {message}.",
+      "edit": "Edit",
+      "questions": "Customers see your welcome and {n, plural, one {a question} other {# questions}} to tap: {questions}.",
+      "callReady": "Customers see your welcome, a Call now button, and {text} ready to send.",
+      "call": "Customers see your welcome and a Call now button.",
+      "ready": "Customers see your welcome and {text} ready to send.",
+      "welcome": "Customers see your welcome."
     }
   },
   "create": {

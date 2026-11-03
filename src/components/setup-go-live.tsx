@@ -19,6 +19,7 @@ import { formatMoney } from "@/lib/format";
 import { createMetaConnectClient } from "@/lib/meta-connect-ui/client";
 import type { SetupWelcome } from "@/lib/campaign/setup-welcome";
 import { whenTheyTapLine } from "@/components/when-they-tap";
+import { whatsappMessageTranslator, type Words } from "@/i18n/words";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -87,7 +88,7 @@ function ReviewPendingStatus({ tried, request, t, onRetry }: { tried: boolean; r
  * walks Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then
  * turn it on as a capped run of the chosen days (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
  */
-export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, returning = false, initialDaily, words, appReviewPending = false }: {
+export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, returning = false, initialDaily, words, whatsappWords, appReviewPending = false }: {
   business: Pick<Business, "id" | "name" | "locations">;
   ads: Creative[];
   pageConnected: boolean;
@@ -103,6 +104,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   initialDaily?: number;
   /** #1438: the owner's app language (#1901: the picture badge's and #1989's review status too); English without it. */
   words?: SetupWords;
+  /** #1438: "When they tap" line in the owner's language. */
+  whatsappWords?: Words<"whatsappMessage">;
   /** #1989: Meta App Review (#156) is pending, so a new Facebook account can't connect yet (`META_APP_REVIEW_PENDING`). */
   appReviewPending?: boolean;
 }) {
@@ -240,7 +243,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           </dd>
           {welcome && <>
             <dd className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-slate-800">&ldquo;{welcome.greeting}&rdquo;</dd>
-            <dd className="mt-1 text-slate-600">{whenTheyTapLine(welcome, t)}</dd>
+            <dd className="mt-1 text-slate-600">{whenTheyTapLine(welcome, whatsappMessageTranslator(whatsappWords))}</dd>
           </>}
         </div>
       </dl>

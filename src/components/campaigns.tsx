@@ -1774,7 +1774,7 @@ function BusinessCampaigns({
                   </details>;
               })()}
               {prepareReview.draft.input.destination === "whatsapp" && prepareReview.review.whatsappMessage && (
-                <WhenTheyTap message={prepareReview.review.whatsappMessage} businessName={business.name}
+                <WhenTheyTap message={prepareReview.review.whatsappMessage} businessName={business.name} words={whatsappWords}
                   adsLanguage={adsLanguage(adsFor(prepareReview.draft.input.creativeIds))}
                   handoff={handoffRate(campaigns.filter((c) => campaignDestination(c, results[c.id]) === "whatsapp").map((c) => results[c.id]).filter(Boolean))}
                   offers={business.offers ?? []}
