@@ -29,6 +29,8 @@ function budgetWords(preview: Pick<Preview, "before" | "after">, t: T): string {
   return t("budgetEdit.accepted", { changes: parts.join("; ") });
 }
 
+const clockMs = () => Date.now();
+
 async function send(campaignId: string, body: object, t: T): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; message: string }> {
   try {
     const res = await fetch(`/api/campaigns/${campaignId}/budget`, {
@@ -90,8 +92,7 @@ export function EditBudgetDialog({ campaignId, campaignName, start, onClose, onS
     setBusy(null);
     if (!outcome.ok) { setError(outcome.message); return; }
     setPreview(outcome.data.preview as Preview);
-    setCheckedAt(Date.now());
-    setNow(Date.now());
+    const checkedNow = clockMs(); setCheckedAt(checkedNow); setNow(checkedNow);
   };
 
   const save = async () => {
