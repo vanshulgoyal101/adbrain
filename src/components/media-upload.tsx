@@ -314,7 +314,7 @@ export function MediaUploadSheet({ t, open, onOpenChange, uploads, businessId, v
           {!consented && <MediaRightsConsent vertical={vertical} value={consent} onChange={setConsent} />}
           {hasVideo && <p className="text-xs text-slate-500">{t("upload.videoMusic")}</p>}
           {uploads.items.length > 0 && (
-            <ul aria-label={t("upload.picks")} className="divide-y divide-slate-100">
+            <ul aria-label={t(videoEnabled ? "upload.picksMedia" : "upload.picks")} className="divide-y divide-slate-100">
               {uploads.items.map((item) => <ItemLine key={item.key} t={t} item={item} allowVideo={allowVideo}
                 onRetry={() => void uploads.send([item])} onRemove={() => uploads.remove(item.key)} />)}
             </ul>

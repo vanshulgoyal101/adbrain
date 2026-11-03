@@ -42,4 +42,21 @@ describe("Photos in Hindi (#778 walk 1)", () => {
     expect(within(list).getByText(hi.media.upload.format)).toBeTruthy();
     expect(within(sheet).getByRole("button", { name: "2 फ़ोटो जोड़ें" })).toBeTruthy();
   });
+
+  it("shows video limits, the monthly-spot warning and a wide-video preview in Hindi", async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({
+      ok: true, uploads: { videos: { enabled: true, used: 1, limit: 3, maxSeconds: 60, maxBytes: 50 * 1024 * 1024 } },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    render(<MediaLibrary words={words} business={{ id: "b1", vertical: null }} media={[]} creatives={[]} brandAssets={[]} consented startOpen videoEnabled
+      deps={{ fetch: request, uploadToSignedUrl: vi.fn() }} videoReader={async () => ({ width: 1280, height: 720, durationMs: 2000 })} />);
+    const sheet = screen.getByRole("dialog", { name: "फ़ोटो और वीडियो जोड़ें" });
+    const input = await within(sheet).findByLabelText("फ़ोटो और वीडियो चुनें");
+    expect(within(sheet).getByText("इस महीने 3 में से 1 वीडियो अपलोड इस्तेमाल हुए। हर वीडियो ज़्यादा से ज़्यादा 50 MB और 60 सेकंड का हो सकता है।")).toBeTruthy();
+    expect(within(sheet).getByText("वीडियो का अपलोड शुरू होते ही महीने की एक जगह इस्तेमाल होगी। हटाने पर यह जगह वापस नहीं मिलेगी।")).toBeTruthy();
+    fireEvent.change(input, { target: { files: [new File(["video"], "tour.mp4", { type: "video/mp4" })] } });
+    expect(await within(sheet).findByText("चौड़ा वीडियो (16:9): सिर्फ़ Feed में दिखेगा। Reels के लिए लंबा (9:16) वीडियो चाहिए।")).toBeTruthy();
+    expect(within(sheet).getByRole("list", { name: "आपकी चुनी फ़ोटो और वीडियो" })).toBeTruthy();
+    expect(within(sheet).getByText(hi.media.upload.videoMusic)).toBeTruthy();
+    expect(within(sheet).getByRole("button", { name: "1 वीडियो जोड़ें" })).toBeTruthy();
+  });
 });

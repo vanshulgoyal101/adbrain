@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MediaLibrary } from "@/components/media-library";
 import { downloadBlob } from "@/lib/download";
@@ -18,6 +18,7 @@ const video: MediaView = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -57,15 +58,16 @@ describe("video library (#778)", () => {
     ["video/mp4", "mp4"],
     ["video/quicktime", "mov"],
   ])("downloads a checked %s response with the matching extension", async (mime, extension) => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["video"], { type: mime }), { status: 200 })));
+    const blob = new Blob(["video"], { type: mime });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => blob }));
     library();
     fireEvent.keyDown(screen.getByRole("button", { name: "More for Studio tour" }), { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Download" }));
-    await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), `adbrain-studio-tour.${extension}`));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(blob, `adbrain-studio-tour.${extension}`));
   });
 
   it("does not download an unexpected response as a video", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["bad"], { type: "text/html" }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["bad"], { type: "text/html" }) }));
     library();
     fireEvent.keyDown(screen.getByRole("button", { name: "More for Studio tour" }), { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Download" }));
@@ -79,5 +81,16 @@ describe("video library (#778)", () => {
     const panel = screen.getByRole("tabpanel");
     expect(within(panel).getByText("No videos yet. Add a video of your work.")).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Add photos & videos" })).toBeInTheDocument();
+  });
+
+  it("restores a video and identifies it when deletion fails", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    library();
+    fireEvent.keyDown(screen.getByRole("button", { name: "More for Studio tour" }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await act(async () => { vi.advanceTimersByTime(6000); });
+    expect(screen.getByLabelText("Studio tour")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't delete the video. Try again.");
   });
 });

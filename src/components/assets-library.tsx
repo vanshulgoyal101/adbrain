@@ -16,14 +16,14 @@ const ASSET_TYPE_LABEL: Record<string, string> = {
   past_ad: "Past ad",
 };
 
-const IMAGE_EXTENSIONS: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
-const VIDEO_EXTENSIONS: Record<string, string> = { "video/mp4": "mp4", "video/quicktime": "mov" };
+const IMAGE_EXTENSIONS = new Map([["image/png", "png"], ["image/jpeg", "jpg"], ["image/webp", "webp"]]);
+const VIDEO_EXTENSIONS = new Map([["video/mp4", "mp4"], ["video/quicktime", "mov"]]);
 
-async function downloadFile(url: string, filename: string, extensions: Record<string, string>) {
+async function downloadFile(url: string, filename: string, extensions: ReadonlyMap<string, string>) {
   const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error("Download failed.");
   const blob = await res.blob();
-  const extension = extensions[blob.type.split(";")[0]];
+  const extension = extensions.get(blob.type.split(";")[0]);
   if (!extension || !blob.size) throw new Error("The response was not a supported file.");
   downloadBlob(blob, filename.replace(/\.[^.]+$/, `.${extension}`));
 }

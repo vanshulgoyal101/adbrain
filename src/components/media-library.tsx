@@ -148,13 +148,14 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   const commit = useCallback(async (asset: MediaView, index: number) => {
     if (pending.current?.asset.id === asset.id) pending.current = null;
     setDeleted((current) => current?.asset.id === asset.id ? null : current);
+    const failed = t(asset.kind === "video" ? "tile.deleteVideoFailed" : "tile.deleteFailed");
     try {
       const response = await request(`/api/media/${asset.id}`, { method: "DELETE", signal: AbortSignal.timeout(30_000) });
       if (response.ok) return;
       const body = await response.json().catch(() => ({})) as { error?: string };
-      setDeleteError(response.status < 500 && body.error ? body.error : t("tile.deleteFailed"));
+      setDeleteError(response.status < 500 && body.error ? body.error : failed);
     } catch {
-      setDeleteError(t("tile.deleteFailed"));
+      setDeleteError(failed);
     }
     restore(asset, index);
   }, [request, restore, t]);

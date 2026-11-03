@@ -82,6 +82,12 @@ describe("<AssetsLibrary>", () => {
     expect(downloadBlob).not.toHaveBeenCalled();
   });
 
+  it("does not mistake an inherited object property for an allowed video MIME", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["bad"], { type: "constructor" }) }));
+    await expect(downloadVideo("https://example.com/file", "file.mp4")).rejects.toThrow();
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+
   it("renders both sections with counts", () => {
     render(
       <AssetsLibrary

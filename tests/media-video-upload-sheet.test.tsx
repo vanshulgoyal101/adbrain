@@ -75,7 +75,7 @@ describe("video upload sheet (#778)", () => {
     Object.defineProperty(large, "size", { value: 100 * 1024 * 1024 });
     await chooseVideo(large);
     const sheet = screen.getByRole("dialog", { name: "Add photos & videos" });
-    expect(within(sheet).getByText(/100 MB.*50 MB.*smaller or lower-resolution/i)).toBeInTheDocument();
+    expect(within(sheet).getByText(/100 MB.*50 MB.*smaller, lower-resolution/i)).toBeInTheDocument();
     expect(within(sheet).queryByText(/trim.*5 seconds/i)).not.toBeInTheDocument();
     expect(vi.mocked(request).mock.calls.some(([input]) => String(input) === "/api/media/sign")).toBe(false);
   });
@@ -208,6 +208,7 @@ describe("video upload sheet (#778)", () => {
     if (!item) throw new Error("Missing queued item");
     expect(within(item).getByText("Waiting to upload…")).toBeInTheDocument();
     expect(within(item).queryByRole("button", { name: "Remove second.mov" })).not.toBeInTheDocument();
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
     finish({ error: null });
     await waitFor(() => expect(within(item).getByText("Added")).toBeInTheDocument());
     expect(upload).toHaveBeenCalledTimes(2);
