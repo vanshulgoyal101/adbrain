@@ -1,5 +1,6 @@
 "use client";
 import { useNotices } from "@/i18n/notices";
+import { createAdsTranslator, type Words } from "@/i18n/words";
 import { takePendingIdea } from "@/lib/ideas/pending";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
@@ -140,15 +141,16 @@ function createFactsLine(business: Pick<Business, "locations" | "offers" | "usps
   return `Your 3 ads will use: ${facts}`;
 }
 
-export function AdAssistant({ business, opening = null, occasions = [], onFlowStep }: {
+export function AdAssistant({ business, opening = null, occasions = [], onFlowStep, words }: {
   business: Business;
   opening?: OpeningLine | null;
   /** #700: today's festivals and seasons (IST), worked out on the server. */
   occasions?: Suggestion[];
   /** #760: "Brief" while the owner answers, "Create" once ads are being or have been made. */
   onFlowStep?: (step: "Brief" | "Create") => void;
+  words?: Words<"create">;
 }) {
-  const tn = useNotices();
+  const tn = useNotices(), t = createAdsTranslator(words), lang = words && words.locale !== "en" ? words.locale : undefined;
   const [goal, setGoal] = useState("");
   const [started, setStarted] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -613,31 +615,29 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
     const suggestions = creativeRecommendations(business, goal, recentGoals);
     const quick = Boolean(goal.trim()) && hasCreateFacts(business);
     return (
-      <section aria-label="Campaign brief" className="min-w-0 max-w-2xl">
+      <section aria-label={t("brief")} className="min-w-0 max-w-2xl">
         <div>
           <div className="flex flex-col gap-6">
-            <h2 className="text-xl font-semibold tracking-normal text-slate-950">
-              What would you like to achieve?
-            </h2>
+            <h2 lang={lang} className="text-xl font-semibold tracking-normal text-slate-950">{t("question")}</h2>
             {opening && (
               <div className="rounded-lg bg-slate-50 p-4">
                 <p className="text-sm text-slate-800">{opening.text}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {opening.moreLikeThis && (
-                    <Button size="sm" variant="outline" onClick={() => { setGoal(opening.moreLikeThis!.goal); setReferenceBrief(opening.moreLikeThis!.referenceBrief); }}>
-                      More like this
+                    <Button size="sm" variant="outline" lang={lang} onClick={() => { setGoal(opening.moreLikeThis!.goal); setReferenceBrief(opening.moreLikeThis!.referenceBrief); }}>
+                      {t("moreLikeThis")}
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" onClick={() => { setGoal(opening.newAngle.goal); setReferenceBrief(undefined); }}>
-                    New angle
+                  <Button size="sm" variant="outline" lang={lang} onClick={() => { setGoal(opening.newAngle.goal); setReferenceBrief(undefined); }}>
+                    {t("newAngle")}
                   </Button>
                 </div>
               </div>
             )}
             {occasions.length > 0 && (
               <div role="group" aria-labelledby="assistant-occasions" className="flex flex-wrap items-center gap-2">
-                <span id="assistant-occasions" className="flex items-center gap-1.5 text-sm text-slate-600">
-                  <CalendarDays size={15} aria-hidden="true" /> Coming up
+                <span id="assistant-occasions" lang={lang} className="flex items-center gap-1.5 text-sm text-slate-600">
+                  <CalendarDays size={15} aria-hidden="true" /> {t("comingUp")}
                 </span>
                 {occasions.map((o) => (
                   <Button key={o.id} size="sm" variant="outline" className="min-h-11" onClick={() => { setGoal(o.prompt); setReferenceBrief(undefined); }}>
@@ -648,9 +648,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
             )}
             <div className="min-w-0">
               {/* The question above is the visible label; this keeps the field's own name. */}
-              <label htmlFor="assistant-goal" className="sr-only">
-                Campaign goal
-              </label>
+              <label htmlFor="assistant-goal" lang={lang} className="sr-only">{t("goal")}</label>
               <Textarea
                 id="assistant-goal"
                 value={goal}
@@ -658,9 +656,9 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
                 rows={6}
                 maxLength={500}
                 className="rounded-md bg-slate-50/50 p-4 text-base leading-7 focus:bg-white"
-                placeholder="Who do you want to reach, and what would you like them to do?"
+                placeholder={t("goalPlaceholder")}
               />
-              <p className="mt-2 text-right text-xs tabular-nums text-slate-400" aria-label="Campaign goal length">{goal.length}/500</p>
+              <p className="mt-2 text-right text-xs tabular-nums text-slate-400" aria-label={t("goalLength")}>{goal.length}/500</p>
               <div className="mt-5 flex flex-col divide-y divide-slate-100 border-y border-slate-200">
                 {suggestions.map((s) => (
                   <button
@@ -674,22 +672,22 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
                 ))}
               </div>
               <div className="mt-5">
-                <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} />
+                <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} label={t("adLanguage")} lang={lang} />
               </div>
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {quick ? (
                   // #1004: the tap below starts the paid run, so say what it will use, with a way to check the brief first.
                   <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm text-slate-600">
                     <span className="min-w-0 break-words">{createFactsLine(business)}</span>
-                    <button type="button" onClick={() => start(true)} disabled={loading} className="min-h-11 font-medium text-blue-700 hover:underline">Edit brief</button>
+                    <button type="button" onClick={() => start(true)} disabled={loading} lang={lang} className="min-h-11 font-medium text-blue-700 hover:underline">{t("editBrief")}</button>
                   </p>
                 ) : <span aria-hidden="true" />}
                 <div className="flex flex-col items-end gap-1 self-end sm:self-auto">
-                  <Button onClick={() => start()} disabled={!goal.trim()}>
+                  <Button onClick={() => start()} disabled={!goal.trim()} lang={lang}>
                     {/* #858: this tap starts the 3 ads straight away, so it says so. */}
-                    {quick ? "Make 3 ads" : "Start creating"}
+                    {quick ? t("makeThree") : t("start")}
                   </Button>
-                  {quick && <p className="text-xs text-slate-500">About 2 minutes. Nothing is published.</p>}
+                  {quick && <p lang={lang} className="text-xs text-slate-500">{t("aboutTwoMinutes")}</p>}
                 </div>
               </div>
             </div>
@@ -700,12 +698,12 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   }
 
   return (
-    <section aria-label="Creative conversation" className="min-w-0">
+    <section aria-label={t("conversation")} className="min-w-0">
       <div className="flex min-w-0 flex-col gap-4">
         <div
           ref={scrollRef}
           role="region"
-          aria-label="Conversation history"
+          aria-label={t("history")}
           tabIndex={0}
           onScroll={(event) => {
             if (event.target !== event.currentTarget) return;
@@ -731,13 +729,13 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
             />
             {i === 0 && quickBrief && (
               <details className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600">
-                <summary className="flex min-h-11 cursor-pointer items-center font-medium text-slate-800">What I&apos;ll write about · Edit</summary>
+                <summary lang={lang} className="flex min-h-11 cursor-pointer items-center font-medium text-slate-800">{t("whatIllWrite")}</summary>
                 <p className="mt-1 whitespace-pre-line">{quickBrief}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <Button size="sm" variant="outline" onClick={editQuickBrief} disabled={phase === "generating" || loading}>
-                    <Pencil className="h-4 w-4" /> Edit brief
+                  <Button size="sm" variant="outline" lang={lang} onClick={editQuickBrief} disabled={phase === "generating" || loading}>
+                    <Pencil className="h-4 w-4" /> {t("editBrief")}
                   </Button>
-                  {phase === "generating" && <span className="text-xs text-slate-500">You can edit it once these ads are ready.</span>}
+                  {phase === "generating" && <span lang={lang} className="text-xs text-slate-500">{t("editLater")}</span>}
                 </div>
               </details>
             )}
@@ -747,27 +745,27 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
           {phase === "generating" && live ? (
             <CreateProgress ads={live} makingMore={makingMore} makingMorePictures={makingMorePictures} onUseSaved={() => useSavedRef.current?.()} renderReady={(creative) => <ResultCard creative={creative} brand={business} onEdited={(edited) => liveEditsRef.current.set(edited.id, edited)} />} />
           ) : (loading || phase === "generating") && (
-            <div role="status" className="flex items-center gap-2 text-sm text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" /> {phase === "generating" ? "Creating images and copy…" : "Preparing your brief…"}
+            <div role="status" lang={lang} className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> {t(phase === "generating" ? "creating" : "preparing")}
             </div>
           )}
           {stillMaking > 0 && (
-            <p role="status" className="text-sm text-slate-500">
-              {stillMaking === 1 ? "1 more ad is still being made. It's added here when it's ready." : `${stillMaking} more ads are still being made. They're added here when they're ready.`}
+            <p role="status" lang={lang} className="text-sm text-slate-500">
+              {stillMaking === 1 ? t("stillMakingOne") : t("stillMakingMany", { count: stillMaking })}
             </p>
           )}
         </div>
 
         {phase === "review" && prepared && (
-          <section aria-label="Review creative brief" className="min-w-0 border-t border-slate-200 pt-4">
-            <label htmlFor="prepared-brief" className="text-sm font-semibold text-slate-900">Creative brief</label>
+          <section aria-label={t("reviewBrief")} className="min-w-0 border-t border-slate-200 pt-4">
+            <label htmlFor="prepared-brief" lang={lang} className="text-sm font-semibold text-slate-900">{t("creativeBrief")}</label>
             <Textarea id="prepared-brief" value={prepared.brief} onChange={(event) => setPrepared({ ...prepared, brief: event.target.value, recommendations: undefined })} maxLength={2000} rows={7} className="mt-3 w-full" />
             <div className="mt-3">
-              <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} />
+              <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} label={t("adLanguage")} lang={lang} />
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <Button variant="outline" onClick={() => reset(goal, prepared.brief)} disabled={loading}><Pencil className="h-4 w-4" /> Revise goal</Button>
-              <Button onClick={() => generate(prepared.brief.trim(), language)} disabled={loading || !prepared.brief.trim()}><Sparkles className="h-4 w-4" /> Generate 3 ads</Button>
+              <Button variant="outline" lang={lang} onClick={() => reset(goal, prepared.brief)} disabled={loading}><Pencil className="h-4 w-4" /> {t("reviseGoal")}</Button>
+              <Button lang={lang} onClick={() => generate(prepared.brief.trim(), language)} disabled={loading || !prepared.brief.trim()}><Sparkles className="h-4 w-4" /> {t("generateThree")}</Button>
             </div>
           </section>
         )}
@@ -778,13 +776,13 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
               <span>{error}</span>
               <div className="flex flex-wrap gap-2">
                 {lastAction?.type === "step" && (
-                  <Button size="sm" variant="outline" onClick={changeAnswer} disabled={loading}>
-                    <Pencil className="h-4 w-4" /> Change my answer
+                  <Button size="sm" variant="outline" lang={lang} onClick={changeAnswer} disabled={loading}>
+                    <Pencil className="h-4 w-4" /> {t("changeAnswer")}
                   </Button>
                 )}
                 {lastAction && (
-                  <Button size="sm" variant="outline" onClick={retry} disabled={loading}>
-                    <RotateCcw className="h-4 w-4" /> {generationId ? "Check saved results" : "Try again"}
+                  <Button size="sm" variant="outline" lang={lang} onClick={retry} disabled={loading}>
+                    <RotateCcw className="h-4 w-4" /> {t(generationId ? "checkSaved" : "tryAgain")}
                   </Button>
                 )}
               </div>
@@ -794,36 +792,36 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
 
         {phase === "chat" && !generationId && (
           <div className="flex justify-end">
-            <Button size="sm" variant="ghost" onClick={() => reset()} disabled={loading}>
-              <RotateCcw className="h-4 w-4" /> Start over
+            <Button size="sm" variant="ghost" lang={lang} onClick={() => reset()} disabled={loading}>
+              <RotateCcw className="h-4 w-4" /> {t("startOver")}
             </Button>
           </div>
         )}
 
         {phase === "done" && (
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/studio" className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-blue-700 hover:bg-slate-100">
-              Review ads
+            <Link href="/studio" lang={lang} className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-blue-700 hover:bg-slate-100">
+              {t("reviewAds")}
             </Link>
-            <Button variant="ghost" onClick={() => reset()} disabled={stillMaking > 0} className="min-h-11">
-              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Make another
+            <Button variant="ghost" lang={lang} onClick={() => reset()} disabled={stillMaking > 0} className="min-h-11">
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> {t("makeAnother")}
             </Button>
           </div>
         )}
         {phase === "done" && selectedIds.length > 0 && (
           // #847: one primary for the whole result, pinned where a phone's thumb is.
           <div className="sticky bottom-3 z-20 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
-            <span className="text-sm text-slate-700">{selectedIds.length} selected</span>
+            <span lang={lang} className="text-sm text-slate-700">{t("selected", { count: selectedIds.length })}</span>
             {/* #1004: straight to Review; the composer prepares it once it has settled. #1152: one primary step,
                 not a second "Review" beside "Review ads". */}
-            <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}&review=1`} className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
-              Next: set up campaign <ArrowRight size={15} aria-hidden="true" />
+            <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}&review=1`} lang={lang} className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
+              {t("nextCampaign")} <ArrowRight size={15} aria-hidden="true" />
             </Link>
           </div>
         )}
         {phase === "done" && (
           <section aria-labelledby="more-ad-ideas" className="flex flex-col divide-y divide-slate-100 border-t border-slate-200">
-            <h3 id="more-ad-ideas" className="pb-1 pt-4 text-sm font-medium text-slate-500">Ideas for more ads</h3>
+            <h3 id="more-ad-ideas" lang={lang} className="pb-1 pt-4 text-sm font-medium text-slate-500">{t("moreIdeas")}</h3>
             {(prepared?.recommendations?.length ? prepared.recommendations : creativeFollowUps()).map((suggestion) => <button key={suggestion.label} type="button" onClick={() => reset(suggestion.prompt, prepared?.brief ?? goal)} disabled={stillMaking > 0} className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-700 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{suggestion.label}<ArrowRight size={15} className="shrink-0" aria-hidden="true" /></button>)}
           </section>
         )}

@@ -153,6 +153,30 @@ test.beforeAll(async () => {
   authCookies = browserCookies((await mintTestSession(email)).cookies, "http://localhost:3939");
 });
 
+test("Phone menu at 390px opens without a focus ring or auto-links (#2747)", async ({ page, context }, testInfo) => {
+  await context.addCookies(authCookies);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/dashboard");
+  await expect(page.locator('meta[name="format-detection"]')).toHaveAttribute("content", "telephone=no, address=no, email=no");
+  const menu = page.getByRole("button", { name: "Open navigation" });
+  await menu.click();
+  const drawer = page.getByRole("dialog", { name: "Workspace menu" });
+  await expect(drawer).toBeFocused();
+  const account = drawer.locator('[class*="account"]').filter({ has: page.locator('[class*="avatar"]') });
+  const row = account.locator(":scope > div").filter({ has: page.locator('[class*="avatar"]') });
+  await expect(row.locator("a")).toHaveCount(0);
+  await expect(row.locator('[class*="avatar"]')).toHaveCSS("text-decoration-line", "none");
+  // The initial must not sit in the text run next to the email, where iOS reads "D" + email as one address.
+  expect((await row.textContent())?.trim()).toBe((await row.locator("span[title]").getAttribute("title")) ?? "");
+  expect(await account.locator('[class*="avatar"]').evaluate((element) => getComputedStyle(element, "::before").content)).toMatch(/^"[A-Z]"$/);
+  await page.screenshot({ path: testInfo.outputPath("menu-390.png") });
+  await page.keyboard.press("Tab");
+  await expect(drawer.getByRole("link", { name: "AdBrain" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(drawer).not.toBeVisible();
+  await expect(menu).toBeFocused();
+});
+
 for (const width of [1440, 1024, 768, 390]) {
   test(`Home to Review at ${width}px`, async ({ page, context }, testInfo) => {
     await context.addCookies(authCookies);

@@ -1,6 +1,7 @@
 import { metaWaitFor } from "@/services/meta-throttle";
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
 import { requestWords, setupWords } from "@/i18n/request-locale";
+import { campaignsTranslator } from "@/i18n/words";
 import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
@@ -135,16 +136,15 @@ export default async function CampaignsPage({
       whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWords()} appReviewPending={metaAppReviewPending()} />;
   }
 
+  const campaignWords = await requestWords("campaigns");
+  const t = campaignsTranslator(campaignWords), lang = campaignWords.locale === "en" ? undefined : campaignWords.locale;
   return (
     <div>
-      <PageHeader
-        title="Campaigns"
-        description="Launch your approved ads on Meta, pause them and see what they bring in."
-      />
+      <PageHeader title={t("header.pageTitle")} description={t("header.pageDescription")} lang={lang} />
       {/* #757: warn a week before the Facebook connection stops working, while managing still works. */}
       {reconnectBy && (
         <Alert variant="warning" className="mt-6">
-          Reconnect Facebook by {reconnectBy} to keep managing your ads. <Link href="/settings" className="font-medium underline underline-offset-4">Open Settings</Link>
+          <span lang={lang}>{t("header.reconnectBy", { date: reconnectBy })} <Link href="/settings" className="font-medium underline underline-offset-4">{t("header.openSettings")}</Link></span>
         </Alert>
       )}
       <div className="mt-6">
@@ -168,7 +168,7 @@ export default async function CampaignsPage({
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
           verdictWords={await requestWords("verdict")}
-          campaignWords={await requestWords("campaigns")}
+          campaignWords={campaignWords}
           metaWaitUntil={campaigns.some((campaign) => campaign.meta_campaign_id) ? await metaWaitFor(business.id) : null}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
           internal={await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => isInternalUser(data.user)).catch(() => false)}
