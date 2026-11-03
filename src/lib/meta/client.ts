@@ -17,7 +17,7 @@ import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclu
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
 import {
-  fetchAdImage, findAdVideoByName, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoLookup, type AdVideoState,
+  fetchAdImage, findAdVideoByName, readAdVideo, startAdVideo, uploadAdImageBytes, videoStorySpec, type AdVideoLookup, type AdVideoState,
 } from "./media";
 import { readTrackingStatus, type TrackingEvent, type TrackingStatus } from "./pixels";
 import { collectLeadPages, formPageSchema, leadPageSchema, parseLeadPage, type MetaLeadPage } from "./lead-pages";
@@ -58,6 +58,8 @@ export interface CreativeInput {
   message: string;
   description?: string | null;
   cta?: string | null;
+  /** #781: an owner's video, already uploaded to this ad account (#749). `imageUrl` is only its poster and is not sent. */
+  videoId?: string | null;
   /**
    * The same ad at 9:16 for Stories and Reels (#333); without it every placement gets the 4:5 image.
    * May still be rendering: it is awaited only when its upload is due, so the render overlaps Meta's calls.
@@ -1297,7 +1299,7 @@ export class MetaClient {
     };
 
     // Upload each creative image once and reuse the hash across all ad sets.
-    const prepared: { input: CreativeInput; imageHash: string; storyHash: string | null }[] = [];
+    const prepared: { input: CreativeInput; imageHash: string; storyHash: string | null; videoThumbnail: string | null }[] = [];
     // Placement creatives must name the Page's Instagram account; without one, skip the 9:16 (#333).
     let instagramUserId: string | null = null;
     try {
@@ -1310,6 +1312,14 @@ export class MetaClient {
       }
       for (let creativeIndex = 0; creativeIndex < params.creatives.length; creativeIndex++) {
         const c = params.creatives[creativeIndex];
+        if (c.videoId) {
+          if (requested !== "instant_form" && requested !== "whatsapp") throw new MetaError("Video ads can't go to a website yet.");
+          const video = await this.readAdVideo(c.videoId);
+          if (video.status !== "ready" || !video.thumbnailUrl) throw new MetaError("This video isn't ready at Meta yet.");
+          await params.onCheckpoint?.({ phase: "creative", externalId: c.videoId, creativeIndex });
+          prepared.push({ input: c, imageHash: "", storyHash: null, videoThumbnail: video.thumbnailUrl });
+          continue;
+        }
         const imageHash = await this.uploadAdImage(c.imageUrl);
         await params.onCheckpoint?.({
           phase: "creative",
@@ -1329,6 +1339,7 @@ export class MetaClient {
           input: c,
           imageHash,
           storyHash,
+          videoThumbnail: null,
         });
       }
     } catch (error) {
@@ -1407,7 +1418,7 @@ export class MetaClient {
       await params.onCheckpoint?.({ phase: "adset", externalId: adSet.id, variantIndex: i });
 
       for (let creativeIndex = 0; creativeIndex < prepared.length; creativeIndex++) {
-        const { input: c, imageHash, storyHash } = prepared[creativeIndex];
+        const { input: c, imageHash, storyHash, videoThumbnail } = prepared[creativeIndex];
         const placement = storyHash && instagramUserId && hasPlacementCreative(destination)
           ? placementCreativeSpec({
             pageId: this.creds.pageId, instagramUserId, feedHash: imageHash, storyHash, headline: c.headline, message: c.message,
@@ -1416,9 +1427,17 @@ export class MetaClient {
             noFacebookReels: params.excludeFacebookReels,
           })
           : null;
+        const videoSpec = c.videoId && videoThumbnail && (destination === "instant_form" || destination === "whatsapp")
+          ? videoStorySpec({
+            pageId: this.creds.pageId, videoId: c.videoId, thumbnailUrl: videoThumbnail, message: c.message, headline: c.headline, description: c.description,
+            ...(destination === "instant_form"
+              ? { destination, leadFormId: params.leadFormId! }
+              : { destination, ...(params.whatsappGreeting ? { welcomeMessage: whatsappWelcomeMessage(params.whatsappGreeting) } : {}) }),
+          })
+          : null;
         const singleImageForm = {
           name: c.headline.slice(0, 90) || "AdBrain creative",
-          object_story_spec: JSON.stringify({
+          object_story_spec: JSON.stringify(videoSpec ?? {
             page_id: this.creds.pageId,
             link_data: {
               image_hash: imageHash,

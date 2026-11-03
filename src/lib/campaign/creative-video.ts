@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { MetaMediaStore } from "@/services/meta-media";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PreflightVideo = { state: "ready" | "processing" | "error"; reason: string | null };
+export type PreflightVideo = { state: "ready" | "processing" | "error"; reason: string | null; videoId?: string };
 
 export async function readCreativeVideos(
   store: Pick<MetaMediaStore, "asset" | "upload">,
@@ -26,7 +26,7 @@ export async function readCreativeVideos(
     const upload = await store.upload(asset.id, adAccountId);
     if (!upload || upload.status === "starting" || upload.status === "processing") videos.set(creativeId, { state: "processing", reason: null });
     else if (upload.status === "error") videos.set(creativeId, { state: "error", reason: VIDEO_PROBLEM_WORDS[upload.problem ?? "unknown"] });
-    else videos.set(creativeId, upload.videoId ? { state: "ready", reason: null } : { state: "processing", reason: null });
+    else videos.set(creativeId, upload.videoId ? { state: "ready", reason: null, videoId: upload.videoId } : { state: "processing", reason: null });
   }));
   return videos;
 }
