@@ -87,4 +87,14 @@ describe("#2600 website destination", () => {
   it("has every destination word in Hindi", () => {
     expect(keys(hi.campaigns.destination).sort()).toEqual(keys(en.campaigns.destination).sort());
   });
+
+  it("Review shows the button Meta receives for each ad's words (#2703)", () => {
+    const props = { selectedCount: 3, budget: 300, destination: "website" as const, audience: "Mohali", website: "example.com" };
+    const { rerender } = render(<CampaignLaunchReview {...props} adButtons={["Book Now"]} />);
+    expect(screen.getByText("Button on Facebook: Learn more")).toBeInTheDocument();
+    rerender(<CampaignLaunchReview {...props} adButtons={["Shop Now", "Sign up", "Book Now"]} />);
+    expect(screen.getByText("Button on Facebook: Shop now, Sign up, Learn more")).toBeInTheDocument();
+    rerender(<CampaignLaunchReview {...props} destination="whatsapp" whatsappNumber="+91 98•••" adButtons={["Shop Now"]} />);
+    expect(screen.queryByText(/Button on Facebook/)).toBeNull();
+  });
 });

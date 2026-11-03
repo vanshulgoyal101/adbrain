@@ -17,7 +17,6 @@ export function buildManualDraftInput(fields: {
   creativeIds: string[];
   dailyBudgetRupees: number;
   destination: Exclude<LeadDestination, "call">;
-  /** #2595: the website ad's button. */
   leadFormId: string;
   whatsappNumber: string;
   whatsappLanguage: WhatsAppLanguage;

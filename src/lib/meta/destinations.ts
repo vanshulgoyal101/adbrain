@@ -54,8 +54,10 @@ export function destinationPlan(dest: AdDestination): DestinationPlan {
   }
 }
 
+export type WebsiteCtaType = "SHOP_NOW" | "SIGN_UP" | "LEARN_MORE";
+
 /** #2598: a website ad's button from the ad's own button words: Shop now, Sign up, else Learn more. */
-function websiteCtaType(label: string | null | undefined): "SHOP_NOW" | "SIGN_UP" | "LEARN_MORE" {
+export function websiteCtaType(label: string | null | undefined): WebsiteCtaType {
   const words = (label ?? "").toLowerCase().replace(/[^a-z]+/g, " ").trim();
   if (/^(shop|buy|order) now$/.test(words)) return "SHOP_NOW";
   if (/^(sign up|register)$/.test(words)) return "SIGN_UP";

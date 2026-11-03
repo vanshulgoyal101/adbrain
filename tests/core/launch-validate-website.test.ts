@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/launch-validate-website.json";
 import { MetaClient, MetaError, destinationCTA, destinationPlan, editedCreativeForm } from "@/lib/meta/client";
-import { isWebsiteLink } from "@/lib/meta/destinations";
+import { isWebsiteLink, websiteCtaType } from "@/lib/meta/destinations";
 import { destinationFromAdSets } from "@/lib/campaign/outcomes";
 import { checkPlan, type PlannedCampaign } from "@/lib/campaign/plan-check";
 
@@ -107,6 +107,16 @@ describe("core: website-visits launch payloads Meta accepted with validate_only 
     "the %s button becomes Meta's %s with the website link",
     (label, type) => {
       expect(destinationCTA("website", { link: "https://shop.example.in/", ctaLabel: label })).toEqual({ type, value: { link: "https://shop.example.in/" } });
+    },
+  );
+
+  it.each([["Book Now", "LEARN_MORE"], ["Shop Now", "SHOP_NOW"], ["Sign up", "SIGN_UP"]])(
+    "Review's button for %s is the type launch sends (#2703)",
+    async (label, type) => {
+      expect(websiteCtaType(label)).toBe(type);
+      const sent = await launch({ cta: label });
+      const creative = sent.find((s) => s.kind === "adcreatives")!;
+      expect(JSON.parse(creative.form.object_story_spec).link_data.call_to_action.type).toBe(type);
     },
   );
 

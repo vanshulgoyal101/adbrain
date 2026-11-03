@@ -4,6 +4,7 @@ import { formatPerDay } from "@/lib/format";
 import type { WeeklyCapNotice } from "@/lib/campaign/spend";
 import { WeeklyCapLine } from "@/components/weekly-cap-line";
 import { WebsiteGoal, WebsiteReviewFact, websiteHref, type ComposerDestination } from "@/components/campaign-destination";
+import { websiteCtaType } from "@/lib/meta/destinations";
 import { campaignsTranslator, type Words } from "@/i18n/words";
 
 export function CampaignLaunchReview({
@@ -13,6 +14,7 @@ export function CampaignLaunchReview({
   destination = "whatsapp",
   whatsappNumber,
   website,
+  adButtons,
   audience,
   weeklyCap = null,
   words,
@@ -23,14 +25,17 @@ export function CampaignLaunchReview({
   destination?: ComposerDestination;
   /** The chosen WhatsApp button number, masked as the owner sees it. */
   whatsappNumber?: string;
-  /** #2595: the Brand website a website ad opens, and its button. */
+  /** #2595: the Brand website a website ad opens. */
   website?: string | null;
+  /** #2703: each selected ad's own button words; Review shows the button Meta receives for them. */
+  adButtons?: (string | null | undefined)[];
   audience: string;
   /** #1342: the Settings cap against this campaign's weekly commitment. */
   weeklyCap?: WeeklyCapNotice | null;
   words?: Words<"campaigns">;
 }) {
   const t = campaignsTranslator(words);
+  const buttonTypes = destination === "website" && adButtons?.length ? [...new Set(adButtons.map(websiteCtaType))] : [];
   const websiteLink = destination === "website" ? websiteHref(website) : null;
   const destinationReady = destination === "whatsapp" ? !!whatsappNumber : destination === "website" ? !!websiteLink : !!leadFormName;
   const isReady =
@@ -69,6 +74,7 @@ export function CampaignLaunchReview({
                 ? whatsappNumber ? `WhatsApp chat ${whatsappNumber}` : "WhatsApp chat (number verification pending)"
                 : leadFormName ?? "Choose a lead form"}
           </dd>
+          {buttonTypes.length > 0 && <dd className="mt-1 text-xs text-slate-700">{t("destination.reviewButton")}: {buttonTypes.map((type) => t(`destination.button.${type}`)).join(", ")}</dd>}
           {/* #906/#680/#2598: no destination runs on Audience Network, where taps were mostly accidental. */}
           <dd className="mt-1 text-xs text-slate-500">Shown on Facebook, Instagram and Messenger</dd>
         </div>
