@@ -258,7 +258,7 @@ export async function mediaViews(client: SupabaseClient, rows: MediaRow[]): Prom
     const paths = ready.filter((row) => (row.kind ?? "image") === kind).map((row) => row.path);
     if (!paths.length) continue;
     const { data: signed } = await client.storage.from(mediaBucket(kind)).createSignedUrls(paths, URL_SECONDS);
-    for (const item of signed ?? []) urls.set(item.path, item.signedUrl);
+    for (const item of signed ?? []) if (item.signedUrl) urls.set(item.path, item.signedUrl);
   }
   return rows.map((row) => ({
     id: row.id, kind: row.kind ?? "image", name: row.name, tags: row.tags ?? [], width: row.width, height: row.height, bytes: row.bytes,
