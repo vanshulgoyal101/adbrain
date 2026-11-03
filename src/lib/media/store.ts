@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { getEnv } from "@/lib/env";
 import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
 import {
-  isMediaMime, isMediaVideoMime, mediaBucket, MEDIA_EXTENSION, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, MEDIA_MONTHLY_UPLOADS,
+  isMediaMime, isMediaVideoMime, MAX_AD_PHOTOS, mediaBucket, MEDIA_EXTENSION, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, MEDIA_MONTHLY_UPLOADS,
   MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_EXTENSION, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, type MediaFit, type MediaMime,
 } from "@/lib/media/rules";
 
@@ -289,6 +289,18 @@ export async function ownMedia(client: SupabaseClient, id: string): Promise<Medi
   if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't load the photo. Try again.");
   if (!data) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
   return data as MediaRow;
+}
+
+/** #780 slice 2a: the photos the library sent to Create (`?photos=`), under the owner's RLS and in the owner's order.
+ * Bad, unknown, another business's, unready and video ids are dropped; Create re-checks them when it runs. */
+export async function pickedMediaViews(client: SupabaseClient, businessId: string, ids: readonly string[]): Promise<MediaView[]> {
+  const wanted = [...new Set(ids.filter((id) => UUID.test(id)))].slice(0, 10);
+  if (!wanted.length) return [];
+  const { data, error } = await client.from("media_assets").select(COLUMNS).in("id", wanted).eq("business_id", businessId)
+    .eq("status", "ready").eq("kind", "image").is("deleted_at", null);
+  if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't load your photos. Try again.");
+  const rows = new Map(((data ?? []) as MediaRow[]).map((row) => [row.id, row]));
+  return mediaViews(client, wanted.flatMap((id) => rows.get(id) ?? []).slice(0, MAX_AD_PHOTOS));
 }
 
 export async function updateMedia(admin: SupabaseClient, row: MediaRow, change: { name?: string | null; tags?: string[] }): Promise<MediaView> {

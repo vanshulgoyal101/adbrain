@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Business } from "@/lib/types";
 
@@ -13,8 +13,11 @@ vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, h
 const setupProps = vi.hoisted(() => vi.fn());
 vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
 const mediaOn = vi.hoisted(() => ({ value: false }));
-vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => mediaOn.value }));
-vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
+const pickedMediaViews = vi.hoisted(() => vi.fn<(client: unknown, businessId: string, ids: string[]) => Promise<unknown[]>>(async () => []));
+vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => mediaOn.value, pickedMediaViews }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rls: true }) }));
+const assistantProps = vi.hoisted(() => vi.fn());
+vi.mock("@/components/ad-assistant", () => ({ AdAssistant: (props: unknown) => { assistantProps(props); return <div>Assistant</div>; } }));
 // #1438: the owner's language comes from the app-language cookie; unset is English.
 const appLanguage = vi.hoisted(() => ({ value: undefined as string | undefined }));
 vi.mock("next/headers", () => {
@@ -174,6 +177,33 @@ describe("Create page for a first-timer (#1270)", () => {
     render(await CreatePage({ searchParams: Promise.resolve({ all: "1" }) }));
     expect(screen.getByRole("heading", { name: "Create ads" })).toBeInTheDocument();
     expect(screen.queryByText(/phone number/)).toBeNull();
+  });
+
+  it("#780 slice 2a: library photos (?photos=) show above the brief and go to Create as mediaIds, only with the flag on", async () => {
+    getPrimaryBusiness.mockResolvedValue(usable);
+    hasLaunchedCampaign.mockResolvedValue(true);
+    const photo = { id: "11111111-1111-4111-8111-111111111111", kind: "image", name: "Shop front", tags: [], width: 1080, height: 1350, bytes: 1, durationMs: null, fit: null, url: "https://example.com/p.jpg", createdAt: "2026-11-03T00:00:00Z" };
+    pickedMediaViews.mockResolvedValue([photo]);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    mediaOn.value = false;
+    const off = render(await CreatePage({ searchParams: Promise.resolve({ all: "1", photos: photo.id }) }));
+    expect(pickedMediaViews).not.toHaveBeenCalled();
+    expect(screen.queryByRole("heading", { name: "Your photos (1)" })).toBeNull();
+    off.unmount();
+    mediaOn.value = true;
+    try {
+      assistantProps.mockClear();
+      render(await CreatePage({ searchParams: Promise.resolve({ all: "1", photos: `${photo.id},not-an-id` }) }));
+      expect(pickedMediaViews).toHaveBeenCalledWith({ rls: true }, usable.id, [photo.id, "not-an-id"]);
+      expect(screen.getByRole("heading", { name: "Your photos (1)" })).toBeInTheDocument();
+      expect(screen.getByRole("img", { name: "Shop front" })).toHaveAttribute("src", photo.url);
+      expect(assistantProps).toHaveBeenLastCalledWith(expect.objectContaining({ mediaIds: [photo.id] }));
+      fireEvent.click(screen.getByRole("button", { name: "Remove photo 1" }));
+      expect(screen.queryByRole("heading", { name: "Your photos (1)" })).toBeNull();
+      expect(assistantProps).toHaveBeenLastCalledWith(expect.objectContaining({ mediaIds: [] }));
+    } finally {
+      mediaOn.value = false;
+    }
   });
 
   it("no service area is not usable: step 2 sends the first-timer back to step 1 (#1136 CEO)", async () => {

@@ -15,6 +15,8 @@ export const MEDIA_MAX_BYTES = 8 * 1024 * 1024;
 export const MEDIA_MIN_SIDE = 600;
 /** CPO #778 / #744: 50 uploads a month during pilots (deleting one doesn't give it back). */
 export const MEDIA_MONTHLY_UPLOADS = 50;
+/** #780: photos an owner picks from the library for one Create batch, each one ad's picture (ads 1-3). */
+export const MAX_AD_PHOTOS = 3;
 
 export const MEDIA_EXTENSION: Record<MediaMime, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 

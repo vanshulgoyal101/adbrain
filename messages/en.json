@@ -1513,7 +1513,10 @@
         "product_photo": "Product photo",
         "past_ad": "Past ad",
         "other": "Asset"
-      }
+      },
+      "select": "Pick {name}",
+      "makeAds": "Make ads from these ({n})",
+      "maxPhotos": "Pick up to {n} photos at a time."
     },
     "tile": {
       "more": "More for {name}",
@@ -1618,6 +1621,9 @@
     "makeAnother": "Make another",
     "selected": "{count} selected",
     "nextCampaign": "Next: set up campaign",
-    "moreIdeas": "Ideas for more ads"
+    "moreIdeas": "Ideas for more ads",
+    "yourPhotos": "Your photos ({n})",
+    "photosNote": "Each photo becomes one ad’s picture. The words come from your business details and what the photo shows.",
+    "removePhoto": "Remove photo {n}"
   }
 }

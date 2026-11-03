@@ -38,6 +38,7 @@ export function fakeSupabase() {
       update: (change: Row) => { action = { kind: "update", change }; return builder; },
       delete: () => { action = { kind: "delete" }; return builder; },
       eq: (column: string, value: unknown) => { filters.push((row) => row[column] === value); return builder; },
+      in: (column: string, values: unknown[]) => { filters.push((row) => values.includes(row[column])); return builder; },
       is: (column: string, value: unknown) => { filters.push((row) => (row[column] ?? null) === value); return builder; },
       gte: (column: string, value: string) => { filters.push((row) => String(row[column]) >= value); return builder; },
       lt: (column: string, value: string) => { filters.push((row) => String(row[column]) < value); return builder; },

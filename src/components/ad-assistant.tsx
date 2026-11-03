@@ -141,7 +141,7 @@ function createFactsLine(business: Pick<Business, "locations" | "offers" | "usps
   return `Your 3 ads will use: ${facts}`;
 }
 
-export function AdAssistant({ business, opening = null, occasions = [], onFlowStep, words }: {
+export function AdAssistant({ business, opening = null, occasions = [], onFlowStep, words, mediaIds = [] }: {
   business: Business;
   opening?: OpeningLine | null;
   /** #700: today's festivals and seasons (IST), worked out on the server. */
@@ -149,6 +149,8 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   /** #760: "Brief" while the owner answers, "Create" once ads are being or have been made. */
   onFlowStep?: (step: "Brief" | "Create") => void;
   words?: Words<"create">;
+  /** #780 slice 2a: the owner's library photos, one per ad. */
+  mediaIds?: string[];
 }) {
   const tn = useNotices(), t = createAdsTranslator(words), lang = words && words.locale !== "en" ? words.locale : undefined;
   const [goal, setGoal] = useState("");
@@ -419,7 +421,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({
-          businessId: business.id, brief, count, language, generationId: newGenerationId,
+          businessId: business.id, brief, count, language, generationId: newGenerationId, ...(mediaIds.length ? { mediaIds } : {}),
           sourceFacts: [goal.trim().slice(0, 500), ...answers
             .filter((answer) => !(answer.options ?? []).includes(answer.answer) && answer.answer !== AI_ANSWER && answer.answer !== RANDOM_ANSWER)
             .map((answer) => answer.answer.trim().slice(0, 500))].filter(Boolean).slice(0, 12),
