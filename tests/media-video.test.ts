@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
-import { MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, videoTrimSeconds } from "@/lib/media/rules";
+import { MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_BUDGET_BYTES, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, videoTrimSeconds } from "@/lib/media/rules";
 import { finalizeUpload, monthStartIst, signUpload, type MediaRow } from "@/lib/media/store";
 import { fakeSupabase } from "./helpers/media-fake";
 
@@ -121,6 +121,23 @@ describe("video uploads (#748)", () => {
     env.MEDIA_VIDEO_ENABLED = false;
     await expect(sign(tall)).rejects.toMatchObject({ status: 415, message: "Please choose a JPG, PNG or WebP photo." });
     expect(db.tables.media_assets).toEqual([]);
+  });
+
+  it("pauses new videos while Storage holds the budget (#2653): other businesses count, reclaimed and deleted files don't, a retry of a pending row isn't refused, photos work", async () => {
+    const held = (extra: Record<string, unknown>) => db.tables.media_assets.push({ business_id: "22222222-2222-4222-8222-222222222222", source: "upload", kind: "video", status: "ready", created_at: "2020-01-01T00:00:00.000Z", deleted_at: null, ...extra });
+    held({ sha256: "1".repeat(64), bytes: 50 * MB });
+    held({ sha256: "2".repeat(64), bytes: 50 * MB });
+    held({ sha256: "3".repeat(64), bytes: 40 * MB, storage_reclaimed_at: "2026-11-05T00:00:00.000Z" });
+    held({ sha256: "4".repeat(64), bytes: 40 * MB, deleted_at: "2026-11-04T00:00:00.000Z" });
+    held({ sha256: "5".repeat(64), bytes: 40 * MB });
+    expect(MEDIA_VIDEO_BUDGET_BYTES).toBe(150 * MB);
+    await expect(sign(tall, { bytes: 11 * MB })).rejects.toMatchObject({ status: 503, code: "MEDIA_VIDEO_PAUSED", message: "Video uploads are paused for a short while. Try again tomorrow or use photos." });
+    expect(db.tables.media_assets).toHaveLength(5);
+    expect(await sign(tall, { bytes: 10 * MB })).toMatchObject({ duplicate: false, bucket: "media-video" });
+    expect(await sign(tall, { bytes: 10 * MB })).toMatchObject({ duplicate: false });
+    expect(db.tables.media_assets).toHaveLength(6);
+    const photo = await signUpload(db.client, { businessId: BUSINESS, userId: "u", mime: "image/jpeg", bytes: 1000, sha256: "c".repeat(64), width: 1080, height: 1350, rightsConfirmedAt: "x" });
+    expect(photo).toMatchObject({ duplicate: false, bucket: "media" });
   });
 
   it(`stops at ${MEDIA_MONTHLY_VIDEOS} videos a month, says when more come, and photos still count on their own`, async () => {

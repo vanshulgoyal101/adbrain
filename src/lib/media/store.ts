@@ -5,7 +5,7 @@ import { getEnv } from "@/lib/env";
 import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
 import {
   isMediaMime, isMediaVideoMime, MAX_AD_PHOTOS, mediaBucket, MEDIA_EXTENSION, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, MEDIA_MONTHLY_UPLOADS,
-  MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_EXTENSION, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, type MediaFit, type MediaMime,
+  MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_BUDGET_BYTES, MEDIA_VIDEO_EXTENSION, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, type MediaFit, type MediaMime,
 } from "@/lib/media/rules";
 
 /**
@@ -62,6 +62,13 @@ export async function monthlyUploads(admin: SupabaseClient, businessId: string, 
   return count ?? 0;
 }
 
+/** Bytes of video our Storage holds now: files not yet reclaimed after Meta kept its copy (#2653), across all businesses. */
+export async function videoStorageBytes(admin: SupabaseClient): Promise<number> {
+  const { data, error } = await admin.from("media_assets").select("bytes").eq("kind", "video").is("storage_reclaimed_at", null).is("deleted_at", null);
+  if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
+  return ((data ?? []) as { bytes: number | null }[]).reduce((sum, row) => sum + (row.bytes ?? 0), 0);
+}
+
 function quotaError(kind: MediaKind, now = new Date()): MediaError {
   const limit = MEDIA_MONTHLY_LIMIT[kind];
   if (kind === "image") return new MediaError(429, "MEDIA_QUOTA", `You've used ${limit} of ${limit} photo uploads this month.`);
@@ -103,6 +110,10 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     existing = null;
   }
   if (!existing && await monthlyUploads(admin, input.businessId, kind) >= MEDIA_MONTHLY_LIMIT[kind]) throw quotaError(kind);
+  // A pending row already counts in the sum, so only a new row is checked. Parallel signs can pass together by at most one file; the budget sits 50 MB under the alert.
+  if (!existing && kind === "video" && await videoStorageBytes(admin) + input.bytes > MEDIA_VIDEO_BUDGET_BYTES) {
+    throw new MediaError(503, "MEDIA_VIDEO_PAUSED", "Video uploads are paused for a short while. Try again tomorrow or use photos.");
+  }
 
   // A pending row (an earlier try that didn't finish) is reused, so retrying never stores the file twice. It keeps its one
   // upload path, so every token ever signed for it targets that path: at most one unverified object per counted row
