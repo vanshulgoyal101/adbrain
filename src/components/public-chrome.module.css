@@ -1,4 +1,4 @@
-.header { max-width: 1440px; margin: auto; height: 80px; padding: 0 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.header { width: 100%; max-width: 1440px; margin-inline: auto; height: 80px; padding: 0 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .logo { display: inline-flex; align-items: center; min-height: 44px; gap: 10px; font-size: 17px; font-weight: 600; }
 .header nav { display: flex; align-items: center; gap: 32px; }
 .action { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 44px; font-weight: 600; }
