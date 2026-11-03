@@ -24,6 +24,8 @@ export function createOpenAICompatibleProvider(config: {
         headers: () => ({ Authorization: `Bearer ${ctx.apiKey}`, ...config.extraHeaders }),
         transformRequestBody: (body) => ({
           ...body,
+          // #780: a customer's photo goes only to providers that don't keep or train on it.
+          ...(config.name === "openrouter" && options.routing === "vision" ? { provider: { data_collection: "deny" } } : {}),
           ...(config.name === "openrouter" && options.reasoningEffort
             ? { reasoning: { effort: options.reasoningEffort, exclude: true } }
             // #668: models like Haiku 5.5 reason at "medium" unless told not to (~800 hidden tokens a plan).
