@@ -29,14 +29,17 @@ describe("readRegisteredApps", () => {
       return appsCall.body;
     });
     const apps = await readRegisteredApps(graph as never, account);
-    expect(apps).toEqual([{ id: (appsCall.body as Apps).data[0].id, name: "adBrain", storeUrls: [] }]);
+    expect(apps).toEqual([{ id: (appsCall.body as Apps).data[0].id, name: "adBrain", storeLinks: [] }]);
   });
 
   it("keeps iOS and Android links", async () => {
     const apps = await readRegisteredApps(
       graphReturning({ data: [{ id: "1", name: "A", object_store_urls: { itunes: "https://apps.apple.com/app/id1", google_play: "https://play.google.com/store/apps/details?id=a.b", fb_canvas: "https://x.test/" } }] }),
       account);
-    expect(apps?.[0].storeUrls).toEqual(["https://apps.apple.com/app/id1", "https://play.google.com/store/apps/details?id=a.b"]);
+    expect(apps?.[0].storeLinks).toEqual([
+      { platform: "ios", url: "https://apps.apple.com/app/id1" },
+      { platform: "android", url: "https://play.google.com/store/apps/details?id=a.b" },
+    ]);
   });
 
   it("is null (unreadable), never an empty list, when Graph fails, answers oddly or has more pages", async () => {
@@ -47,7 +50,7 @@ describe("readRegisteredApps", () => {
 });
 
 describe("appBlocker", () => {
-  const app = { id: "1", name: "A", storeUrls: ["https://apps.apple.com/app/id1/"] };
+  const app = { id: "1", name: "A", storeLinks: [{ platform: "ios" as const, url: "https://apps.apple.com/app/id1/" }] };
 
   it("blocks the recorded account: its app has no store link, so no link can match", async () => {
     const apps = await readRegisteredApps(graphReturning(appsCall.body), account);
@@ -63,6 +66,15 @@ describe("appBlocker", () => {
     expect(appBlocker([app], "not a url")).toEqual({ blocker: "no_store_link" });
     expect(appBlocker([app], "javascript:alert(1)")).toEqual({ blocker: "no_store_link" });
     expect(appBlocker([app], "https://apps.apple.com/app/id2")).toEqual({ blocker: "link_not_registered" });
+  });
+
+  it("refuses an http downgrade, a platform mismatch and two apps owning the same link", () => {
+    expect(appBlocker([app], "http://apps.apple.com/app/id1")).toEqual({ blocker: "no_store_link" });
+    expect(appBlocker([app], "https://apps.apple.com/app/id1", "android")).toEqual({ blocker: "link_not_registered" });
+    expect(appBlocker([app], "https://apps.apple.com/app/id1", "ios")).toEqual({ app });
+    const twin = { ...app, id: "2" };
+    expect(appBlocker([app, twin], "https://apps.apple.com/app/id1")).toEqual({ blocker: "ambiguous_app" });
+    expect(appBlocker([twin, app], "https://apps.apple.com/app/id1")).toEqual({ blocker: "ambiguous_app" });
   });
 
   it("passes the registered link, ignoring host case, www and a trailing slash", () => {

@@ -3,11 +3,13 @@
  * the only apps an OUTCOME_APP_PROMOTION campaign can promote. Read-only and adapter-shaped (ADR-001, #1792):
  * Graph in, channel-neutral `RegisteredApp`s out. A failed or malformed read is `null` (unreadable), never an empty list.
  */
-import type { RegisteredApp } from "@/lib/campaign/app-tracking";
+import type { RegisteredApp, StoreLink, StorePlatform } from "@/lib/campaign/app-tracking";
 import type { MetaGraph } from "./media";
 
 /** Meta's `object_store_urls` also lists `fb_canvas` and `instant_game`, which aren't install pages: only these keys count. */
-const STORE_KEYS = ["itunes", "itunes_ipad", "google_play", "amazon_appstore", "windows_10_store", "windows_phone_store"] as const;
+const STORE_PLATFORMS: Record<string, StorePlatform> = {
+  itunes: "ios", itunes_ipad: "ios", google_play: "android", amazon_appstore: "amazon", windows_10_store: "windows", windows_phone_store: "windows",
+};
 
 type RawApp = { id?: string; name?: string; object_store_urls?: Record<string, unknown> };
 
@@ -19,8 +21,11 @@ export async function readRegisteredApps(graph: MetaGraph, adAccountId: string):
     if (!Array.isArray(page.data) || page.paging?.next) return null;
     return page.data.flatMap((raw) => {
       if (typeof raw.id !== "string" || !/^\d+$/.test(raw.id)) return [];
-      const storeUrls = STORE_KEYS.flatMap((key) => (typeof raw.object_store_urls?.[key] === "string" ? [raw.object_store_urls[key] as string] : []));
-      return [{ id: raw.id, name: raw.name ?? "", storeUrls }];
+      const storeLinks: StoreLink[] = Object.entries(STORE_PLATFORMS).flatMap(([key, platform]) => {
+        const url = raw.object_store_urls?.[key];
+        return typeof url === "string" ? [{ platform, url }] : [];
+      });
+      return [{ id: raw.id, name: raw.name ?? "", storeLinks }];
     });
   } catch {
     return null;

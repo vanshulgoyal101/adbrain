@@ -3,19 +3,22 @@
  * the Meta adapter reads the ad account's registered apps; this rule decides from them. Fails closed: when the
  * apps couldn't be read, none is registered, or the link isn't one of a registered app's store pages, the answer is a blocker.
  */
-export type RegisteredApp = { id: string; name: string; storeUrls: string[] };
+export type StorePlatform = "ios" | "android" | "amazon" | "windows";
+export type StoreLink = { platform: StorePlatform; url: string };
+export type RegisteredApp = { id: string; name: string; storeLinks: StoreLink[] };
 
 export type AppBlocker =
   | "unreadable"
   | "no_app"
   | "no_store_link"
-  | "link_not_registered";
+  | "link_not_registered"
+  | "ambiguous_app";
 
-/** Compares links ignoring case in the host, a trailing slash, `www.` and the scheme's http/https difference. */
+/** Only https links count (an http link never matches a registered https listing). Ignores host case, `www.` and a trailing slash. */
 export function normalizeStoreUrl(raw: string): string | null {
   try {
     const url = new URL(raw.trim());
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    if (url.protocol !== "https:") return null;
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
     return `${host}${url.pathname.replace(/\/+$/, "")}${url.search}`;
   } catch {
@@ -23,12 +26,16 @@ export function normalizeStoreUrl(raw: string): string | null {
   }
 }
 
-/** The registered app whose store page is this link, or why none matches. `apps` is null when Meta's read failed. */
-export function appBlocker(apps: RegisteredApp[] | null, storeUrl: string | null | undefined): { blocker: AppBlocker } | { app: RegisteredApp } {
+/**
+ * The one registered app whose store page is this link (and, when given, on this platform), or why none is.
+ * `apps` is null when Meta's read failed. Two apps owning the same link is ambiguous, never "the first one".
+ */
+export function appBlocker(apps: RegisteredApp[] | null, storeUrl: string | null | undefined, platform?: StorePlatform): { blocker: AppBlocker } | { app: RegisteredApp } {
   if (apps === null) return { blocker: "unreadable" };
   if (!apps.length) return { blocker: "no_app" };
   const wanted = storeUrl ? normalizeStoreUrl(storeUrl) : null;
   if (!wanted) return { blocker: "no_store_link" };
-  const app = apps.find((candidate) => candidate.storeUrls.some((url) => normalizeStoreUrl(url) === wanted));
-  return app ? { app } : { blocker: "link_not_registered" };
+  const owners = apps.filter((candidate) => candidate.storeLinks.some((link) => normalizeStoreUrl(link.url) === wanted && (!platform || link.platform === platform)));
+  if (owners.length > 1) return { blocker: "ambiguous_app" };
+  return owners.length ? { app: owners[0] } : { blocker: "link_not_registered" };
 }
