@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { mediaBucket } from "@/lib/media/rules";
 import { readVerifiedMedia, type MediaRow } from "@/lib/media/store";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import {
@@ -52,9 +53,9 @@ export function supabaseMetaMediaStore(admin: Admin): MetaMediaStore {
   };
 }
 
-/** The signed link Meta pulls an owner's video from (private `media` bucket). */
+/** The signed link Meta pulls an owner's video from (its private bucket, `media-video` for videos: #748). */
 export async function signedMediaUrl(admin: Admin, asset: MediaAsset): Promise<string> {
-  const { data, error } = await admin.storage.from("media").createSignedUrl(asset.path, VIDEO_URL_SECONDS);
+  const { data, error } = await admin.storage.from(mediaBucket(asset.kind)).createSignedUrl(asset.path, VIDEO_URL_SECONDS);
   if (error || !data?.signedUrl) throw new Error("Couldn't prepare the video for Meta.");
   return data.signedUrl;
 }

@@ -14,8 +14,9 @@
 .business > svg { flex-shrink: 0; color: var(--muted); }
 .account { margin-top: auto; padding-top: 24px; font-size: 13px; }
 .help { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--primary-hover); }
-.account > div { display: flex; align-items: center; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
-.account > div > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+/* #2748: the email row only; a bare `.account > div` also caught Sign out's wrapper and shifted it 12px with a second line. */
+.me { display: flex; align-items: center; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
+.me > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .avatar { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-strong); color: var(--foreground); display: grid; place-items: center; font-size: 13px; font-weight: 600; }
 /* #2747: drawn by CSS, out of the text run, so iOS can't join the initial to the email as one address. */
 .avatar::before { content: attr(data-initial); }

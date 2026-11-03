@@ -58,7 +58,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
       />
       <nav
         aria-label="Business sections"
-        className="mt-5 flex gap-2 overflow-x-auto border-y border-slate-200/80 py-2 text-sm"
+        className="mt-5 flex gap-2 overflow-x-auto border-y border-slate-200/80 py-2 pr-10 text-sm [mask-image:linear-gradient(to_right,#000_calc(100%-40px),transparent)] md:pr-0 md:[mask-image:none]"
       >
         {[
           ["Basics", "brand-identity"],

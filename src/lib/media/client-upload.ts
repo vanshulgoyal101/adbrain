@@ -1,4 +1,5 @@
-import { isMediaMime, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, mediaFit, type MediaFit } from "@/lib/media/rules";
+import { mediaTranslator } from "@/i18n/words";
+import { isMediaMime, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, mediaFit, mediaFitWords, type MediaFit } from "@/lib/media/rules";
 import type { MediaView } from "@/lib/media/store";
 
 /**
@@ -7,27 +8,23 @@ import type { MediaView } from "@/lib/media/store";
  * CPO's (#1868 on #744).
  */
 export const MEDIA_PICK_MAX = 10;
-export const UPLOAD_WORDS = {
-  format: "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
-  failed: "This didn't upload. Check your connection and tap Try again.",
-  duplicate: "You already added this one; using the saved copy.",
-  rightsRequired: "Tick the box above to add your photos.",
-  // Uploads stop if the page closes, so the sheet and the library say the same thing (Designer, #1973 review item 3).
-  keepOpen: "You can close this. Keep this page open until it finishes.",
-  limitCount: (max: number) => `You can add up to ${max} at a time. Add the rest after these finish.`,
-  tooBig: (size: string, max: string) => `This file is ${size}; the limit is ${max}. Trim or compress it in your gallery and add it again.`,
-};
+/** A `media.*` key and its values; the screen says it in the owner's language. */
+export type UploadWords = { key: "upload.format" | "upload.failed" | "upload.rightsRequired" | "upload.tooBig" | "fit.tooSmall"; values?: Record<string, string | number> };
+const english = mediaTranslator();
 
 export type Prepared = { name: string; blob: Blob; bytes: number; width: number; height: number; sha256: string; fit: MediaFit };
 export type Encoded = { blob: Blob; width: number; height: number };
 export type Codec = (file: File, maxSide: number) => Promise<Encoded>;
 
+/** `words` is set for the browser's own reasons; without it `message` is the server's, already in the owner's language. */
 export class UploadError extends Error {
-  constructor(public code: string, message: string) {
+  constructor(public code: string, message: string, public words?: UploadWords) {
     super(message);
     this.name = "UploadError";
   }
 }
+
+const refusal = (code: string, words: UploadWords) => new UploadError(code, english(words.key, words.values), words);
 
 export function megabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
@@ -67,13 +64,13 @@ export async function sha256Hex(blob: Blob): Promise<string> {
 
 /** A picked file, ready to send, or an UploadError with the line to show under it. Nothing leaves the phone here. */
 export async function prepareImage(file: File, codec: Codec = browserCodec): Promise<Prepared> {
-  if (!isMediaMime(file.type)) throw new UploadError("MEDIA_FORMAT", UPLOAD_WORDS.format);
+  if (!isMediaMime(file.type)) throw refusal("MEDIA_FORMAT", { key: "upload.format" });
   let encoded: Encoded;
   try { encoded = await codec(file, MEDIA_MAX_LONG_SIDE); }
-  catch { throw new UploadError("MEDIA_FORMAT", UPLOAD_WORDS.format); }
+  catch { throw refusal("MEDIA_FORMAT", { key: "upload.format" }); }
   const fit = mediaFit(encoded.width, encoded.height);
-  if (fit.level === "too_small") throw new UploadError("MEDIA_TOO_SMALL", fit.message);
-  if (encoded.blob.size > MEDIA_MAX_BYTES) throw new UploadError("MEDIA_TOO_BIG", UPLOAD_WORDS.tooBig(megabytes(encoded.blob.size), megabytes(MEDIA_MAX_BYTES)));
+  if (fit.level === "too_small") throw refusal("MEDIA_TOO_SMALL", { key: "fit.tooSmall", values: { width: mediaFitWords(encoded.width, encoded.height).width } });
+  if (encoded.blob.size > MEDIA_MAX_BYTES) throw refusal("MEDIA_TOO_BIG", { key: "upload.tooBig", values: { size: megabytes(encoded.blob.size), max: megabytes(MEDIA_MAX_BYTES) } });
   const name = file.name.replace(/\.[^.]+$/, "").slice(0, 200) || "Photo";
   return { name, blob: encoded.blob, bytes: encoded.blob.size, width: encoded.width, height: encoded.height, sha256: await sha256Hex(encoded.blob), fit };
 }
@@ -86,14 +83,15 @@ async function postJson(deps: UploadDeps, url: string, body: unknown): Promise<R
   try {
     response = await deps.fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
   } catch {
-    throw new UploadError("MEDIA_NETWORK", UPLOAD_WORDS.failed);
+    throw refusal("MEDIA_NETWORK", { key: "upload.failed" });
   }
   const json = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
     const code = typeof json.code === "string" ? json.code : "MEDIA_UNAVAILABLE";
-    if (code === "MEDIA_RIGHTS_REQUIRED") throw new UploadError(code, UPLOAD_WORDS.rightsRequired);
-    // The server's own reasons (too small, monthly limit, can't read) are owner-facing; a crash isn't.
-    throw new UploadError(code, response.status < 500 && typeof json.error === "string" ? json.error : UPLOAD_WORDS.failed);
+    if (code === "MEDIA_RIGHTS_REQUIRED") throw refusal(code, { key: "upload.rightsRequired" });
+    // The server's own reasons (too small, monthly limit, can't read) are owner-facing and in their language; a crash isn't.
+    if (response.status < 500 && typeof json.error === "string") throw new UploadError(code, json.error);
+    throw refusal(code, { key: "upload.failed" });
   }
   return json;
 }
@@ -105,7 +103,7 @@ export async function uploadPrepared(businessId: string, file: Prepared, deps: U
   });
   if (signed.duplicate) return { status: "duplicate", asset: signed.asset as MediaView };
   const { error } = await deps.uploadToSignedUrl(String(signed.path), String(signed.token), file.blob).catch((caught: unknown) => ({ error: caught }));
-  if (error) throw new UploadError("MEDIA_NETWORK", UPLOAD_WORDS.failed);
+  if (error) throw refusal("MEDIA_NETWORK", { key: "upload.failed" });
   const finalized = await postJson(deps, "/api/media/finalize", { id: signed.id });
   return { status: "added", asset: finalized.asset as MediaView };
 }

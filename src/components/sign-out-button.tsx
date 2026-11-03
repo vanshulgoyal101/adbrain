@@ -47,7 +47,7 @@ export function SignOutButton({ label = "Sign out", failed = "Could not sign out
       aria-label={label}
       title={label}
       lang={lang}
-      className="w-full justify-start px-3 text-slate-600"
+      className="min-h-11 w-full justify-start gap-3 px-3 text-slate-600"
     >
       <LogOut className="h-4 w-4" />
       <span>{label}</span>

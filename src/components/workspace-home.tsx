@@ -151,10 +151,13 @@ export function WorkspaceHome({
                 </Link>
               </p>
             )}
+            {/* #2748: the work card already offers "Launch a campaign"; one start button per screen. */}
+            {next?.id !== "launch" && <>
             {/* #1934 (CPO #1924): a new offer re-runs the 3 steps in returning mode. */}
-            <Link href="/brand?again=1" className="inline-flex min-h-11 max-w-full items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 sm:ml-auto sm:shrink-0">
+            <Link href="/brand?again=1" className="inline-flex min-h-11 max-w-full whitespace-nowrap items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 sm:ml-auto sm:shrink-0">
               {t("newCampaign")}
             </Link>
+            </>}
           </div>
           <dl className="flex flex-wrap gap-x-8 gap-y-5 sm:gap-x-16">
             {[
@@ -293,12 +296,12 @@ export function WorkspaceHome({
               {creatives.slice(0, 4).map((creative) => (
                 <li key={creative.id} className="min-w-0">
                   <Link href={`/studio?creative=${encodeURIComponent(creative.id)}`} aria-label={`${creative.headline || "Untitled ad"}: ${reviewLabel(creative).toLowerCase()}`} className="group block">
-                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md bg-slate-100">
+                    <div className="flex aspect-[4/5] items-center justify-center overflow-hidden rounded-md bg-slate-100">
                       {creative.image_url ? (
                         <img
                           src={creativeThumbnailUrl(creative.image_url)}
                           alt={creative.headline || "Ad"}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain"
                           loading="lazy"
                         />
                       ) : (

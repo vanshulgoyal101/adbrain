@@ -1,6 +1,6 @@
 import { LockKeyhole, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatPerDay } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import type { WeeklyCapNotice } from "@/lib/campaign/spend";
 import { WeeklyCapLine } from "@/components/weekly-cap-line";
 import { WebsiteGoal, WebsiteReviewFact, websiteHref, type ComposerDestination, type ReviewAd } from "@/components/campaign-destination";
@@ -50,12 +50,10 @@ export function CampaignLaunchReview({
       <div>
         <p id="launch-review-title" className="flex items-center gap-2 font-semibold text-slate-950">
           <LockKeyhole className={cn("h-4 w-4 flex-none", isReady ? "text-emerald-700" : "text-slate-500")} aria-hidden="true" />
-          {isReady ? "Ready for campaign review" : "Review before creation"}
+          {isReady ? t("launchReview.readyTitle") : t("launchReview.reviewTitle")}
         </p>
         <p className="mt-0.5 text-sm text-slate-600">
-          {isReady
-            ? "AdBrain creates this campaign paused. Nothing spends until you activate it. Review these settings; Meta eligibility and audience checks still apply."
-            : "AdBrain creates this campaign paused. Nothing spends until you activate it."}
+          {isReady ? t("launchReview.readyBody") : t("launchReview.pausedBody")}
         </p>
       </div>
       <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -64,38 +62,38 @@ export function CampaignLaunchReview({
           <dd className="mt-1 font-medium text-slate-900"><WebsiteGoal words={words} /></dd>
         </div>}
         <div>
-          <dt className="text-xs text-slate-500">{destination === "website" ? t("destination.reviewWebsite") : "Lead destination"}</dt>
+          <dt className="text-xs text-slate-500">{destination === "website" ? t("destination.reviewWebsite") : t("launchReview.leadDestination")}</dt>
           <dd className={cn("mt-1 break-words font-medium", destinationReady ? "text-slate-900" : "text-amber-700")}>
             {destination === "website"
               ? <WebsiteReviewFact url={websiteLink} ads={websiteAds} words={words} />
               : destination === "whatsapp"
-                ? whatsappNumber ? `WhatsApp chat ${whatsappNumber}` : "WhatsApp chat (number verification pending)"
-                : leadFormName ?? "Choose a lead form"}
+                ? whatsappNumber ? t("launchReview.whatsappChat", { number: whatsappNumber }) : t("launchReview.whatsappPending")
+                : leadFormName ?? t("launchReview.chooseLeadForm")}
           </dd>
           {/* #906/#680/#2598: no destination runs on Audience Network, where taps were mostly accidental. */}
-          <dd className="mt-1 text-xs text-slate-500">Shown on Facebook, Instagram and Messenger</dd>
+          <dd className="mt-1 text-xs text-slate-500">{t("launchReview.shownOn")}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Ad</dt>
+          <dt className="text-xs text-slate-500">{t("launchReview.ad")}</dt>
           <dd className={cn("mt-1 font-medium", selectedCount ? "text-slate-900" : "text-amber-700")}>
-            {selectedCount ? `${selectedCount} selected` : "Select an ad"}
+            {selectedCount ? t("launchReview.selected", { n: selectedCount }) : t("launchReview.selectAd")}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Total daily budget</dt>
+          <dt className="text-xs text-slate-500">{t("launchReview.dailyBudget")}</dt>
           <dd className={cn("mt-1 font-medium", budget > 0 ? "text-slate-900" : "text-amber-700")}>
-            {budget > 0 ? formatPerDay(budget) : "Enter a budget"}
+            {budget > 0 ? t("launchReview.perDay", { money: formatMoney(budget) }) : t("launchReview.enterBudget")}
           </dd>
         </div>
         <div>
           <dt className="flex items-center gap-1 text-xs text-slate-500">
-            <MapPin className="h-3 w-3" /> Audience
+            <MapPin className="h-3 w-3" /> {t("launchReview.audience")}
           </dt>
           <dd className="mt-1 break-words font-medium text-slate-900">
             {audience}
           </dd>
           <dd className="mt-1 text-xs text-slate-500">
-            Meta may reach people beyond your age range and interests; never outside your area.
+            {t("launchReview.audienceNote")}
           </dd>
         </div>
       </dl>

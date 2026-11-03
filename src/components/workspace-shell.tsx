@@ -86,7 +86,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     <ChevronRight size={14} aria-hidden="true" />
   </Link>;
 
-  const account = <div className={styles.account}><HelpOnWhatsApp className={styles.help} label={labels.help} lang={lang} /><div><span className={styles.avatar} aria-hidden="true" data-initial={(email || "A").slice(0, 1).toUpperCase()} /><span title={email || undefined} lang={email ? undefined : lang}>{email || labels.yourAccount}</span></div><SignOutButton label={labels.signOut} failed={labels.signOutFailed} lang={lang} /><nav aria-label={labels.legal} lang={lang} className={styles.legal}>{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{labels[link.key]}</Link>)}</nav></div>;
+  const account = <div className={styles.account}><HelpOnWhatsApp className={styles.help} label={labels.help} lang={lang} /><div className={styles.me}><span className={styles.avatar} aria-hidden="true" data-initial={(email || "A").slice(0, 1).toUpperCase()} /><span title={email || undefined} lang={email ? undefined : lang}>{email || labels.yourAccount}</span></div><SignOutButton label={labels.signOut} failed={labels.signOutFailed} lang={lang} /><nav aria-label={labels.legal} lang={lang} className={styles.legal}>{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{labels[link.key]}</Link>)}</nav></div>;
 
   // #2747: showModal() focuses the first link (the logo), and WebKit draws the focus ring on a tap. Focus the
   // drawer itself instead; Tab still reaches the logo first, Esc closes and focus returns to the menu button.
