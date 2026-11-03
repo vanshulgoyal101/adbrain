@@ -251,6 +251,18 @@ describe("Management API migration transaction", () => {
     expect(() => managementMigrationSql("x'; drop table y; --.sql", sql, { commit: false })).toThrow(/filename/);
   });
 
+  it.each([
+    "select 1;\nstart transaction;\n",
+    "select 1;\nbegin transaction;\n",
+    "select 1;\nsavepoint example;\n",
+    "select 1;\nrelease savepoint example;\n",
+    "select 1;\nrollback to savepoint example;\n",
+    "select 1;\nend;\n",
+    "select 1;\nabort;\n",
+  ])("continues to reject unsafe transaction controls: %s", (migration) => {
+    expect(() => managementMigrationSql("20261024_x.sql", migration, { commit: false })).toThrow(/own transaction/);
+  });
+
   it("builds every migration in the repository with one begin and a final rollback", () => {
     for (const name of readdirSync("db/migrations").filter((file) => file.endsWith(".sql"))) {
       const dry = managementMigrationSql(name, readFileSync(`db/migrations/${name}`, "utf8"), { commit: false });
