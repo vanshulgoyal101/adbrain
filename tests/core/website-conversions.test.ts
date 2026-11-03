@@ -48,12 +48,20 @@ describe("core: website conversions from Meta insights (#2716)", () => {
     expect(decodeCampaignInsights({ data: [] }, "website", { conversionGoal: "leads" })).toMatchObject({ conversions: 0, conversionValue: null, costPerConversion: null, noDelivery: true });
   });
 
-  it("refuses an ambiguous or malformed value instead of showing a wrong one", () => {
+  it("an ambiguous or malformed conversion reads as unavailable, never a wrong number, and never fails spend or page views", () => {
     const row = provisional.sales.payload.data[0];
     const twice = { data: [{ ...row, action_values: [...row.action_values, { action_type: "offsite_conversion.fb_pixel_purchase", value: "1.00" }] }] };
-    expect(() => decodeCampaignInsights(twice, "website", { conversionGoal: "sales" })).toThrow(/ambiguous/);
     const bad = { data: [{ ...row, action_values: [{ action_type: "offsite_conversion.fb_pixel_purchase", value: "-5" }] }] };
-    expect(() => decodeCampaignInsights(bad, "website", { conversionGoal: "sales" })).toThrow(/invalid/);
+    const fractional = { data: [{ ...row, actions: [...row.actions.filter((action) => !action.action_type.includes("purchase")), { action_type: "offsite_conversion.fb_pixel_purchase", value: "2.5" }] }] };
+    for (const payload of [twice, bad, fractional]) {
+      const read = decodeCampaignInsights(payload, "website", { conversionGoal: "sales", requireSpend: true });
+      expect(read).toMatchObject({ conversionGoal: "sales", conversionsUnavailable: true, spend: 1200, landingPageViews: 84 });
+      expect(read).not.toHaveProperty("conversions");
+      expect(read).not.toHaveProperty("conversionValue");
+    }
+    const ads = decodeAdResults(provisional.sales.ads.list, { data: [{ ...provisional.sales.ads.insights.data[0], action_values: [{ action_type: "offsite_conversion.fb_pixel_purchase", value: "x" }] }] }, "website", "sales");
+    expect(ads[0]).toMatchObject({ conversionsUnavailable: true, landingPageViews: 60, spend: 800 });
+    expect(ads[0]).not.toHaveProperty("conversions");
   });
 
   it("visits, WhatsApp and form reads are unchanged: no conversion fields", () => {
@@ -106,6 +114,16 @@ describe("core: the client asks for action_values only for a conversion goal (#2
     expect(paths.filter((path) => path.includes("/insights?"))).toEqual([
       `${CAMPAIGN}/insights?fields=impressions,clicks,spend,actions,action_values,date_start,date_stop&date_preset=maximum`,
       `${CAMPAIGN}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions,action_values&date_preset=maximum&limit=100`,
+    ]);
+  });
+
+  it("the weekly spend check never asks for conversions, so a bad one can't pause anything", async () => {
+    const paths = graph("PURCHASE");
+    const weekly = await new MetaClient(creds).getCampaignInsights(CAMPAIGN, { weekly: true });
+    expect(weekly).toMatchObject({ spend: 1200 });
+    expect(weekly).not.toHaveProperty("conversionGoal");
+    expect(paths.filter((path) => path.includes("/insights?"))).toEqual([
+      `${CAMPAIGN}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=this_week_mon_today`,
     ]);
   });
 

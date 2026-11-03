@@ -1643,7 +1643,10 @@ export class MetaClient {
   }
 
   async getCampaignInsights(campaignId: string, options?: { weekly?: boolean }): Promise<CampaignInsights> {
-    const { destination, conversionGoal, state } = await this.readCampaignBinding(campaignId, true);
+    const binding = await this.readCampaignBinding(campaignId, true);
+    const { destination, state } = binding;
+    // The weekly spend check needs spend only, so it never asks for conversions.
+    const conversionGoal = options?.weekly ? null : binding.conversionGoal;
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,${conversionGoal ? "action_values," : ""}date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
     const insights = decodeCampaignInsights(data, destination, { requireSpend: options?.weekly, conversionGoal });

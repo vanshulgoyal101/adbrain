@@ -24,6 +24,8 @@ export interface CampaignInsights {
    * (null: Meta sent no value, not zero) and ₹ per conversion. Never enquiries.
    */
   conversionGoal?: ConversionGoal;
+  /** #2716: Meta sent a malformed or ambiguous conversion; the read keeps its page views and spend, conversions show as unavailable. */
+  conversionsUnavailable?: true;
   conversions?: number;
   conversionValue?: number | null;
   costPerConversion?: number | null;
@@ -92,14 +94,23 @@ function actionValue(row: InsightRow | undefined) {
   };
 }
 
-/** #2716: a website leads/sales goal's conversions, read from the same row as its page views. */
+/**
+ * #2716: a website leads/sales goal's conversions, read from the same row as its page views. Best effort: a bad
+ * conversion field never fails the read, because spend, page views and the spend checks depend on it.
+ */
 function conversionFigures(row: InsightRow | undefined, goal: ConversionGoal, spend: number) {
   const action = WEBSITE_CONVERSIONS[goal];
-  const conversions = actionCounter(row)(action.metaActions);
-  return { conversionGoal: goal, conversions, conversionValue: actionValue(row)(action.metaValueActions), costPerConversion: conversions > 0 ? spend / conversions : null };
+  try {
+    const conversions = actionCounter(row)(action.metaActions);
+    return { conversionGoal: goal, conversions, conversionValue: actionValue(row)(action.metaValueActions), costPerConversion: conversions > 0 ? spend / conversions : null };
+  } catch {
+    return { conversionGoal: goal, conversionsUnavailable: true as const };
+  }
 }
 
-const adConversions = ({ conversions, conversionValue }: ReturnType<typeof conversionFigures>) => ({ conversions, conversionValue });
+function adConversions(figures: ReturnType<typeof conversionFigures>) {
+  return "conversions" in figures ? { conversions: figures.conversions, conversionValue: figures.conversionValue } : { conversionsUnavailable: true as const };
+}
 
 const LEAD_ACTIONS = outcomeDefinition("instant_form").metaActions;
 /** #371/#789: the headline WhatsApp result; Meta also reports first replies and depth, which we don't switch to silently. */
@@ -163,7 +174,7 @@ export type AdResult = {
   /** #2601: a website campaign's ad also counts its results as landing-page views, so storage knows which they are. */
   landingPageViews?: number;
   /** #2716: a website leads/sales ad's pixel conversions and their value (null: none sent), apart from its page views. */
-  conversions?: number; conversionValue?: number | null;
+  conversions?: number; conversionValue?: number | null; conversionsUnavailable?: true;
   /** Archived (an audience edit rebuilt its ad set) or gone from the listing: its results count, but it can't be "Best so far". */
   replaced: boolean;
 };
