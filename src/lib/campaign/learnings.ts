@@ -25,6 +25,8 @@ export type LaunchSnapshotInput = {
   storyFormat: boolean;
   /** #789: `media` is the library photo or video the ad was made from (`readCreativeMedia`), if any. */
   creatives: { id: string; angle: string | null; generation: unknown; media?: CreativeMedia | null }[];
+  /** #789: the media read failed or timed out, so a null `mediaAssetId` means unknown, not "no photo". */
+  mediaUnknown?: boolean;
   /** #672: the ad sets' `targeting` forms as sent to Meta (from the plan check's payloads). */
   sentTargetings?: string[];
   /** #672: the Meta creative each ad runs on, in ad order. */
@@ -104,18 +106,20 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
     }),
     media: [...new Map(input.creatives.flatMap(({ media }) => media ? [[media.id, { mediaAssetId: media.id, kind: media.kind, source: media.source }] as const] : [])).values()],
     metaCreativeIds: input.metaCreativeIds ?? [],
+    ...(input.mediaUnknown ? { mediaUnknown: true as const } : {}),
     cap: null as null | { lifetimeRupees: number; days: number; endTime: string },
   };
 }
 
 /**
  * #789: the library asset each creative was made from, for the ledger. Best effort like the ledger itself:
- * any error or a read slower than 1.5 s (including a database without #2625's `media_asset_id` yet) gives no media, never a failed launch.
+ * any error or a read slower than 1.5 s (including a database without #2625's `media_asset_id` yet) gives
+ * `null` (unknown, distinct from an empty map meaning no photos), never a failed launch.
  */
-export async function readCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[], timeoutMs = MEDIA_READ_TIMEOUT_MS): Promise<Map<string, CreativeMedia>> {
+export async function readCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[], timeoutMs = MEDIA_READ_TIMEOUT_MS): Promise<Map<string, CreativeMedia> | null> {
   // Launch awaits this after Meta's create and before the campaign row is saved, so a stalled read must not hold it.
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timedOut = new Promise<Map<string, CreativeMedia>>(resolve => { timer = setTimeout(() => resolve(new Map()), timeoutMs); });
+  const timedOut = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); });
   try {
     return await Promise.race([lookupCreativeMedia(database, businessId, creativeIds), timedOut]);
   } finally {
@@ -125,26 +129,26 @@ export async function readCreativeMedia(database: SupabaseClient, businessId: st
 
 const MEDIA_READ_TIMEOUT_MS = 1500;
 
-async function lookupCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[]): Promise<Map<string, CreativeMedia>> {
+async function lookupCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[]): Promise<Map<string, CreativeMedia> | null> {
   const media = new Map<string, CreativeMedia>();
   try {
     if (!creativeIds.length) return media;
     const { data: links, error } = await database.from("creatives").select("id, media_asset_id").in("id", creativeIds).eq("business_id", businessId);
-    if (error || !Array.isArray(links)) return media;
+    if (error || !Array.isArray(links)) return null;
     const linked = (links as { id: string; media_asset_id: string | null }[]).filter(link => link.media_asset_id);
     if (!linked.length) return media;
     const { data: assets, error: assetError } = await database.from("media_assets").select("id, kind, source")
       .in("id", [...new Set(linked.map(link => link.media_asset_id!))]).eq("business_id", businessId);
-    if (assetError || !Array.isArray(assets)) return media;
+    if (assetError || !Array.isArray(assets)) return null;
     const byId = new Map((assets as CreativeMedia[]).map(asset => [asset.id, { id: asset.id, kind: asset.kind, source: asset.source }]));
     for (const link of linked) {
       const asset = byId.get(link.media_asset_id!);
       if (asset) media.set(link.id, asset);
     }
+    return media;
   } catch {
-    media.clear();
+    return null;
   }
-  return media;
 }
 
 /**

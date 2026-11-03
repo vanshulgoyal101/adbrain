@@ -109,7 +109,7 @@ describe("learning ledger snapshot (#588)", () => {
     });
     const creatives = { data: [{ id: "c1", media_asset_id: "m1" }, { id: "c2", media_asset_id: null }, { id: "c3", media_asset_id: "m1" }, { id: "c4", media_asset_id: "gone" }], error: null };
     const media = await readCreativeMedia(database({ creatives, media_assets: { data: [{ id: "m1", kind: "image", source: "upload" }], error: null } }) as never, "b1", ["c1", "c2", "c3", "c4"]);
-    expect([...media]).toEqual([["c1", { id: "m1", kind: "image", source: "upload" }], ["c3", { id: "m1", kind: "image", source: "upload" }]]);
+    expect([...media!]).toEqual([["c1", { id: "m1", kind: "image", source: "upload" }], ["c3", { id: "m1", kind: "image", source: "upload" }]]);
     expect(calls).toEqual([
       { table: "creatives", columns: "id, media_asset_id", filters: [["in", "id", ["c1", "c2", "c3", "c4"]], ["eq", "business_id", "b1"]] },
       { table: "media_assets", columns: "id, kind, source", filters: [["in", "id", ["m1", "gone"]], ["eq", "business_id", "b1"]] },
@@ -117,17 +117,23 @@ describe("learning ledger snapshot (#588)", () => {
 
     calls.length = 0;
     // No library photos: one read, nothing else asked.
-    expect((await readCreativeMedia(database({ creatives: { data: [{ id: "c2", media_asset_id: null }], error: null } }) as never, "b1", ["c2"])).size).toBe(0);
+    expect((await readCreativeMedia(database({ creatives: { data: [{ id: "c2", media_asset_id: null }], error: null } }) as never, "b1", ["c2"]))?.size).toBe(0);
     expect(calls.map(call => call.table)).toEqual(["creatives"]);
-    // Before #2625's column exists, a store error or a throw: no media, never an error.
+    // Before #2625's column exists, a store error or a throw: unknown (null, not "no photos"), never an error.
     const missingColumn = { data: null, error: { code: "42703", message: "column creatives.media_asset_id does not exist" } };
-    expect((await readCreativeMedia(database({ creatives: missingColumn }) as never, "b1", ["c1"])).size).toBe(0);
-    expect((await readCreativeMedia(database({ creatives, media_assets: { data: null, error: { code: "42P01" } } }) as never, "b1", ["c1"])).size).toBe(0);
-    expect((await readCreativeMedia({ from: () => { throw new Error("no table"); } } as never, "b1", ["c1"])).size).toBe(0);
-    expect((await readCreativeMedia(database({}) as never, "b1", [])).size).toBe(0);
+    expect(await readCreativeMedia(database({ creatives: missingColumn }) as never, "b1", ["c1"])).toBeNull();
+    expect(await readCreativeMedia(database({ creatives, media_assets: { data: null, error: { code: "42P01" } } }) as never, "b1", ["c1"])).toBeNull();
+    expect(await readCreativeMedia({ from: () => { throw new Error("no table"); } } as never, "b1", ["c1"])).toBeNull();
+    expect((await readCreativeMedia(database({}) as never, "b1", []))?.size).toBe(0);
     // A stalled read gives up rather than hold the launch.
     const hung = { from: () => ({ select: () => ({ in: () => ({ eq: () => new Promise(() => {}) }) }) }) };
-    expect((await readCreativeMedia(hung as never, "b1", ["c1"], 20)).size).toBe(0);
+    expect(await readCreativeMedia(hung as never, "b1", ["c1"], 20)).toBeNull();
+  });
+
+  it("marks a launch whose photos couldn't be read as unknown, not photo-less (#789)", () => {
+    const unknown = buildLaunchSnapshot({ ...base, creatives: [{ id: "c2", angle: null, generation: null }], mediaUnknown: true });
+    expect(unknown).toMatchObject({ version: 3, mediaUnknown: true, media: [], creatives: [{ id: "c2", mediaAssetId: null }] });
+    expect(buildLaunchSnapshot({ ...base, creatives: [{ id: "c2", angle: null, generation: null }] })).not.toHaveProperty("mediaUnknown");
   });
 
   it("copes with lead-form launches and old creatives without a receipt", () => {

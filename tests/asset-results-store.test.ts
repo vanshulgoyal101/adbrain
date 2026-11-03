@@ -117,6 +117,30 @@ describe("owner-scoped asset result storage", () => {
     expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "partial" }));
   });
 
+  it("recovers an unverified launch's photo on a later refresh, and writes nothing while it still can't be read (#789 QA hold)", async () => {
+    const creativeId = "00000000-0000-4000-8000-000000000001";
+    const mediaId = "00000000-0000-4000-8000-000000000002";
+    const tables = {
+      campaign_learnings: [{ business_id: "b1", campaign_id: "c1", snapshot: { version: 3, mediaUnknown: true, creatives: [{ id: creativeId, mediaAssetId: null }] } }],
+      creatives: [{ id: creativeId, business_id: "b1", media_asset_id: mediaId }],
+      media_assets: [{ id: mediaId, business_id: "b1", kind: "image", source: "upload" }],
+    };
+    const input = {
+      businessId: "b1", campaign: { ...campaign, creative_ids: [creativeId], meta_campaign_id: "1", meta_adset_id: "2", meta_ad_ids: ["101"],
+        raw: { source: "campaign_operation", metaResult: { campaignId: "1", adSetIds: ["2"], adIds: ["101"] } } },
+      ads: [{ adId: "101", creativeId: "501", ...result }],
+    };
+    const down = database(tables, "media_assets");
+    await refreshAdAssetResults(down.client as never, input as never);
+    expect(down.writes.filter(write => write.table === "campaign_ads")).toEqual([]);
+    expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "failed" }));
+
+    const healthy = database(tables);
+    await refreshAdAssetResults(healthy.client as never, input as never);
+    expect(healthy.writes.find(write => write.table === "campaign_ads")?.rows).toEqual([expect.objectContaining({ meta_ad_id: "101", creative_id: creativeId, media_asset_id: mediaId })]);
+    expect(healthy.reads.filter(read => !["campaign_ads", "ad_results"].includes(read.table)).every(read => read.filters.some(([field, value]) => field === "business_id" && value === "b1"))).toBe(true);
+  });
+
   it("keeps historical media results when the creative or its photo was deleted or moved to another business", async () => {
     const creativeId = "00000000-0000-4000-8000-000000000001";
     const mediaId = "00000000-0000-4000-8000-000000000002";

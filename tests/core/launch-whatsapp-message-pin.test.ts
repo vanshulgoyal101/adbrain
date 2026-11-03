@@ -13,7 +13,10 @@ vi.mock("@/lib/meta/whatsapp-bindings", () => ({ boundWhatsAppNumbers: async () 
 vi.mock("@/lib/creative/story", () => ({ renderStoriesWithin: (generations: unknown[]) => generations.map(() => null) }));
 vi.mock("@/lib/campaign/operation-store", () => ({ createOperationCheckpoint: () => ({ checkpoint: async (operation: unknown) => operation }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: async () => ({ data: { id: "campaign-row" }, error: null }) }));
-vi.mock("@/lib/campaign/learnings", () => ({ buildLaunchSnapshot: () => attribution.snapshot, readCreativeMedia: async () => new Map(), saveLaunchSnapshot: async () => true }));
+vi.mock("@/lib/campaign/learnings", () => ({
+  buildLaunchSnapshot: (input: { mediaUnknown?: boolean }) => attribution.snapshot && { ...attribution.snapshot, ...(input.mediaUnknown ? { mediaUnknown: true } : {}) },
+  readCreativeMedia: async () => attribution.media, saveLaunchSnapshot: async () => true,
+}));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: attribution.events }));
 
@@ -23,7 +26,7 @@ import type { ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { OperationRecord } from "@/lib/campaign/operations";
 import type { CampaignMutationCheckpoint } from "@/lib/meta/client";
 
-const attribution = vi.hoisted(() => ({ record: vi.fn(), events: vi.fn(), snapshot: null as null | { creatives: { id: string; mediaAssetId: string | null }[] } }));
+const attribution = vi.hoisted(() => ({ record: vi.fn(), events: vi.fn(), media: new Map() as Map<string, unknown> | null, snapshot: null as null | { creatives: { id: string; mediaAssetId: string | null }[] } }));
 vi.mock("@/lib/campaign/asset-results-store", () => ({ recordAdAssetLinks: attribution.record }));
 
 const solaride = { name: "Solaride", website: "https://solaride.in", locations: ["Chandigarh", "Panchkula", "Mohali"],
@@ -59,6 +62,7 @@ beforeEach(() => {
   attribution.record.mockReset().mockResolvedValue(undefined);
   attribution.events.mockClear();
   attribution.snapshot = null;
+  attribution.media = new Map();
   meta.createLeadCampaign.mockReset().mockResolvedValue({ destination: "whatsapp", campaignId: "c1", adSetId: "s1", adSetIds: ["s1"], adIds: ["a1"], creativeIds: ["cr1"] });
 });
 
@@ -94,6 +98,30 @@ describe("core: explicit launch attribution (#789), using the recorded reviewed 
     try {
       expect((await checkpointLaunch()).kind).toBe("succeeded");
       expect(attribution.events).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "failed" }));
+    } finally { vi.unstubAllEnvs(); }
+  });
+});
+
+describe("core: an unverified launch photo is never stored as no photo (#789 QA hold)", () => {
+  it("writes no ad links and logs a partial when the media read fails or times out, so refresh links them later", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    try {
+      attribution.media = null;
+      expect((await checkpointLaunch()).kind).toBe("succeeded");
+      expect(attribution.record).not.toHaveBeenCalled();
+      expect(attribution.events).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "partial", attributes: { errorCode: "media_unverified" } }));
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("writes no ad links when the launch snapshot couldn't be built", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    meta.createLeadCampaign.mockImplementation(async ({ onCheckpoint }: { onCheckpoint: (event: CampaignMutationCheckpoint) => Promise<void> }) => {
+      await onCheckpoint({ phase: "ad", externalId: "101", variantIndex: 0, creativeIndex: 0 });
+      return { destination: "whatsapp", campaignId: "1", adSetId: "2", adSetIds: ["2"], adIds: ["101"], creativeIds: ["501"] };
+    });
+    try {
+      expect((await launch(solaride)).kind).toBe("succeeded");
+      expect(attribution.record).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
 });

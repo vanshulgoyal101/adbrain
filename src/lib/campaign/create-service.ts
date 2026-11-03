@@ -150,7 +150,8 @@ export async function executeReviewedCampaign(input: {
               interests: (review.audienceInterests ?? []).map(interest => interest.name),
               whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill, prefillSource: message?.source,
               storyFormat: storyRendered, sentTargetings, metaCreativeIds: metaResult.creativeIds,
-              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation, media: media.get(creative.id) ?? null })),
+              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation, media: media?.get(creative.id) ?? null })),
+              mediaUnknown: !media,
             });
           } catch {
             launchSnapshot = null;
@@ -184,11 +185,14 @@ export async function executeReviewedCampaign(input: {
       if (launchSnapshot && !(await saveLaunchSnapshot(createAdminClient() as unknown as SupabaseClient, { campaignId: campaign.id, businessId: actor.businessId, snapshot: launchSnapshot }))) {
         recordProductEvent({ kind: "workflow", name: "campaign.learning_snapshot", outcome: "failed", businessId: actor.businessId });
       }
-      if (adResultsEnabled()) {
+      // #789: an unverified photo is never stored as "no photo"; the next results refresh links these ads instead.
+      if (adResultsEnabled() && (!launchSnapshot || launchSnapshot.mediaUnknown)) {
+        recordProductEvent({ kind: "workflow", name: "campaign.ad_attribution", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: "media_unverified" } });
+      } else if (adResultsEnabled()) {
         try {
           await recordAdAssetLinks(createAdminClient() as unknown as SupabaseClient, buildAdAssetLinks({
             businessId: actor.businessId, campaignId: campaign.id, creativeIds: draft.input.creativeIds,
-            mediaByCreative: new Map(launchSnapshot?.creatives.map(creative => [creative.id, creative.mediaAssetId]) ?? []),
+            mediaByCreative: new Map(launchSnapshot.creatives.map(creative => [creative.id, creative.mediaAssetId])),
             events: assetCheckpoints,
           }));
         } catch {

@@ -44,6 +44,12 @@ describe("quiet lifetime asset result badges", () => {
     rerender(<AssetResultsNotice results={{ ...ready(), unmatched: 2 }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Some ad results couldn't be linked to a photo or saved ad.");
   });
+  it("says an empty tile's results are not linked yet, not absent, while some ad results are unlinked", () => {
+    const { rerender } = render(<AssetResultBadge results={{ ...ready(), unmatched: 1 }} assetId="unread" kind="media" />);
+    expect(screen.getByText("Results not linked yet")).toBeInTheDocument();
+    rerender(<AssetResultBadge results={{ ...ready(), unmatched: 1 }} assetId="photo" kind="media" />);
+    expect(screen.getByText(/3 chats/)).toBeInTheDocument();
+  });
   it("uses Hindi words and a server-pinned clock even across a hydration time boundary", () => {
     const view = <AssetResultBadge results={ready()} assetId="photo" kind="media" words={{ locale: "hi", messages: hi.verdict }} />;
     const html = renderToString(view);

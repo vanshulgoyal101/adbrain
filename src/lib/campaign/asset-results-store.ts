@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AD_RESULT_COLUMNS, adCreativeLinks, saveAdResults } from "@/lib/campaign/ad-results-store";
 import { poolAssetResults, type AssetAdLink, type AssetAdResult, type AssetCampaign, type AssetResults } from "@/lib/campaign/asset-results";
 import { readAllByCursor } from "@/lib/supabase/queries";
+import { readCreativeMedia } from "@/lib/campaign/learnings";
 import { recordProductEvent } from "@/lib/observability/logger";
 import type { AdResult } from "@/lib/meta/insights";
 import type { Campaign } from "@/lib/types";
@@ -18,9 +19,10 @@ type Layout = Pick<Campaign, "id" | "creative_ids" | "meta_campaign_id" | "meta_
 const mediaSnapshot = z.object({
   version: z.literal(3),
   creatives: z.array(z.object({ id: z.uuid(), mediaAssetId: z.uuid().nullable() })).max(100),
+  mediaUnknown: z.literal(true).optional(),
 });
 
-/** Exact stored layouts only, including capped copies. Legacy runs without v3 media keep an unknown asset. */
+/** Exact stored layouts only, including capped copies. Legacy runs without v3 media keep an unknown asset; an unverified v3 launch writes nothing until its photos read. */
 export async function backfillAdAssetLinks(database: SupabaseClient, input: {
   businessId: string; campaign: Layout; ads: Pick<AdResult, "adId" | "creativeId">[];
 }): Promise<void> {
@@ -37,6 +39,12 @@ export async function backfillAdAssetLinks(database: SupabaseClient, input: {
   const parsed = mediaSnapshot.safeParse(data?.snapshot);
   if (!parsed.success && data?.snapshot?.version === 3) throw new Error("Launch attribution is invalid.");
   const media = new Map(parsed.success ? parsed.data.creatives.map(row => [row.id, row.mediaAssetId]) : []);
+  if (parsed.success && parsed.data.mediaUnknown) {
+    // Launch couldn't verify the photos; creatives.media_asset_id is set once at creation, so a later read is the launch's.
+    const read = await readCreativeMedia(database, businessId, parsed.data.creatives.map(row => row.id));
+    if (!read) throw new Error("Launch photos could not be verified.");
+    for (const creative of media.keys()) media.set(creative, read.get(creative)?.id ?? null);
+  }
   const ids = [...new Set([...media.values()].filter((id): id is string => id !== null))];
   if (ids.length) {
     const { data: assets, error: assetError } = await database.from("media_assets").select("id").eq("business_id", businessId).in("id", ids);

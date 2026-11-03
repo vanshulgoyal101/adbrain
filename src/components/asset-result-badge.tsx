@@ -20,7 +20,8 @@ export function AssetResultBadge({ results, words, assetId, kind }: AssetResultP
   if (!results || results.state !== "ready") return null;
   const t = verdictTranslator(words);
   const groups = (kind === "media" ? results.byMedia : results.byCreative)[assetId];
-  if (!groups?.length) return <p lang={words?.locale} className="text-xs text-slate-500">{t("assets.unread")}</p>;
+  // With unlinked ad results, an empty tile may still have results: say so instead of "No results yet".
+  if (!groups?.length) return <p lang={words?.locale} className="text-xs text-slate-500">{t(results.unmatched ? "assets.unknown" : "assets.unread")}</p>;
   return (
     <div lang={words?.locale} className="space-y-1 text-xs text-slate-600">
       {groups.map(group => {
