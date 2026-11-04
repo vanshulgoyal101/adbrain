@@ -171,6 +171,7 @@ describe("prepareCampaignReview checks a website ad's link (#2599)", () => {
       findForm: vi.fn(async () => base.form!),
       findWebsite: async () => "cedarridgechiro.com",
       findCostPerResult: vi.fn(async () => 40),
+      isMediaPilot: () => false,
       getConnection: async () => base.connection,
       resolveGeo: async () => base.geo,
       hash: () => "a".repeat(64),
@@ -204,5 +205,22 @@ describe("prepareCampaignReview checks a website ad's link (#2599)", () => {
     const result = await run(loaders("instant_form", { checkWebsite }));
     expect(checkWebsite).not.toHaveBeenCalled();
     expect(result.kind === "review" && result.review.blockers).toEqual([]);
+  });
+
+  it("applies pilot eligibility from the authorized actor during Review, never from the draft", async () => {
+    const value = loaders("instant_form");
+    const original = value.findDraft;
+    const creativeIds = Array.from({ length: 7 }, (_, index) => `${creativeId}-${index}`);
+    value.findDraft = async (actor, id) => {
+      const record = await original(actor, id);
+      return record && { ...record, input: { ...record.input, creativeIds } };
+    };
+    value.findCreatives = async () => creativeIds.map((id) => ({ ...input("instant_form").creatives[0], id }));
+    const isMediaPilot = vi.fn(() => true);
+    Object.assign(value, { isMediaPilot });
+    const result = await run(value);
+    expect(isMediaPilot).toHaveBeenCalledWith({ businessId, userId: "owner-1" });
+    expect(result.kind === "review" && result.review.canCreatePaused).toBe(false);
+    expect(result.kind === "review" && result.review.blockers.some((item) => item.reason === "REVIEW_CREATIVES")).toBe(true);
   });
 });

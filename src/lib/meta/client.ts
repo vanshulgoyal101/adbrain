@@ -28,6 +28,7 @@ export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, ty
 import { CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
 export { CREATIVE_FEATURES_OPT_OUT, CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
 export { buildGeoLocations, geoItemsToTargeting, hasGeo, pickBestGeoMatch } from "./geo";
+export { splitAgeRange } from "@/lib/campaign/ad-count";
 export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
 export type { CampaignDeliverySnapshot } from "./types";
 
@@ -704,24 +705,6 @@ export interface AdSetVariant {
   ageMax?: number;
   location?: GeoTargeting;
   excludedLocation?: GeoTargeting;
-}
-
-/**
- * Split an age range into two contiguous bands for an A/B test. Returns a single
- * band when the range is too narrow to split meaningfully.
- */
-export function splitAgeRange(
-  min: number,
-  max: number,
-): { ageMin: number; ageMax: number; label: string }[] {
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max - min < 6) {
-    return [{ ageMin: min, ageMax: max, label: `Age ${min}–${max}` }];
-  }
-  const mid = Math.floor((min + max) / 2);
-  return [
-    { ageMin: min, ageMax: mid, label: `Age ${min}–${mid}` },
-    { ageMin: mid + 1, ageMax: max, label: `Age ${mid + 1}–${max}` },
-  ];
 }
 
 /**

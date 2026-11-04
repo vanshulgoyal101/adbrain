@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Circle } from "lucide-react";
+import { VideoPrepare, type VideoPreparationState, type VideoPrepareWords } from "@/components/video-prepare";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import { SetupSpine } from "@/components/setup-spine";
 import { WeeklyCapLine } from "@/components/weekly-cap-line";
@@ -87,7 +88,7 @@ function ReviewPendingStatus({ tried, request, t, onRetry }: { tried: boolean; r
  * walks Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then
  * turn it on as a capped run of the chosen days (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
  */
-export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, returning = false, initialDaily, words, appReviewPending = false }: {
+export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, returning = false, initialDaily, words, prepareWords, videoAssetIds = [], appReviewPending = false }: {
   business: Pick<Business, "id" | "name" | "locations">;
   ads: Creative[];
   pageConnected: boolean;
@@ -103,6 +104,9 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   initialDaily?: number;
   /** #1438: the owner's app language (#1901: the picture badge's and #1989's review status too); English without it. */
   words?: SetupWords;
+  /** #781: the server-identified videos and the words shown while Meta prepares them. */
+  videoAssetIds?: string[];
+  prepareWords?: VideoPrepareWords;
   /** #1989: Meta App Review (#156) is pending, so a new Facebook account can't connect yet (`META_APP_REVIEW_PENDING`). */
   appReviewPending?: boolean;
 }) {
@@ -146,6 +150,17 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   }
   const [step, setStep] = useState<GoLiveStep | null>(null);
   const [result, setResult] = useState<GoLiveResult | null>(null);
+  const selectedVideoItems = pageConnected && prepareWords && result?.kind !== "live"
+    ? ads.flatMap((ad) => ad.media_asset_id && videoAssetIds.includes(ad.media_asset_id)
+      ? [{ id: ad.media_asset_id, label: ad.headline?.trim() || t("goLive.yourAd") }] : [])
+    : [];
+  const selectedVideos = selectedVideoItems.map((item) => item.id);
+  const videoKey = [...new Set(selectedVideos)].sort().join(",");
+  const [videoProgress, setVideoProgress] = useState<{ key: string; state: VideoPreparationState } | null>(null);
+  if (videoProgress && videoProgress.key !== videoKey) setVideoProgress(null);
+  const onVideoProgress = (state: VideoPreparationState) => setVideoProgress((current) =>
+    current?.key === videoKey && current.state === state ? current : { key: videoKey, state });
+  const videoNotReady = selectedVideos.length > 0 && (videoProgress?.key !== videoKey || videoProgress.state !== "ready");
   const running = useRef(false);
   // #1251 CPO/Dev 2: the most it can cost includes Meta's GST, worked out as activation's reserve check does.
   const total = capWithGstPaise({ dailyRupees: daily, days }) / 100;
@@ -180,7 +195,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
       ? { label: t("goLive.openCampaign"), href: "/campaigns?all=1" }
       : {
           label: t("goLive.goLive", { amount: formatMoney(daily) }),
-          disabled: Boolean(cap?.exceeds) || step !== null,
+          disabled: Boolean(cap?.exceeds) || step !== null || videoNotReady,
           onClick: () => void startGoLive(),
         };
 
@@ -264,6 +279,9 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         )}
         <Row labels={rowLabels} done title={t("goLive.stopsAt", { total: formatMoney(total) })} status={t("goLive.stopsDetail", { days, daily: formatMoney(daily) })} />
       </ul>
+      {prepareWords && pageConnected && result?.kind !== "live" && (
+        <VideoPrepare assetIds={selectedVideos} labels={Object.fromEntries(selectedVideoItems.map((item) => [item.id, item.label]))} words={prepareWords} onProgress={onVideoProgress} />
+      )}
       <p className="mt-4 text-sm text-slate-600">{t("goLive.metaChecks")}</p>
       {/* #718 (CEO, path A): AdBrain's own price, said before the first Go live. */}
       {ownAccount && !returning && <p className="mt-3 text-sm text-slate-600">{t("goLive.price")}</p>}

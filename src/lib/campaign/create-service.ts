@@ -9,8 +9,10 @@ import { buildCreativeReviewPayload, isReviewedWhatsAppMessage } from "./preflig
 import { createOperationCheckpoint } from "./operation-store";
 import { executeOperation, OperationPhaseError, OperationRolledBackError, recordExternalId, type OperationRecord } from "./operations";
 import { effectiveDailyBudget } from "./spend";
+import { campaignAdCount, MEDIA_PILOT_AD_LIMIT, splitAgeRange } from "./ad-count";
 import { savedCreativeDescription } from "@/lib/creative/concept";
-import { MetaCreateRolledBackError, splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
+import { MetaCreateRolledBackError, type CreateCampaignResult } from "@/lib/meta/client";
+import { mediaPilotEnabled } from "@/lib/media/pilot";
 import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { boundWhatsAppNumbers } from "@/lib/meta/whatsapp-bindings";
 import type { CampaignSupabase } from "./preflight-runtime";
@@ -63,6 +65,21 @@ export async function executeReviewedCampaign(input: {
       run: async () => {
         if (signal?.aborted) throw new OperationPhaseError("Campaign execution was stopped before transmission.", { transmitted: false });
         const targeting = draft.input.targeting;
+        let pilot: boolean;
+        try {
+          pilot = mediaPilotEnabled(actor.businessId);
+        } catch (error) {
+          console.error("Media pilot eligibility check failed.", error instanceof Error ? error.name : "UnknownError");
+          const failure = new OperationPhaseError("Media pilot eligibility could not be checked.", { transmitted: false });
+          failure.cause = error;
+          throw failure;
+        }
+        if (pilot !== Boolean(review.mediaPilot)) {
+          throw new OperationPhaseError("Media pilot eligibility changed. Check the campaign again before sending.", { transmitted: false });
+        }
+        if (pilot && campaignAdCount(draft.input.creativeIds.length, draft.input.abTest, targeting.age?.min, targeting.age?.max) > MEDIA_PILOT_AD_LIMIT) {
+          throw new OperationPhaseError(`This pilot can run at most ${MEDIA_PILOT_AD_LIMIT} ads. Check the campaign again before sending.`, { transmitted: false });
+        }
         const created = await withMetaConnection(actor, {
           purpose: "create_paused",
           binding: { adAccountId: review.selected!.adAccountId, pageId: review.selected!.pageId },

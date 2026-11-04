@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // #2599: a website ad launches to the Brand's own site, the link Review opened and hashed, never with a lead form.
-const meta = vi.hoisted(() => ({ createLeadCampaign: vi.fn(), saveCampaign: vi.fn() }));
+const meta = vi.hoisted(() => ({ createLeadCampaign: vi.fn(), saveCampaign: vi.fn(), connect: vi.fn(), mediaPilotEnabled: vi.fn() }));
 vi.mock("@/lib/meta/connection-access", () => ({
-  withMetaConnection: async (_actor: unknown, _options: unknown, run: (client: unknown) => unknown) => run(meta),
+  withMetaConnection: async (_actor: unknown, _options: unknown, run: (client: unknown) => unknown) => { meta.connect(); return run(meta); },
 }));
 vi.mock("@/lib/meta/whatsapp-bindings", () => ({ boundWhatsAppNumbers: async () => [] }));
 vi.mock("@/lib/creative/story", () => ({ renderStoriesWithin: (generations: unknown[]) => generations.map(() => null) }));
@@ -12,7 +12,7 @@ vi.mock("@/lib/campaign/operation-store", () => ({ createOperationCheckpoint: ()
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: meta.saveCampaign }));
 vi.mock("@/lib/campaign/learnings", () => ({ buildLaunchSnapshot: () => null, readCreativeMedia: async () => new Map(), saveLaunchSnapshot: async () => true }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
-vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => false }));
+vi.mock("@/lib/media/pilot", () => ({ mediaPilotEnabled: meta.mediaPilotEnabled }));
 vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: () => undefined }));
 
 import { executeReviewedCampaign } from "@/lib/campaign/create-service";
@@ -28,10 +28,10 @@ const creative = {
 const creativeHash = createHash("sha256").update(JSON.stringify(buildCreativeReviewPayload([{
   id: creative.id, businessId: "b1", approved: true, imageUrl: creative.image_url, headline: creative.headline, primaryText: creative.primary_text, cta: creative.cta, description: null,
 }]))).digest("hex");
-const draft = { id: "d1", version: 1, input: {
+const draftData = { id: "d1", version: 1, input: {
   name: "Cedar Ridge website", dailyBudgetRupees: 300, destination: "website", leadFormId: "form-left-over", creativeIds: [creative.id], abTest: false,
   targeting: { location: { mode: "ai", includedNames: ["Austin, Texas"] }, age: { min: 25, max: 55 } },
-} } as never;
+} };
 const review = {
   selected: { adAccountId: "act_9000000000000001", pageId: "900000000000002" }, connectionGeneration: 1, creativeHash,
   resolvedLocation: { cities: [{ key: "2421836" }] },
@@ -39,15 +39,23 @@ const review = {
 const operation = { operationId: "o1", businessId: "b1", kind: "campaign_create", idempotencyKey: "k", requestHash: "h", connectionGeneration: 1,
   state: "running", phase: "campaign", leaseUntil: null, attemptCount: 1, campaignId: null, externalIds: [] as string[], sanitizedError: null } satisfies OperationRecord;
 
-function launch(website: string, reviewed: string | null = websiteAdLink(website), websiteGoal?: ReviewDTO["websiteGoal"]) {
+function launch(website: string, reviewed: string | null = websiteAdLink(website), websiteGoal?: ReviewDTO["websiteGoal"],
+  overLimit?: { count: number; abTest: boolean; ageMin: number; ageMax: number }, reviewedPilot = Boolean(overLimit)) {
   const business = { name: "Cedar Ridge Chiropractic", website, locations: ["Austin, Texas"], offers: [], whatsapp_template: null };
   const businesses = { select: () => businesses, eq: () => businesses, maybeSingle: async () => ({ data: business, error: null }) };
   const creatives = { select: () => creatives, in: () => creatives, eq: () => creatives, then: (resolve: (value: unknown) => void) => resolve({ data: [creative], error: null }) };
   const database = { from: (table: string) => (table === "businesses" ? businesses : creatives) } as never;
-  return executeReviewedCampaign({ database, operationDatabase: database, actor: { businessId: "b1" } as never, draft, review: { ...review, websiteUrl: reviewed, ...(websiteGoal ? { websiteGoal } : {}) }, operation: { ...operation, externalIds: [] } });
+  const draft = overLimit ? { ...draftData, input: { ...draftData.input,
+    creativeIds: Array.from({ length: overLimit.count }, (_, index) => `${creative.id}-${index}`),
+    abTest: overLimit.abTest,
+    targeting: { ...draftData.input.targeting, age: { min: overLimit.ageMin, max: overLimit.ageMax } },
+  } } : draftData;
+  return executeReviewedCampaign({ database, operationDatabase: database, actor: { businessId: "b1" } as never, draft: draft as never, review: { ...review, websiteUrl: reviewed, ...(websiteGoal ? { websiteGoal } : {}), ...(reviewedPilot ? { mediaPilot: true } : {}) }, operation: { ...operation, externalIds: [] } });
 }
 
 beforeEach(() => {
+  meta.connect.mockReset();
+  meta.mediaPilotEnabled.mockReset().mockReturnValue(false);
   meta.createLeadCampaign.mockReset().mockResolvedValue({ destination: "website", campaignId: "c1", adSetId: "s1", adSetIds: ["s1"], adIds: ["a1"], creativeIds: ["cr1"] });
   meta.saveCampaign.mockReset().mockResolvedValue({ data: { id: "campaign-row" }, error: null });
 });
@@ -96,5 +104,50 @@ describe("core: website launch (#2599)", () => {
   it("a reviewed visits goal still launches and saves as traffic", async () => {
     expect((await launch("https://cedarridgechiro.com", undefined, "visits")).kind).toBe("succeeded");
     expect(meta.saveCampaign.mock.calls[0][1]).toMatchObject({ objective: "traffic" });
+  });
+
+  it.each([
+    { count: 7, abTest: false, ageMin: 25, ageMax: 55 },
+    { count: 4, abTest: true, ageMin: 25, ageMax: 55 },
+    { count: 7, abTest: true, ageMin: 25, ageMax: 30 },
+  ])("rechecks the pilot limit before contacting Meta for $count selected ads", async (input) => {
+    meta.mediaPilotEnabled.mockReturnValue(true);
+    const result = await launch("https://cedarridgechiro.com", undefined, undefined, input);
+    expect(result.kind).toBe("failed");
+    expect(result.operation.sanitizedError).toMatch(/6 ads/i);
+    expect(meta.connect).not.toHaveBeenCalled();
+    expect(meta.createLeadCampaign).not.toHaveBeenCalled();
+    expect(meta.saveCampaign).not.toHaveBeenCalled();
+  });
+
+  it("refuses a previously reviewed pilot campaign after eligibility is revoked, before contacting Meta", async () => {
+    const result = await launch("https://cedarridgechiro.com", undefined, undefined, undefined, true);
+    expect(result.kind).toBe("failed");
+    expect(result.operation.sanitizedError).toMatch(/pilot.*changed/i);
+    expect(meta.mediaPilotEnabled).toHaveBeenCalledWith("b1");
+    expect(meta.connect).not.toHaveBeenCalled();
+    expect(meta.createLeadCampaign).not.toHaveBeenCalled();
+    expect(meta.saveCampaign).not.toHaveBeenCalled();
+  });
+
+  it("requires a fresh review when a previously regular business enters the pilot", async () => {
+    meta.mediaPilotEnabled.mockReturnValue(true);
+    const result = await launch("https://cedarridgechiro.com");
+    expect(result.kind).toBe("failed");
+    expect(meta.connect).not.toHaveBeenCalled();
+    expect(meta.createLeadCampaign).not.toHaveBeenCalled();
+  });
+
+  it("reports an eligibility-check failure as pre-transmission, not an uncertain Meta write", async () => {
+    meta.mediaPilotEnabled.mockImplementation(() => { throw new Error("configuration unavailable"); });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const result = await launch("https://cedarridgechiro.com");
+      expect(result.kind).toBe("failed");
+      expect(result.operation.sanitizedError).toMatch(/eligibility.*checked/i);
+      expect(meta.connect).not.toHaveBeenCalled();
+      expect(meta.createLeadCampaign).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalled();
+    } finally { error.mockRestore(); }
   });
 });

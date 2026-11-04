@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { runPreflight } from "@/lib/campaign/preflight";
+import { checkReviewFreshness, runPreflight } from "@/lib/campaign/preflight";
 import { REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
 
 // Production launch for Cedar Ridge (no website) on Oct 21, operation d88f0502: Meta
@@ -78,6 +79,70 @@ describe("core: launch preflight", () => {
     expect(warned.blockers).toEqual([]);
     expect(warned.planHash).toBe(review(null, "whatsapp", { storyReady: true, costPerResultRupees: 10, dailyBudgetRupees: 200 }).planHash);
     expect(review("https://cedarridgechiro.com").planWarnings).toEqual([REVIEW_WARNINGS.story]);
+  });
+});
+
+describe("core: media pilot ad limit (#781)", () => {
+  function pilotReview(count: number, abTest: boolean, min: number, max: number, enabled = true) {
+    const creativeIds = Array.from({ length: count }, (_, index) => `${creativeId}-${index}`);
+    return runPreflight({
+      draft: {
+        ...draft, destination: "instant_form", creativeIds, abTest,
+        targeting: { ...draft.targeting, age: { mode: "manual", min, max } },
+      },
+      draftId: "90d1d2bb-466c-4889-9af2-edb533e82531",
+      draftVersion: 2,
+      connection: { generation: 1, canCreatePaused: true, selected: {
+        metaBusinessId: null, adAccountId: "act_9000000000000001", accountName: "Solaride 101",
+        pageId: "900000000000002", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
+      } },
+      creatives: creativeIds.map((id) => ({ id, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "New-patient exam" })),
+      form: { id: draft.leadFormId, businessId, active: true },
+      website: "https://cedarridgechiro.com",
+      geo: { resolvedAreaLabel: "Austin, Texas", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "6840321905207", name: "Wellness" }] },
+      hash: (payload) => createHash("sha256").update(payload).digest("hex"),
+      ...{ mediaPilotEnabled: enabled },
+    });
+  }
+
+  it.each([
+    { count: 6, abTest: false, min: 25, max: 55, adSets: 1 },
+    { count: 3, abTest: true, min: 25, max: 55, adSets: 2 },
+    { count: 6, abTest: true, min: 25, max: 30, adSets: 1 },
+  ])("allows $count selected ads with $adSets actual ad sets", ({ count, abTest, min, max, adSets }) => {
+    const result = pilotReview(count, abTest, min, max);
+    expect(result.canCreatePaused).toBe(true);
+    expect(result.adSetCount).toBe(adSets);
+    expect(result.totalDailyBudgetRupees).toBe(200 * adSets);
+  });
+
+  it.each([
+    { count: 7, abTest: false, min: 25, max: 55, total: 7 },
+    { count: 4, abTest: true, min: 25, max: 55, total: 8 },
+    { count: 7, abTest: true, min: 25, max: 30, total: 7 },
+  ])("blocks $count selected ads when they produce $total ads", ({ count, abTest, min, max, total }) => {
+    const result = pilotReview(count, abTest, min, max);
+    expect(result.canCreatePaused).toBe(false);
+    expect(result.planHash).toBeNull();
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: "REVIEW_CREATIVES", message: expect.stringMatching(new RegExp(`6.*${total}|${total}.*6`)) }),
+    ]));
+  });
+
+  it("keeps the existing uncapped behavior when media uploads are off", () => {
+    const result = pilotReview(7, false, 25, 55, false);
+    expect(result.canCreatePaused).toBe(true);
+    expect(result.blockers).toEqual([]);
+  });
+
+  it("invalidates a checked plan when the business enters or leaves the pilot", () => {
+    const pilot = pilotReview(3, false, 25, 55);
+    const regular = pilotReview(3, false, 25, 55, false);
+    expect(pilot.planHash).not.toBe(regular.planHash);
+    expect(pilot).toHaveProperty("mediaPilot", true);
+    expect(regular).not.toHaveProperty("mediaPilot");
+    const expected = { draftVersion: pilot.draftVersion, connectionGeneration: pilot.connectionGeneration, planHash: pilot.planHash! };
+    expect(checkReviewFreshness(regular, expected)).toEqual({ fresh: false, reason: "REVIEW_CHANGED" });
   });
 });
 

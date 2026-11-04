@@ -35,7 +35,7 @@ describe("readCreativeVideos (#781)", () => {
     expect(videos.get("c1")?.state).toBe("processing");
   });
   it("an error carries Meta's reason in plain words", async () => {
-    expect((await read("video", upload({ status: "error", problem: "format" }))).get("c1")).toEqual({ state: "error", assetId: "m1", reason: expect.stringContaining("MP4 or MOV") });
+    expect((await read("video", upload({ status: "error", problem: "format" }))).get("c1")).toEqual({ state: "error", assetId: "m1", reason: expect.stringContaining("MP4 or MOV"), problem: "format" });
   });
 });
 
@@ -46,6 +46,21 @@ describe("fail closed on linked media (#781)", () => {
       const videos = await readCreativeVideos({ asset: async () => asset as MediaAsset | null, upload: async () => upload({ status: "ready", videoId: "v1" }) }, businessId, "act_1", [{ creativeId: "c1", mediaAssetId: "m1" }]);
       expect(videos.get("c1")?.state).toBe("error");
     }
+  });
+  it("does not turn a saved photo ad into a video error when its library source is removed", async () => {
+    const photo = { id: "m1", businessId, kind: "image", status: "ready", deletedAt: "2026-11-03T00:00:00Z", path: "p" } satisfies MediaAsset;
+    const videos = await readCreativeVideos({ asset: async () => photo, upload: async () => null }, businessId, undefined, [{ creativeId: "c1", mediaAssetId: "m1" }], false);
+    expect(videos.size).toBe(0);
+  });
+});
+
+describe("uploads switched off after a video was linked (#781)", () => {
+  it("a linked video stays unlaunchable instead of going as its poster; a photo still passes", async () => {
+    const ready = upload({ status: "ready", videoId: "v1" });
+    const video = await readCreativeVideos(store("video", ready), businessId, "act_1", [{ creativeId: "c1", mediaAssetId: "m1" }], false);
+    expect(video.get("c1")).toMatchObject({ state: "error", assetId: "m1" });
+    const photo = await readCreativeVideos(store("image", null), businessId, "act_1", [{ creativeId: "c1", mediaAssetId: "m1" }], false);
+    expect(photo.size).toBe(0);
   });
 });
 
@@ -79,5 +94,39 @@ describe("Go live with a video (#781)", () => {
     const words = blocker({ state: "error", reason: "Meta couldn't use this video file. Try another video." })!;
     expect(words).toContain("Meta couldn't use this video file");
     expect(words).toContain("Take it out of this campaign");
+  });
+  it("explains Meta's format failure in Hindi instead of inserting English into the Hindi sentence", async () => {
+    const video = (await read("video", upload({ status: "error", problem: "format" }))).get("c1");
+    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"] }, ad(video), translator("hi", "review"))!;
+    expect(words).toMatch(/MP4/);
+    expect(words).toMatch(/MOV/);
+    expect(words).not.toContain("Meta can't read this kind of video");
+  });
+  it("describes a missing linked file without assuming it was a video, even for website ads", async () => {
+    const videos = await readCreativeVideos({ asset: async () => null, upload: async () => null }, businessId, "act_1", [{ creativeId: "c1", mediaAssetId: "m1" }]);
+    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"], destination: "website" }, ad(videos.get("c1")), say)!;
+    expect(words).toMatch(/file/i);
+    expect(words).not.toMatch(/video/i);
+  });
+  it.each([
+    ["unreachable", "भेज"],
+    ["format", "MP4"],
+    ["file", "फ़ाइल"],
+    ["too_small", "छोटा"],
+    ["invalid", "वीडियो"],
+    ["reconnect", "जोड़"],
+    ["throttled", "व्यस्त"],
+    ["unknown", "वीडियो"],
+  ] as const)("localizes the %s failure in Hindi", async (problem, expected) => {
+    const video = (await read("video", upload({ status: "error", problem }))).get("c1");
+    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"] }, ad(video), translator("hi", "review"))!;
+    expect(words).toContain(expected);
+    expect(words).not.toContain(video?.reason);
+  });
+  it("localizes a disabled video without falling back to English", async () => {
+    const video = (await readCreativeVideos(store("video", null), businessId, "act_1", [{ creativeId: "c1", mediaAssetId: "m1" }], false)).get("c1");
+    const words = creativesBlockerMessage({ businessId, creativeIds: ["c1"] }, ad(video), translator("hi", "review"))!;
+    expect(words).toContain("बंद");
+    expect(words).not.toContain(video?.reason);
   });
 });

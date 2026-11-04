@@ -692,8 +692,8 @@
       "openCampaigns": "Open Campaigns"
     },
     "access": {
-      "pending": "Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.",
-      "requested": "Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.",
+      "pending": "Connecting a new Facebook account requires Meta approval for AdBrain. You can make, approve and download ads now.",
+      "requested": "Your request is recorded. You can connect Facebook once Meta approves AdBrain. Until then, your approved ads stay here for you to download and share.",
       "requestFailed": "Your request did not send. Check your connection and try again.",
       "again": "Try again"
     },
@@ -765,6 +765,52 @@
     "closeNav": "Close navigation",
     "continueFirstAd": "Continue your first ad"
   },
+  "websiteTracking": {
+    "card": {
+      "title": "Website tracking",
+      "intro": "Only needed for website leads or sales.",
+      "legend": "Which tracking source should AdBrain use?",
+      "noSource": "No website tracking source is available to this ad account.",
+      "noSourceHelp": "Check Meta access or open Events Manager.",
+      "unreadable": "We couldn't check tracking for this ad account.",
+      "unreadableHelp": "Check Meta access, then try again.",
+      "choose": "Choose which tracking source to use.",
+      "quiet": "Meta hasn't seen any recent events.",
+      "missing": "Meta hasn't seen one or more events for website goals.",
+      "selectionUnavailable": "Choosing a tracking source is not available yet.",
+      "pixelUnavailable": "Unavailable",
+      "unnamed": "Tracking source {n}",
+      "leadCount": "Website leads (Lead): {n}",
+      "purchaseCount": "Sales (Purchase): {n}",
+      "window": "Checked from {since} to {until}",
+      "countsNote": "These are Meta events, not orders verified by AdBrain.",
+      "checkAgain": "Check again",
+      "checking": "Checking…",
+      "checkAccess": "Check Meta access",
+      "eventsManager": "Open Events Manager"
+    },
+    "goals": {
+      "legend": "What do you want from your website?",
+      "visits": "Visits",
+      "leads": "Website leads",
+      "sales": "Sales",
+      "needsTracking": "Needs tracking",
+      "unavailable": "Not available yet",
+      "missing": "Meta hasn't seen the event for this goal.",
+      "finish": "Finish tracking setup"
+    },
+    "review": {
+      "visitsHint": "Meta counts people who open your page.",
+      "leadsHint": "Meta reports Lead events, not customers verified by AdBrain.",
+      "salesHint": "Meta reports Purchase events, not orders verified by AdBrain.",
+      "attributionLabel": "Results counted within",
+      "attributionHelp": "Meta counts results after clicks or views in this period.",
+      "attributionUnavailable": "Not confirmed"
+    },
+    "chat": {
+      "draftMismatch": "We couldn't confirm the website goal on the saved draft. Check Saved drafts before retrying."
+    }
+  },
   "campaigns": {
     "header": {
       "running": "{n} running",
@@ -829,9 +875,14 @@
       "edit": "Edit",
       "editAd": "Edit {headline}",
       "thisAd": "ad",
-      "preparing": "Getting your photos and videos ready at Facebook…",
-      "prepared": "Your photos and videos are ready at Facebook.",
-      "prepareFailed": "Facebook couldn't take one of your files. Untick it, or try again later."
+      "preparing": "Facebook is preparing this video…",
+      "prepareLong": "Facebook is still preparing this video. You can wait here or check again later.",
+      "prepareWaiting": "Facebook is busy. We'll check this video again shortly.",
+      "prepared": "This video is ready at Facebook.",
+      "prepareFailed": "Facebook couldn't prepare this video. Try again or remove this ad.",
+      "pilotLimit": "This pilot can run up to {max} ads across all ad sets.",
+      "pilotLimitExceeded": "This pilot can run up to {max} ads, but this selection makes {count} ads across all ad sets. Remove an ad or change the audience test.",
+      "pilotLimitAtLeast": "This pilot can run up to {max} ads, but this selection will make at least {count} ads across all ad sets. Remove an ad or change the audience test."
     },
     "list": {
       "deleted": "Deleted ({n})",
@@ -1577,9 +1628,22 @@
     "adNoHeadline": "An ad you chose has no headline. Take it out of this campaign and choose another ad.",
     "adNotApproved": "The ad {named, select, yes {{name}} other {you chose}} isn't approved yet. Approve it on the Review page, or take it out of this campaign.",
     "adNoPicture": "The ad {named, select, yes {{name}} other {you chose}} has no picture yet. Take it out of this campaign and choose another ad.",
+    "adMediaGone": "The file {named, select, yes {in the ad {name}} other {in an ad you chose}} was removed or isn't ready. Take the ad out of this campaign, or replace it.",
     "adVideoProcessing": "Your video is still being prepared by Facebook. Try again in a few minutes.",
     "adVideoError": "The video {named, select, yes {in the ad {name}} other {you chose}} can't be used: {reason} Take it out of this campaign, or replace it.",
     "adVideoWebsite": "Videos can't go to a website yet{named, select, yes { (ad {name})} other {}}. Take the video out of this campaign, or choose WhatsApp or an instant form.",
+    "videoProblem": {
+      "unreachable": "Couldn't send your video to Meta. Try again.",
+      "format": "Meta can't read this kind of video. Use an MP4 or MOV from your phone.",
+      "file": "Meta couldn't use this video file. Try another video.",
+      "too_small": "This video is too small for Meta. Use a longer or larger video.",
+      "invalid": "Meta couldn't accept this video. Try another video.",
+      "reconnect": "Reconnect Facebook to send videos to Meta.",
+      "throttled": "Meta is busy. Try again in a minute.",
+      "unknown": "Meta couldn't take this video right now. Try again.",
+      "disabled": "Videos are switched off for now."
+    },
+    "pilotLimitExceeded": "This pilot can run up to {max} ads, but this selection makes {count} ads across all ad sets. Remove an ad or change the audience test.",
     "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
     "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
     "whatsappMessage": "Your WhatsApp message: {problem}",
@@ -1604,31 +1668,40 @@
     "websiteStatus": "Your website {host} answered with an error{coded, select, yes { ({status})} other {}} when AdBrain opened it. Check the address on the Your business page, or make sure the site is up, then review again.",
     "websiteBlocked": "{host} isn't a public website address. Add your business's public site on the Your business page.",
     "websiteRedirect": "Your website {host} sends visitors on to {known, select, yes {{finalHost}} other {another site}}. Add the address of your own site on the Your business page, so the ad opens your business.",
-    "trackingNone": "Your ad account has no website tracking (Meta pixel) yet, so Meta can't count {goal, select, leads {signups from this ad} other {sales from this ad}}. Add tracking to your site, or choose the visits goal.",
-    "trackingChoose": "Choose which website tracking counts {goal, select, leads {your signups} other {your sales}} on the Your business page, then review again.",
+    "trackingNone": "No website tracking source is available to this ad account, so Meta can't count {goal, select, leads {website leads} other {sales}} from this ad. Check that this ad account can use your Meta pixel, or set one up in Events Manager. Until then, choose the visits goal.",
+    "trackingChoose": "Choose which website tracking counts {goal, select, leads {your website leads} other {your sales}} on the Your business page, then review again.",
     "trackingUnreadable": "AdBrain couldn't read your website tracking from Meta. {reconnect, select, yes {Connect Facebook again, then review again.} other {Try reviewing again in a few minutes.}}",
     "trackingQuiet": "Your website tracking reported nothing from {since} to {until}{seen, select, yes { (last heard {lastSeen})} other {}}. Check that it is on your site, then review again, or choose the visits goal.",
-    "trackingEventMissing": "Your website tracking works but reported no {goal, select, leads {signup (Lead)} other {sale (Purchase)}} from {since} to {until}. Make sure your site sends it, then review again, or choose the visits goal.",
-    "goalWords": "The ad {named, select, yes {\"{headline}\"} other {you chose}} asks people {goal, select, leads {to buy, but this campaign looks for signups} other {to sign up, but this campaign looks for sales}}. Choose an ad that fits, or change the goal."
+    "trackingEventMissing": "Your website tracking works but reported no {goal, select, leads {website lead (Lead)} other {sale (Purchase)}} from {since} to {until}. Make sure your site sends it, then review again, or choose the visits goal.",
+    "goalWords": "The ad {named, select, yes {\"{headline}\"} other {you chose}} has a {goal, select, leads {Shop now button, but this campaign is for website leads} other {Sign up button, but this campaign is for sales}}. Choose an ad that fits, or change the goal.",
+    "salesFew": "With few recent purchases, results and spending can vary. We won't increase your budget or change your goal."
   },
   "media": {
     "page": {
       "title": "Photos",
-      "description": "Your own photos for {name}'s ads, and every ad AdBrain made."
+      "description": "Your own photos for {name}'s ads, and every ad AdBrain made.",
+      "videoTitle": "Photos & videos",
+      "videoDescription": "Your own photos and videos for {name}'s ads, and every ad AdBrain made."
     },
     "library": {
       "tabs": {
         "label": "Show",
         "all": "All",
         "photos": "Photos",
+        "videos": "Videos",
         "made": "Made by AdBrain"
       },
       "yours": "Your photos",
+      "yoursMedia": "Your photos & videos",
       "made": "Made by AdBrain",
       "add": "Add photos",
+      "addMedia": "Add photos & videos",
       "empty": "No photos yet. Add your own work: finished jobs, your shop, your team.",
+      "emptyMedia": "No photos or videos yet. Add your own work: finished jobs, your shop, your team.",
+      "noVideos": "No videos yet. Add a video of your work.",
       "noAds": "No ads yet. Every ad you create is saved here.",
       "photo": "Photo",
+      "video": "Video",
       "adFallback": "Ad creative",
       "approved": "Approved",
       "showMore": "Show more ({n} left)",
@@ -1655,25 +1728,35 @@
       "deleted": "Deleted ‘{name}’",
       "undo": "Undo",
       "ok": "OK",
-      "deleteFailed": "Couldn't delete the photo. Try again."
+      "deleteFailed": "Couldn't delete the photo. Try again.",
+      "deleteVideoFailed": "Couldn't delete the video. Try again."
     },
     "upload": {
       "title": "Add photos",
+      "titleMedia": "Add photos & videos",
       "description": "Your own work: finished jobs, your shop, your team.",
       "choose": "Choose photos",
+      "chooseMedia": "Choose photos and videos",
       "close": "Close",
       "picks": "Your picks",
+      "picksMedia": "Your picks",
       "checking": "Checking…",
+      "queued": "Waiting to upload…",
       "uploading": "Uploading…",
       "added": "Added",
       "tryAgain": "Try again",
+      "remove": "Remove {name}",
       "progress": "Uploading {n} of {total}…",
       "keepOpen": "You can close this. Keep this page open until it finishes.",
       "add": "{count, plural, =0 {Add photos} one {Add 1 photo} other {Add # photos}}",
+      "addMedia": "Add photos & videos",
+      "addVideos": "{count, plural, =0 {Add videos} one {Add 1 video} other {Add # videos}}",
+      "addFiles": "{count, plural, =0 {Add files} one {Add 1 file} other {Add # files}}",
       "duplicate": "You already added this one; using the saved copy.",
       "failed": "This didn't upload. Check your connection and tap Try again.",
       "limitCount": "You can add up to {max} at a time. Add the rest after these finish.",
       "rightsRequired": "Tick the box above to add your photos.",
+      "rightsRequiredMedia": "Tick the box above to add your photos or videos.",
       "consentFailed": "Your confirmation couldn't be saved. Try again.",
       "confirmTitle": "Confirm your rights to the photos in your ads",
       "confirmAction": "Confirm",
@@ -1683,12 +1766,25 @@
       "peopleText": "Everyone recognisable has agreed to appear in your ads.",
       "musicNote": "Music from films or popular songs can get your ad muted or rejected. Use your own audio or royalty-free music.",
       "format": "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
-      "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again."
+      "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again.",
+      "videoLimits": "{used} of {limit} video uploads used this month. Each video can be up to {max} and {seconds} seconds.",
+      "videoQuotaWarning": "A video uses one monthly spot when upload starts. Removing it won’t give the spot back.",
+      "videoWholeFileRetry": "If the connection drops, tap Try again to upload the video from the start.",
+      "videoQuotaLoading": "Checking video limits…",
+      "videoUnavailable": "Video uploads aren't available right now. You can still add photos.",
+      "videoQuotaError": "Couldn't check video limits. Try again; you can still add photos.",
+      "videoFormat": "This video can't be used. Choose a readable MP4 or MOV video.",
+      "videoTooBig": "This video is {size}; the limit is {max}. Save a smaller, lower-resolution copy and add it again.",
+      "videoTooBigTrim": "This video is {size}; the limit is {max}. Try trimming it to about {seconds} seconds, or save a smaller, lower-resolution copy.",
+      "videoTooLong": "This video is longer than {max} seconds. Trim it and add it again.",
+      "videoRejectedLarge": "This video is larger than {max}. Save a smaller, lower-resolution copy and add it again.",
+      "videoQuotaReached": "You've used all {limit} video upload spots for this month. Try again next month."
     },
     "fit": {
       "ok": "Ready for Feed, Stories and Reels",
       "square": "Square: fine for Feed.",
       "wide": "Wide ({ratio}): Feed shows it; Stories and Reels need a tall picture.",
+      "wideVideo": "Wide video ({ratio}): Feed only. Reels needs a tall (9:16) video.",
       "landscape": "landscape",
       "tooSmall": "Too small ({width} px wide). Use the original photo, not a screenshot or a WhatsApp copy."
     }

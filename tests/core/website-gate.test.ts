@@ -15,7 +15,7 @@ function loaders(destination: "website" | "whatsapp" | "instant_form", websiteGo
     input: { businessId, name: "Visits", goal: "Visits", mode: "manual", creativeIds: [], dailyBudgetRupees: 500, leadFormId: null, targeting: {}, abTest: false, destination, ...(websiteGoal ? { websiteGoal } : {}) } } as unknown as DraftRecord;
   const loadFailed = () => { throw new Error("stop after the gate"); };
   return { findDraft: vi.fn(async () => record), getConnection: vi.fn(loadFailed), findCreatives: vi.fn(loadFailed),
-    resolveGeo: vi.fn(loadFailed), hash: () => "a".repeat(64) } as unknown as PreflightLoaders & { getConnection: ReturnType<typeof vi.fn> };
+    isMediaPilot: () => false, resolveGeo: vi.fn(loadFailed), hash: () => "a".repeat(64) } as unknown as PreflightLoaders & { getConnection: ReturnType<typeof vi.fn> };
 }
 const review = (value: PreflightLoaders, websiteOpen?: () => boolean | Promise<boolean>) =>
   prepareCampaignReview(value, { actor, draftId, requestedDraftVersion: 1, now: "2026-11-01T00:00:00Z", websiteOpen });

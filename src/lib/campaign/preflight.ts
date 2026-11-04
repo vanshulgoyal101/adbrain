@@ -2,6 +2,7 @@ import { adPolicyHits, isHealthPromise } from "@/lib/campaign/ad-policy";
 import type { GeoTargeting } from "@/lib/meta/client";
 import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
+import { campaignAdCount, campaignAdSetCount, MEDIA_PILOT_AD_LIMIT } from "@/lib/campaign/ad-count";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
 import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE, type ReviewDestination } from "@/lib/campaign/plan-check";
@@ -94,6 +95,8 @@ export interface PreflightInput {
   locale?: AppLocale;
   /** #784: the owner confirmed the current rights terms; undefined when no ad uses their own photos. */
   mediaConsent?: boolean;
+  /** Server-side eligibility for the actor whose draft is being reviewed. */
+  mediaPilotEnabled?: boolean;
 }
 
 export type ReviewFreshnessInput = {
@@ -129,6 +132,7 @@ export interface CanonicalReviewPayload {
   pixelId?: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
+  mediaPilot?: true;
   excludeFacebookReels?: true;
   targeting: DraftInput["targeting"];
   resolvedAreaLabel: string | null;
@@ -205,6 +209,7 @@ export function buildCanonicalReviewPayload(
       ? { whatsappOpening: input.whatsappMessage.opening } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
+    ...(input.mediaPilotEnabled ? { mediaPilot: true as const } : {}),
     // #2273: only when on, so plans reviewed before this field keep their hash.
     ...(input.draft.excludeFacebookReels ? { excludeFacebookReels: true as const } : {}),
     targeting: input.draft.targeting,
@@ -318,7 +323,11 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
       : say("interestsUnnamed")));
   }
 
-  const adSetCount = draft.abTest ? 2 : 1;
+  const adSetCount = campaignAdSetCount(draft.abTest, age?.min, age?.max);
+  const adCount = campaignAdCount(draft.creativeIds.length, draft.abTest, age?.min, age?.max);
+  if (input.mediaPilotEnabled && adCount > MEDIA_PILOT_AD_LIMIT) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_CREATIVES", say("pilotLimitExceeded", { max: MEDIA_PILOT_AD_LIMIT, count: adCount })));
+  }
   const perAdSetDailyBudgetRupees = draft.dailyBudgetRupees;
   const totalDailyBudgetRupees = effectiveDailyBudget(perAdSetDailyBudgetRupees, adSetCount);
   const payload = buildCanonicalReviewPayload(input);
@@ -358,6 +367,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers,
     planHash,
     creativeHash,
+    ...(input.mediaPilotEnabled ? { mediaPilot: true as const } : {}),
     destination: draft.destination ?? "instant_form",
     whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
     ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),

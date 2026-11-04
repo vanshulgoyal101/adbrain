@@ -30,7 +30,7 @@ change Meta payloads, campaign objectives at create, budgets or spend.
 | PUT | `/api/campaign-drafts/[id]` | Version + input -> envelope draft | Versioned write |
 | DELETE | `/api/campaign-drafts/[id]` | `version` query -> envelope `{deleted:true}` | Retention-aware delete |
 | POST | `/api/campaigns/plan` | Goal/answers/optional audience draft -> plain result | Model; can save a draft |
-| POST | `/api/campaigns/preflight` | Draft ID/version/business -> envelope review | Provider verification, no campaign creation; a failed Meta read (e.g. the Page's WhatsApp number) is a retryable 503, never a setup blocker (#681). With `MEDIA_UPLOADS_ENABLED`, an ad made from an owner's video blocks Go live while Meta is still preparing it or after it failed (the reason is in the sentence), and on a website campaign (#781) |
+| POST | `/api/campaigns/preflight` | Draft ID/version/business -> envelope review | Provider verification, no campaign creation; a failed Meta read (e.g. the Page's WhatsApp number) is a retryable 503, never a setup blocker (#681). An ad linked to an owner's video blocks Go live while Meta is preparing it, after it failed, on a website campaign, or if either `MEDIA_UPLOADS_ENABLED` or `MEDIA_VIDEO_ENABLED` is off; it never falls back to the video's poster. Valid linked photos keep the photo path. Media and upload status are read with the owner's RLS client (#781) |
 | POST | `/api/campaigns/create` | Reviewed identifiers -> envelope operation | Worker mode enqueues (202); inline mode creates paused remote objects; a Meta read failing during the re-review is a retryable 503 with nothing sent (#681). A ready owner video is sent as `video_data` beside photos (instant form or WhatsApp); one that isn't ready, or a website campaign, stops before any Meta call (#781) |
 | GET | `/api/campaigns/list` | `businessId`, optional opaque `cursor`, `query` (max 200), `status` -> `{campaigns,results,nextCursor}` | Owner-scoped, at most 50 rows; latest stored result per returned campaign |
 | GET | `/api/campaigns/operations` | Business/key -> envelope operation or null | Recovery read; can expire stale leases |
@@ -69,7 +69,7 @@ change Meta payloads, campaign objectives at create, budgets or spend.
 | `destination` | Optional `instant_form` or `whatsapp`; absent means instant form |
 | `whatsappNumber` | Optional WhatsApp button number: E.164 or the masked form from `/api/meta/whatsapp` ("+91 ••••• 4842"). Preflight resolves it to the Page's number or one on the ad account business's WhatsApp Business Accounts; a mask must match exactly one |
 | `targeting` | Strict object below; `{}` can be saved but is not launch-ready |
-| `abTest` | Required boolean; true produces two age-band ad sets |
+| `abTest` | Required boolean; true splits into two age-band ad sets when the age range is at least six years wide, otherwise one |
 
 ### Targeting
 
@@ -172,6 +172,7 @@ nonnegative-safe-integer}`. Review data includes:
 | `serviceArea` | Optional, display only (#741): `excludedCities` (names), `keptStates`, `excludedStateCount`: the out-of-area exclusions launch adds; not part of `planHash` |
 | `planHash` | 64 lowercase hex characters, or null while blocked |
 | `creativeHash` | Optional content hash used by current execution |
+| `mediaPilot` | `true` only for an authorized business in the media pilot; server-generated and bound to `planHash`, never accepted in a create request |
 | `currency` | `INR` |
 | `perAdSetDailyBudgetRupees`, `adSetCount`, `totalDailyBudgetRupees` | Explicit budget multiplication |
 | `selected` | Verified Meta assets or null |
@@ -179,6 +180,12 @@ nonnegative-safe-integer}`. Review data includes:
 | `audienceInterests` | Resolved `{id,name}` entries, up to five |
 | `destination`, `whatsappNumber` | Optional destination and nullable E.164 number (`+` and 7-15 digits) |
 | `websiteUrl` | Website ads only: the https link Review opened and hashed; launch sends this link, and refuses before Meta without it (#2599) |
+
+For media-pilot businesses, Review blocks more than six ads after multiplying the
+selected ads by the actual number of age-band ad sets. It never silently drops
+ads. Both inline and worker creation recompute Review and recheck eligibility
+and the cap before contacting Meta; a change in pilot eligibility requires a new
+Review. Other businesses keep their uncapped behavior.
 
 Create body: `businessId`, `draftId` (UUIDs), `draftVersion`,
 `connectionGeneration` (nonnegative safe integers), `planHash` (64 lowercase hex),

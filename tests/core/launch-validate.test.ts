@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/launch-validate.json";
 import { MetaClient, type AdDestination } from "@/lib/meta/client";
 import { checkPlan, type PlannedCampaign } from "@/lib/campaign/plan-check";
+import { campaignAdCount, splitAgeRange } from "@/lib/campaign/ad-count";
 
 // #419 gate: every object AdBrain's launch code creates (campaign, ad set, creative, ad, for
 // lead-form and WhatsApp campaigns) must be a payload Meta accepted with validate_only.
@@ -19,7 +20,8 @@ const inputs = recorded.inputs;
 const KINDS = ["campaigns", "adsets", "adcreatives", "ads"];
 const IDS: Record<string, string> = { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE", ads: "AD" };
 
-async function launch(destination: AdDestination, onPlanned?: (plan: Omit<PlannedCampaign, "costPerResultRupees">) => void) {
+async function launch(destination: AdDestination, onPlanned?: (plan: Omit<PlannedCampaign, "costPerResultRupees">) => void,
+  expansion?: { creatives: number; variants: ReturnType<typeof splitAgeRange> }) {
   const sent: { kind: string; form: Record<string, string> }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -47,7 +49,8 @@ async function launch(destination: AdDestination, onPlanned?: (plan: Omit<Planne
   await meta.createLeadCampaign({
     name: inputs.name, dailyBudgetRupees: inputs.dailyBudgetRupees, link: inputs.link,
     ageMin: inputs.ageMin, ageMax: inputs.ageMax, gender: inputs.gender as "all", location: inputs.location, interests: inputs.interests,
-    creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative }],
+    creatives: Array.from({ length: expansion?.creatives ?? 1 }, () => ({ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative })),
+    ...(expansion ? { variants: expansion.variants } : {}),
     destination,
     ...(destination === "whatsapp"
       ? { whatsappNumber: inputs.phone, whatsappGreeting: inputs.whatsappGreeting }
@@ -76,6 +79,15 @@ describe("core: launch payloads Meta accepted with validate_only (#419)", () => 
     sent.forEach((s, i) => {
       expect(s.form, `${destination} ${s.kind} changed: re-record with scripts/record-meta-launch-validate.ts`).toEqual(accepted[i].form);
     });
+  });
+
+  it("counts the ads launch actually expands from the recorded age range", async () => {
+    const variants = splitAgeRange(inputs.ageMin, inputs.ageMax);
+    expect(variants).toHaveLength(2);
+    const sent = await launch("instant_form", undefined, { creatives: 3, variants });
+    expect(sent.filter((item) => item.kind === "adsets")).toHaveLength(variants.length);
+    expect(sent.filter((item) => item.kind === "ads")).toHaveLength(campaignAdCount(3, true, inputs.ageMin, inputs.ageMax));
+    expect(sent.filter((item) => item.kind === "ads")).toHaveLength(6);
   });
 
   // #419 item 2(a): every launch checks the payloads it sent against new-advertiser guidance.

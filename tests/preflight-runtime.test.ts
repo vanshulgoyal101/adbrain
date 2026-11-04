@@ -12,7 +12,9 @@ const access = vi.hoisted(() => ({
 vi.mock("@/lib/meta/connection-access", () => access);
 const evidence = vi.hoisted(() => ({ getCostPerResult: vi.fn(async () => 69) }));
 vi.mock("@/lib/campaign/result-evidence-store", () => evidence);
-vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => false }));
+const pilot = vi.hoisted(() => ({ enabled: vi.fn(() => true) }));
+vi.mock("@/lib/media/pilot", () => ({ mediaPilotEnabled: pilot.enabled }));
+vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => false, mediaVideoEnabled: () => false }));
 // #253's bindings have their own tests (whatsapp-bindings.test.ts); here the Page's number is the one.
 vi.mock("@/lib/meta/whatsapp-bindings", () => ({
   whatsappNumberForBusiness: (_businessId: string, meta: { getWhatsAppNumber: (requested: string | null, bound: string[]) => Promise<string | null> }, requested: string | null) => meta.getWhatsAppNumber(requested, []),
@@ -26,6 +28,14 @@ const supabase = {
 } as never;
 
 describe("preflight loaders (#366)", () => {
+  it("uses only the authorized business for pilot eligibility and rejects a different actor", () => {
+    const loaders = buildCampaignPreflightLoaders(supabase, actor);
+    expect(loaders.isMediaPilot({ businessId: "b1", userId: "u1" })).toBe(true);
+    expect(pilot.enabled).toHaveBeenCalledWith("b1");
+    expect(() => loaders.isMediaPilot({ businessId: "other", userId: "u1" })).toThrow(/authorized business/);
+    expect(() => loaders.isMediaPilot({ businessId: "b1", userId: "other" })).toThrow(/authorized business/);
+  });
+
   it("read the Meta connection once per preflight, however many loaders need it", async () => {
     const loaders = buildCampaignPreflightLoaders(supabase, actor);
     const draft = { input: { destination: "whatsapp", whatsappNumber: "+91 ••••• 4842", targeting: { location: { mode: "ai", includedNames: ["Austin"] } } } } as never;
@@ -118,13 +128,17 @@ describe("own-photo rights loader (#784)", () => {
       { id: "c6", business_id: "b1", status: "approved", image_url: "https://x/6.png", headline: "F", primary_text: "f", cta: null, generation: { image: { provider: "gemini" } }, media_asset_id: null },
     ];
     const creatives = { select: () => creatives, in: () => creatives, eq: async () => ({ data: rows }) };
+    const media = { select: () => media, eq: () => media, maybeSingle: async () => ({
+      data: { id: "m1", business_id: "b1", kind: "image", status: "ready", deleted_at: null, path: "photo" }, error: null,
+    }) };
     const business = { owner_id: "owner-1", vertical: "solar energy", transferred_at: "2026-11-02T09:00:00Z" };
     const businesses = { select: () => businesses, eq: () => businesses, maybeSingle: async () => ({ data: business, error: null }) };
     const consents = (confirmedAt: string) => {
       const query = { select: () => query, eq: () => query, order: () => query, limit: async () => ({ data: [{ terms_version: "x", people_confirmed: false, confirmed_at: confirmedAt, user_id: "owner-1" }], error: null }) };
       return query;
     };
-    const build = (confirmedAt: string) => buildCampaignPreflightLoaders({ from: (table: string) => table === "creatives" ? creatives : table === "businesses" ? businesses : consents(confirmedAt) } as never, actor);
+    const build = (confirmedAt: string) => buildCampaignPreflightLoaders({ from: (table: string) =>
+      table === "creatives" ? creatives : table === "media_assets" ? media : table === "businesses" ? businesses : consents(confirmedAt) } as never, actor);
     expect((await build("2026-11-02T10:00:00Z").findCreatives("b1", ["c1", "c2", "c3", "c4", "c5", "c6"])).map((creative) => creative.ownMedia)).toEqual([true, false, true, false, true, false]);
     expect(await build("2026-11-02T10:00:00Z").findMediaConsent?.(actor)).toBe(true);
     expect(await build("2026-11-01T10:00:00Z").findMediaConsent?.(actor)).toBe(false);

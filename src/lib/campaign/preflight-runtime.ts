@@ -4,6 +4,7 @@ import { hasStoryDesign, savedBackground, storedPictureDesign } from "@/lib/crea
 import { renderAndPersistDesign } from "@/lib/creative/persist";
 import { logEvent } from "@/lib/audit";
 import { hasCurrentMediaConsent } from "@/lib/media/consent";
+import { mediaPilotEnabled } from "@/lib/media/pilot";
 import { getEnv } from "@/lib/env";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
 import type { Json } from "@/lib/types";
@@ -30,6 +31,12 @@ export function buildCampaignPreflightLoaders(
   let connectionStatus: ReturnType<typeof getConnectionStatus> | undefined;
   const status = () => (connectionStatus ??= getConnectionStatus(authorizedBusiness));
   return {
+    isMediaPilot: (actor) => {
+      if (actor.businessId !== authorizedBusiness.businessId || actor.userId !== authorizedBusiness.userId) {
+        throw new Error("Campaign review actor does not match the authorized business.");
+      }
+      return mediaPilotEnabled(authorizedBusiness.businessId);
+    },
     findDraft: async (actor, draftId) => {
       const { data } = await supabase
         .from("campaign_drafts")
