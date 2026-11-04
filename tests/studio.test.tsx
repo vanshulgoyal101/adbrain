@@ -979,6 +979,24 @@ describe("<Studio> empty state", () => {
 });
 
 describe("<Studio> review board", () => {
+  it("keeps status counts and keyboard filtering available with many ads", async () => {
+    const user = userEvent.setup();
+    const ads = Array.from({ length: 40 }, (_, index) =>
+      creative({ id: `c${index}`, status: index < 13 ? "approved" : "draft" }));
+    render(<Studio business={business} initialCreatives={ads} />);
+    const status = screen.getByRole("group", { name: "Ad status" });
+    expect(within(status).getByRole("radio", { name: "All (40)" })).toBeChecked();
+    const approved = within(status).getByRole("radio", { name: "Approved (13)" });
+    approved.focus();
+    await user.keyboard(" ");
+    expect(approved).toBeChecked();
+    expect(within(status).getByRole("radio", { name: "Needs review (27)" })).not.toBeChecked();
+    expect(screen.getByRole("link", { name: "Create campaign (13)" })).toHaveAttribute(
+      "href",
+      `/campaigns?new=1&creatives=${ads.slice(0, 13).map((ad) => ad.id).join(",")}`,
+    );
+  });
+
   // #1162: on a phone the details sit below every batch; a tile tap must bring them into view.
   it.each([
     { width: "phone", wide: false, scrolls: true },
