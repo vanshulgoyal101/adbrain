@@ -148,10 +148,13 @@ export async function prepareVideo(file: File, read: VideoReader = browserVideoR
 export type SignedUpload = (bucket: string, path: string, token: string, blob: Blob, mime: Prepared["mime"]) => Promise<{ error: unknown }>;
 export type UploadDeps = { fetch: typeof fetch; uploadToSignedUrl: SignedUpload };
 
-async function postJson(deps: UploadDeps, url: string, body: unknown, kind: Prepared["kind"]): Promise<Record<string, unknown>> {
+const REQUEST_TIMEOUT_MS = 30_000;
+const FINALIZE_TIMEOUT_MS = 90_000;
+
+async function postJson(deps: UploadDeps, url: string, body: unknown, kind: Prepared["kind"], timeout = REQUEST_TIMEOUT_MS): Promise<Record<string, unknown>> {
   let response: Response;
   try {
-    response = await deps.fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
+    response = await deps.fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) });
   } catch {
     throw refusal("MEDIA_NETWORK", { key: "upload.failed" });
   }
@@ -208,7 +211,7 @@ export async function uploadPrepared(businessId: string, file: Prepared, deps: U
   const bucket = mediaBucket(file.kind);
   const { error } = await deps.uploadToSignedUrl(bucket, signed.path, signed.token, file.blob, file.mime).catch((caught: unknown) => ({ error: caught }));
   if (error) throw refusal("MEDIA_NETWORK", { key: "upload.failed" });
-  const finalized = await postJson(deps, "/api/media/finalize", { id: signed.id }, file.kind);
+  const finalized = await postJson(deps, "/api/media/finalize", { id: signed.id }, file.kind, FINALIZE_TIMEOUT_MS);
   if (finalized.ok !== true) throw refusal("MEDIA_UNAVAILABLE", { key: "upload.failed" });
   return { status: "added", asset: checkedAsset(finalized.asset, file.kind, signed.id) };
 }

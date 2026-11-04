@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MediaLibrary } from "@/components/media-library";
 import type { SignedUpload, VideoReader } from "@/lib/media/client-upload";
+import type { MediaView } from "@/lib/media/store";
 
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
@@ -12,7 +13,7 @@ const quota = (used = 0) => ({
   uploads: { used: 0, limit: 50, videos: { enabled: true, used, limit: 3, maxSeconds: 60, maxBytes: 50 * 1024 * 1024 } },
 });
 const video = () => new File(["video"], "tour.mov", { type: "video/quicktime" });
-const videoAsset = {
+const videoAsset: MediaView = {
   id: "m2", kind: "video", name: "tour", tags: [], width: 1280, height: 720, bytes: 5, durationMs: 2000,
   fit: { level: "feed", ratio: "16:9", message: "Wide (16:9): Feed shows it; Stories and Reels need a tall picture." },
   url: "https://example.com/tour.mov", createdAt: "2026-11-03T08:00:00Z",
@@ -21,13 +22,13 @@ const reader: VideoReader = async () => ({ width: 1280, height: 720, durationMs:
 
 afterEach(() => vi.unstubAllGlobals());
 
-function setup(options: { consented?: boolean; request?: typeof fetch; videoReader?: VideoReader; upload?: SignedUpload } = {}) {
+function setup(options: { consented?: boolean; request?: typeof fetch; videoReader?: VideoReader; upload?: SignedUpload; media?: MediaView[] } = {}) {
   const request = options.request ?? vi.fn(async (input: RequestInfo | URL) =>
     String(input).startsWith("/api/media?") ? json(200, quota()) :
       String(input) === "/api/media/sign" ? json(200, { ok: true, duplicate: false, id: "m2", bucket: "media-video", path: "b1/m2.mov", token: "t" }) :
         json(200, { ok: true, asset: videoAsset }));
   const uploadToSignedUrl = options.upload ?? vi.fn(async () => ({ error: null }));
-  render(<MediaLibrary business={{ id: "b1", vertical: null }} media={[]} creatives={[]} brandAssets={[]}
+  render(<MediaLibrary business={{ id: "b1", vertical: null }} media={options.media ?? []} creatives={[]} brandAssets={[]}
     consented={options.consented ?? true} startOpen videoEnabled videoReader={options.videoReader ?? reader}
     deps={{ fetch: request, uploadToSignedUrl }} />);
   return { request, uploadToSignedUrl };
@@ -191,6 +192,73 @@ describe("video upload sheet (#778)", () => {
     expect(screen.queryByText("tour.mov")).not.toBeInTheDocument();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:tour.mov");
     expect(vi.mocked(request).mock.calls.some(([input]) => String(input) === "/api/media/sign")).toBe(false);
+  });
+
+  it("does not sign a video removed while rights confirmation is saving", async () => {
+    let confirm!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => { confirm = resolve; });
+    const request = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.startsWith("/api/media?")) return json(200, quota());
+      if (url === "/api/media/consent") return pending;
+      if (url === "/api/media/sign") return json(200, { ok: true, duplicate: false, id: "m2", bucket: "media-video", path: "p", token: "t" });
+      return json(200, { ok: true, asset: videoAsset });
+    });
+    const { uploadToSignedUrl } = setup({ consented: false, request });
+    await chooseVideo();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 video" }));
+    await waitFor(() => expect(request.mock.calls.some(([input]) => String(input) === "/api/media/consent")).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Remove tour.mov" }));
+    await act(async () => { confirm(json(200, { ok: true })); });
+    expect(request.mock.calls.some(([input]) => String(input) === "/api/media/sign")).toBe(false);
+    expect(uploadToSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("shows a saved video once when a lost finalize response is followed by a duplicate retry", async () => {
+    let signs = 0;
+    const request = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.startsWith("/api/media?")) return json(200, quota());
+      if (url === "/api/media/sign") {
+        return ++signs === 1
+          ? json(200, { ok: true, duplicate: false, id: "m2", bucket: "media-video", path: "p", token: "t" })
+          : json(200, { ok: true, duplicate: true, asset: videoAsset });
+      }
+      if (url === "/api/media/finalize") throw new TypeError("response lost after save");
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { uploadToSignedUrl } = setup({ request });
+    await chooseVideo();
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 video" }));
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    await waitFor(() => expect(retry).toBeEnabled());
+    fireEvent.click(retry);
+    expect(await screen.findByText("You already added this one; using the saved copy.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getAllByLabelText("tour")).toHaveLength(1);
+    expect(uploadToSignedUrl).toHaveBeenCalledTimes(1);
+    expect(signs).toBe(2);
+  });
+
+  it("does not resurrect a locally deleted video when a duplicate response arrives", async () => {
+    const request = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.startsWith("/api/media?")) return json(200, quota());
+      if (url === "/api/media/sign") return json(200, { ok: true, duplicate: true, asset: videoAsset });
+      if (url === "/api/media/m2") return json(200, { ok: true });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    setup({ request, media: [videoAsset] });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "More for tour" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add photos & videos" }));
+    await chooseVideo();
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 video" }));
+    expect(await screen.findByText("You already added this one; using the saved copy.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByLabelText("tour")).not.toBeInTheDocument();
   });
 
   it("shows the music note for videos even when rights were previously confirmed", async () => {

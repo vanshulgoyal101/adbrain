@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MediaLibrary } from "@/components/media-library";
 import type { Codec } from "@/lib/media/client-upload";
@@ -15,11 +15,13 @@ const codec: Codec = async (file) => {
 const pick = async (names: string[]) => {
   const input = screen.getByLabelText("Choose photos");
   fireEvent.change(input, { target: { files: names.map((name) => new File(["x"], name, { type: name.endsWith(".gif") ? "image/gif" : "image/jpeg" })) } });
-  await waitFor(() => expect(screen.queryByText("Checking…")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryAllByText("Checking…")).toHaveLength(0), { timeout: 5000 });
 };
 const asset = (id: string, name: string) => ({ id, kind: "image", name, tags: [], width: 1080, height: 1350, bytes: 1, durationMs: null, fit: { level: "ready", ratio: "4:5", message: "Ready for Feed, Stories and Reels" }, url: `https://example.com/${id}.jpg`, createdAt: "2026-10-29T10:00:00Z" });
 
-function setup({ consented = true, vertical = "Interior design", fetch = vi.fn() } = {}) {
+function setup({ consented = true, vertical = "Interior design", fetch = vi.fn<typeof globalThis.fetch>() }: {
+  consented?: boolean; vertical?: string; fetch?: typeof globalThis.fetch;
+} = {}) {
   const uploadToSignedUrl = vi.fn(async () => ({ error: null }));
   render(<MediaLibrary business={{ id: "b1", vertical }} media={[]} creatives={[]} brandAssets={[]} consented={consented} startOpen
     deps={{ fetch, uploadToSignedUrl }} codec={codec} />);
@@ -42,7 +44,7 @@ describe("upload sheet (#778 slice 3b)", () => {
     const created: string[] = [];
     const revoke = vi.fn();
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: (file: File) => { created.push(file.name); return `blob:${file.name}`; }, revokeObjectURL: revoke }));
-    const { sheet } = setup({ fetch: vi.fn(async (url: string) => url === "/api/media/sign"
+    const { sheet } = setup({ fetch: vi.fn<typeof globalThis.fetch>(async (url) => url === "/api/media/sign"
       ? json(200, { ok: true, duplicate: false, id: "m1", bucket: "media", path: "p", token: "t" }) : json(200, { ok: true, asset: asset("m1", "tall") })) });
     await pick(["tall.jpg"]);
     const list = within(sheet).getByRole("list", { name: "Your picks" });
@@ -144,6 +146,31 @@ describe("upload sheet (#778 slice 3b)", () => {
     await waitFor(() => expect(within(sheet).getByText("Added")).toBeInTheDocument());
     expect(JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toEqual({ businessId: "b1", rights: true, people: true });
     expect(within(sheet).queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("does not sign a photo removed while rights confirmation is saving", async () => {
+    let confirm!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => { confirm = resolve; });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/media/consent") return pending;
+      if (url === "/api/media/sign") return json(200, { ok: true, duplicate: false, id: "m1", bucket: "media", path: "p", token: "t" });
+      if (url === "/api/media/finalize") return json(200, { ok: true, asset: asset("m1", "wide") });
+      throw new Error(`Unexpected request: ${url} ${String(init?.method)}`);
+    });
+    const { sheet, uploadToSignedUrl } = setup({ consented: false, fetch });
+    await pick(["tall.jpg", "wide.jpg"]);
+    fireEvent.click(within(sheet).getByRole("checkbox", { name: /I own these photos/ }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Add 2 photos" }));
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => url === "/api/media/consent")).toBe(true));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Remove tall.jpg" }));
+    await act(async () => { confirm(json(200, { ok: true })); });
+    const remaining = within(sheet).getByText("wide.jpg").closest("li");
+    if (!remaining) throw new Error("Missing remaining pick");
+    await waitFor(() => expect(within(remaining).getByText("Added")).toBeInTheDocument());
+    const signs = fetch.mock.calls.filter(([url]) => url === "/api/media/sign");
+    expect(signs.map(([, init]) => JSON.parse(String(init?.body)).name)).toEqual(["wide"]);
+    expect(uploadToSignedUrl).toHaveBeenCalledTimes(1);
   });
 
   it("a failed upload says so and Try again sends it again", async () => {

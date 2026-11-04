@@ -119,6 +119,20 @@ describe("uploadPrepared (#778 slice 3b)", () => {
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ id: "m2" });
   });
 
+  it("allows finalization longer than the server's 60-second execution limit", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    try {
+      const fetch = vi.fn()
+        .mockResolvedValueOnce(json(200, { ok: true, duplicate: false, id: "m1", bucket: "media", path: "p", token: "t" }))
+        .mockResolvedValueOnce(json(200, { ok: true, asset }));
+      await uploadPrepared("b1", prepared, { fetch, uploadToSignedUrl: vi.fn(async () => ({ error: null })) });
+      expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([30_000, expect.any(Number)]);
+      expect(timeout.mock.calls[1][0]).toBeGreaterThan(60_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it("reports a signed video before its Storage transfer finishes", async () => {
     let finish!: (value: { error: null }) => void;
     const fetch = vi.fn()
