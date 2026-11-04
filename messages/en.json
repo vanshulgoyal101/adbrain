@@ -692,8 +692,8 @@
       "openCampaigns": "Open Campaigns"
     },
     "access": {
-      "pending": "Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.",
-      "requested": "Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.",
+      "pending": "Connecting a new Facebook account requires Meta approval for AdBrain. You can make, approve and download ads now.",
+      "requested": "Your request is recorded. You can connect Facebook once Meta approves AdBrain. Until then, your approved ads stay here for you to download and share.",
       "requestFailed": "Your request did not send. Check your connection and try again.",
       "again": "Try again"
     },

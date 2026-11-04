@@ -122,9 +122,7 @@ export function routeRows(text) {
 // #2252: a "quoted" label in docs/product must exist in the app (src, messages, db/migrations). Compared as word
 // trigrams: an app slot ({x}, ${x}) matches one word; a doc placeholder (…, N, n, X, Y, [x], {x}, numbers) is skipped.
 // "Owner says:" lines quote customers; LABEL_PROSE lists example text that isn't app copy.
-export const LABEL_PROSE = new Set(["Cures back pain", "Hi, I want info", "Can I get PM Surya Ghar subsidy help?", "fresh direction", "ignore preferences",
-  // setup-go-live.tsx renders hintBefore + <strong>adBrain</strong> + hintAfter.
-  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our invite: open your invites and accept adBrain, then tap Connect."]);
+export const LABEL_PROSE = new Set(["Cures back pain", "Hi, I want info", "Can I get PM Surya Ghar subsidy help?", "fresh direction", "ignore preferences"]);
 const SLOT = "§";
 const words = text => (text.replace(/[‘’]/g, "'").replace(/&apos;|&rsquo;|&#39;/g, "'").toLowerCase().match(/[\p{L}\p{M}\p{N}'§]+/gu) ?? [])
   .map(word => word.replace(/^'+|'+$/g, "")).filter(Boolean).map(word => /^\d+[a-z]{0,2}$/.test(word) || /^[nxy]$/.test(word) ? SLOT : word);
