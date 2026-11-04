@@ -1,15 +1,101 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { campaignsTranslator, type Words } from "@/i18n/words";
-import type { LeadDestination } from "@/lib/types/campaign";
+import type { LeadDestination, WebsiteGoal } from "@/lib/types/campaign";
 import { websiteButton, type WebsiteButton } from "@/lib/campaign/website-button";
+import { trackingBlocker, websiteGoalOpen, type ReviewTracking, type TrackingBlocker } from "@/lib/campaign/website-tracking";
 
 /** #2595: the destinations the composer can choose (Call stays planner-only). */
 export type ComposerDestination = Exclude<LeadDestination, "call">;
 
+export type WebsiteGoalCopy = {
+  legend: string;
+  visits: string;
+  leads: string;
+  sales: string;
+  needsTracking: string;
+  unavailable: string;
+  noSource: string;
+  chooseTracking: string;
+  unreadable: string;
+  quiet: string;
+  missing: string;
+  finish: string;
+};
+
+export type WebsiteGoalChoice = {
+  value: WebsiteGoal;
+  tracking: ReviewTracking | undefined;
+  onChange: (value: WebsiteGoal) => void;
+  copy: WebsiteGoalCopy;
+  disabled?: boolean;
+};
+
+export type WebsiteReviewDetails = {
+  goal: WebsiteGoal;
+  /** The reviewed attribution setting, formatted for this locale; null when it has not been confirmed. */
+  attribution: string | null;
+  copy: {
+    goals: Record<WebsiteGoal, { label: string; hint: string }>;
+    attributionLabel: string;
+    attributionHelp: string;
+    attributionUnavailable: string;
+  };
+};
+
 const selectedBox = (active: boolean) => active ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white";
 const openButton = "inline-flex min-h-11 flex-none items-center gap-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 hover:bg-slate-50";
+
+function trackingGuidance(problems: (TrackingBlocker | null)[], copy: WebsiteGoalCopy): string | null {
+  const keys = problems.map((problem) => problem?.key);
+  if (keys.includes("trackingNone")) return copy.noSource;
+  if (keys.includes("trackingChoose")) return copy.chooseTracking;
+  if (keys.includes("trackingUnreadable")) return copy.unreadable;
+  if (keys.includes("trackingQuiet")) return copy.quiet;
+  if (keys.includes("trackingEventMissing")) return copy.missing;
+  return null;
+}
+
+function WebsiteGoalChoices({ value, tracking, onChange, copy, disabled }: WebsiteGoalChoice) {
+  const id = useId();
+  const leads = trackingBlocker("leads", tracking);
+  const sales = trackingBlocker("sales", tracking);
+  const guidance = trackingGuidance([leads, sales], copy);
+  const options = [
+    { value: "visits", label: copy.visits, problem: null },
+    { value: "leads", label: copy.leads, problem: leads },
+    { value: "sales", label: copy.sales, problem: sales },
+  ] as const;
+
+  return (
+    <fieldset disabled={disabled} className="mt-4 min-w-0">
+      <legend className="mb-2 text-sm font-medium text-slate-900">{copy.legend}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const reason = option.problem ? copy.needsTracking : !websiteGoalOpen(option.value) ? copy.unavailable : null;
+          const reasonId = `${id}-${option.value}-reason`;
+          return (
+            <label key={option.value} className={cn(
+              "flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-blue-600",
+              selectedBox(value === option.value),
+              reason ? "cursor-default text-slate-600" : "cursor-pointer text-slate-900",
+            )}>
+              <input type="radio" name={`website-goal-${id}`} value={option.value} checked={value === option.value}
+                aria-label={option.label} aria-disabled={reason ? true : undefined} aria-describedby={reason ? reasonId : undefined}
+                onChange={() => { if (!reason) onChange(option.value); }} className="h-4 w-4 flex-none accent-blue-600" />
+              <span className="font-medium">{option.label}</span>
+              {reason && <span id={reasonId} className="text-xs text-slate-600">{reason}</span>}
+            </label>
+          );
+        })}
+      </div>
+      {guidance && <p role="status" className="mt-2 text-sm text-slate-600">{guidance}</p>}
+      {guidance && <Link href="/brand?all=1#brand-tracking" className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 underline underline-offset-4">{copy.finish}</Link>}
+    </fieldset>
+  );
+}
 
 /** The Brand website as a link the ad may open: http(s) only, a bare domain gets https. */
 export function websiteHref(raw?: string | null): string | null {
@@ -82,9 +168,10 @@ export function DestinationChoice({ value, onChange, disabled, describedBy, offe
 }
 
 /** The website the ads open. Each ad keeps its own button (QA, #2660): a button choice returns once preflight and launch carry it. */
-export function WebsiteDestinationFields({ website, words }: {
+export function WebsiteDestinationFields({ website, words, goalChoice }: {
   website?: string | null;
   words?: Words<"campaigns">;
+  goalChoice?: WebsiteGoalChoice;
 }) {
   const t = campaignsTranslator(words);
   const href = websiteHref(website);
@@ -97,14 +184,23 @@ export function WebsiteDestinationFields({ website, words }: {
           <Link href="/brand" className="inline-flex min-h-11 w-fit items-center text-sm font-medium text-blue-700 underline underline-offset-4">{t("destination.changeInBrand")}</Link>
         </>
         : <p id="website-destination" role="status" className="text-sm text-amber-800">{t("destination.noWebsite")} <Link href="/brand" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline underline-offset-4">{t("destination.openBrand")}</Link></p>}
+      {goalChoice && <WebsiteGoalChoices {...goalChoice} />}
     </div>
   );
 }
 
 /** #2595: the goal a website ad is bought for, shown first in Review. */
-export function WebsiteGoal({ words }: { words?: Words<"campaigns"> }) {
+export function WebsiteGoal({ words, review }: { words?: Words<"campaigns">; review?: WebsiteReviewDetails }) {
   const t = campaignsTranslator(words);
+  if (review) {
+    const goal = review.copy.goals[review.goal];
+    return <>{goal.label}<span className="block text-xs text-slate-500">{goal.hint}</span></>;
+  }
   return <>{t("destination.goalWebsite")}<span className="block text-xs text-slate-500">{t("destination.goalWebsiteHint")}</span></>;
+}
+
+export function WebsiteAttribution({ review }: { review: WebsiteReviewDetails }) {
+  return <>{review.attribution?.trim() || review.copy.attributionUnavailable}<span className="block text-xs text-slate-500">{review.copy.attributionHelp}</span></>;
 }
 
 /** A selected ad as Review names it: its headline and its own button words. */
@@ -133,7 +229,7 @@ export function WebsiteReviewFact({ url, ads = [], words }: { url?: string | nul
   const t = campaignsTranslator(words);
   const href = websiteHref(url);
   return <>
-    <span className="flex min-w-0 items-start justify-between gap-3">
+    <span className="flex min-w-0 flex-wrap items-start justify-between gap-3">
       <span className="min-w-0">
         {href ? <span className="block"><WebsiteLinkText href={href} /></span> : <span className="block font-medium text-amber-800">{t("destination.needsLink")}</span>}
       </span>
@@ -144,11 +240,17 @@ export function WebsiteReviewFact({ url, ads = [], words }: { url?: string | nul
 }
 
 /** The server Review's first rows for a website ad (#2595: goal, then where people go). */
-export function WebsiteReviewFacts({ url, ads, words }: { url?: string | null; ads?: readonly ReviewAd[]; words?: Words<"campaigns"> }) {
+export function WebsiteReviewFacts({ url, ads, words, websiteReview }: {
+  url?: string | null;
+  ads?: readonly ReviewAd[];
+  words?: Words<"campaigns">;
+  websiteReview?: WebsiteReviewDetails;
+}) {
   const t = campaignsTranslator(words);
   const row = "grid grid-cols-[5.75rem_1fr] gap-3 sm:grid-cols-[7.5rem_1fr] sm:gap-4";
   return <>
-    <div className={row}><dt className="text-slate-500">{t("destination.goal")}</dt><dd className="min-w-0 text-slate-900"><WebsiteGoal words={words} /></dd></div>
+    <div className={row}><dt className="text-slate-500">{t("destination.goal")}</dt><dd className="min-w-0 text-slate-900"><WebsiteGoal words={words} review={websiteReview} /></dd></div>
     <div className={row}><dt className="text-slate-500">{t("destination.reviewWebsite")}</dt><dd className="min-w-0 text-slate-900"><WebsiteReviewFact url={url} ads={ads} words={words} /><span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span></dd></div>
+    {websiteReview && <div className={row}><dt className="text-slate-500">{websiteReview.copy.attributionLabel}</dt><dd className="min-w-0 break-words text-slate-900"><WebsiteAttribution review={websiteReview} /></dd></div>}
   </>;
 }

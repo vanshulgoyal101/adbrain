@@ -1,7 +1,7 @@
 "use client";
 
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
 import { CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
@@ -119,7 +119,11 @@ function firstLine(value: string): string {
 
 type BrandSaveState = SaveState & { submittedRevision?: number };
 
-export function BrandForm({ business, photoCount = 0 }: { business: Business | null; photoCount?: number }) {
+export function BrandForm({ business, photoCount = 0, trackingCard }: {
+  business: Business | null;
+  photoCount?: number;
+  trackingCard?: ReactNode;
+}) {
   const [form, setForm] = useState(() => ({ fields: fromBusiness(business), revision: 0 }));
   const { fields, revision } = form;
   function setFields(update: (current: FieldsState) => FieldsState) {
@@ -371,6 +375,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         </CardContent>
       </Card>
       </div>
+
+      {trackingCard}
 
       <div id="brand-contact" className="scroll-mt-6">
       <Card>

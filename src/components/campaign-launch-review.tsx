@@ -3,8 +3,9 @@ import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/format";
 import type { WeeklyCapNotice } from "@/lib/campaign/spend";
 import { WeeklyCapLine } from "@/components/weekly-cap-line";
-import { WebsiteGoal, WebsiteReviewFact, websiteHref, type ComposerDestination, type ReviewAd } from "@/components/campaign-destination";
+import { WebsiteAttribution, WebsiteGoal, WebsiteReviewFact, websiteHref, type ComposerDestination, type ReviewAd, type WebsiteReviewDetails } from "@/components/campaign-destination";
 import { campaignsTranslator, type Words } from "@/i18n/words";
+import { websiteGoalOpen } from "@/lib/campaign/website-tracking";
 
 export function CampaignLaunchReview({
   selectedCount,
@@ -14,6 +15,7 @@ export function CampaignLaunchReview({
   whatsappNumber,
   website,
   websiteAds,
+  websiteReview,
   audience,
   weeklyCap = null,
   words,
@@ -28,6 +30,7 @@ export function CampaignLaunchReview({
   website?: string | null;
   /** #2703: the selected ads, so Review shows the button each gets on Facebook. */
   websiteAds?: readonly ReviewAd[];
+  websiteReview?: WebsiteReviewDetails;
   audience: string;
   /** #1342: the Settings cap against this campaign's weekly commitment. */
   weeklyCap?: WeeklyCapNotice | null;
@@ -40,6 +43,7 @@ export function CampaignLaunchReview({
     selectedCount > 0 &&
     budget > 0 &&
     destinationReady &&
+    (destination !== "website" || !websiteReview || websiteGoalOpen(websiteReview.goal)) &&
     audience.trim().length > 0 &&
     audience !== "Choose an area" &&
     !weeklyCap?.exceeds;
@@ -59,7 +63,11 @@ export function CampaignLaunchReview({
       <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         {destination === "website" && <div>
           <dt className="text-xs text-slate-500">{t("destination.goal")}</dt>
-          <dd className="mt-1 font-medium text-slate-900"><WebsiteGoal words={words} /></dd>
+          <dd className="mt-1 font-medium text-slate-900"><WebsiteGoal words={words} review={websiteReview} /></dd>
+        </div>}
+        {destination === "website" && websiteReview && <div>
+          <dt className="text-xs text-slate-500">{websiteReview.copy.attributionLabel}</dt>
+          <dd className="mt-1 break-words font-medium text-slate-900"><WebsiteAttribution review={websiteReview} /></dd>
         </div>}
         <div>
           <dt className="text-xs text-slate-500">{destination === "website" ? t("destination.reviewWebsite") : t("launchReview.leadDestination")}</dt>
