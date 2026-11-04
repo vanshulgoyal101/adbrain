@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad, plist, awakePlist } from "../scripts/team-supervisor.mjs";
+import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad, plist, awakePlist, WORKER_ROLES } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -110,6 +110,25 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).not.toMatch(/Stop only when the waiter times out/);
     expect(text).toContain('"Dev 2:"');
     expect(() => restartPrompt("nobody")).toThrow();
+  });
+
+  it("routes routine role questions through the CEO without interrupting other work", () => {
+    expect(WORKER_ROLES.length).toBeGreaterThan(0);
+    for (const role of WORKER_ROLES) {
+      const text = restartPrompt(role);
+      expect(text).toMatch(/do not use ask_user for routine questions/i);
+      expect(text).toContain('post "→ CEO:"');
+      expect(text).toContain("continue other actionable work");
+      expect(text).toContain("mandatory confirmations and prompts still apply");
+    }
+  });
+
+  it("replaces an unreachable ended-turn chat only after checking for an active writer", () => {
+    const text = restartPrompt("ceo");
+    expect(text).toContain("Unknown chat owner");
+    expect(text).toContain("replace the unreachable chat");
+    expect(text).toContain("after confirming no active writer");
+    expect(text).not.toContain("a queued one lands only when the turn ends");
   });
 
   it("gives a rotated-in CEO a succession prompt that respawns workers outside its own session (#2476)", () => {
