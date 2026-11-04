@@ -8,6 +8,7 @@
 // --plant injects a promise into step 3 and slows step 2's pictures, so the run must FAIL (proves the checks bite).
 import assert from "node:assert/strict";
 import { chromium, type CDPSession, type Page } from "@playwright/test";
+import { freeOnlyEligibility } from "../src/lib/internal-accounts";
 import { honestCopyFindings } from "../src/lib/copy/honest-copy-rules";
 import { SMOKE_FENCE_HEADER, fenceStop } from "./lib/smoke-fence.mjs";
 import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
@@ -25,6 +26,8 @@ const BIO = "Sweet Crumbs Bakery, Mohali Phase 7 | Eggless cakes, brownies and c
 assert.ok(email, "Set WS1_EMAIL.");
 
 const failures: string[] = [];
+let skipped = false;
+class SkippedWalk extends Error {}
 const check = (ok: boolean, label: string, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${label}${detail ? ` (${detail})` : ""}`);
   if (!ok) failures.push(label);
@@ -117,7 +120,17 @@ try {
   }
 
   // #2574: a minted session, not the password form, so Supabase CAPTCHA (#1777) can stay on.
-  await signInBrowser(context, origin, email, { config: testSessionConfig(env, origin) });
+  const { user } = await signInBrowser(context, origin, email, { config: testSessionConfig(env, origin) });
+
+  // #2861: the walk may generate ads and fill Brand, which call AI providers. Only an identity the server holds to
+  // free providers (a listed smoke user for text, a verified internal non-exempt user for images) may run it; any
+  // other stops here, before any page or AI call, and says the coverage was skipped (never a pass).
+  const eligibility = freeOnlyEligibility(user);
+  if (!eligibility.text || !eligibility.images) {
+    console.log(`WS1 walk SKIPPED: the signed-in test account isn't held to free AI providers (text ${eligibility.text ? "yes" : "no"}, images ${eligibility.images ? "yes" : "no"}); no page opened and no AI call made. Coverage NOT run.`);
+    skipped = true;
+    throw new SkippedWalk();
+  }
 
   cdp = await context.newCDPSession(page);
   await cdp.send("Network.enable");
@@ -173,10 +186,11 @@ try {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   check(overflow <= 0, "Step 3 no horizontal overflow", `${overflow}px`);
 } catch (error) {
-  check(false, "WS1 walk ran to the end", error instanceof Error ? error.message.split("\n")[0].slice(0, 200) : String(error));
+  if (!(error instanceof SkippedWalk)) check(false, "WS1 walk ran to the end", error instanceof Error ? error.message.split("\n")[0].slice(0, 200) : String(error));
 } finally {
   await browser.close();
 }
 check(!metaWrites.length, "No Meta write attempted", metaWrites.join(", "));
+if (skipped) process.exit(0);
 console.log(failures.length ? `WS1 walk FAILED: ${failures.length} check(s)` : "WS1 walk PASSED");
 process.exitCode = failures.length ? 1 : 0;

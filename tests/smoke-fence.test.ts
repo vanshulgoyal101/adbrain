@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { fenceHeaderValue, fenceStop, SMOKE_FENCE_HEADER as scriptHeader } from "../scripts/lib/smoke-fence.mjs";
 import { alignPrintedNumbers } from "@/lib/creative/chat-number";
 import { readFileSync } from "node:fs";
+import internal from "@/lib/internal-accounts.json";
+import { freeOnlyEligibility } from "@/lib/internal-accounts";
 import { assertFenceOwnsDraft, refuseWhenFenced, SMOKE_FENCE_HEADER, SmokeFenceError, smokeFenceResponse } from "@/lib/security/smoke-fence";
 import { requestIsFenced, smokeFence } from "@/lib/security/smoke-fence-server";
 
@@ -87,5 +89,19 @@ describe("draft-only smoke fence (#2861)", () => {
       const handler = source.slice(source.indexOf("async function handlePOST"));
       expect(handler.slice(0, 400), route).toContain("refuseWhenFenced(");
     }
+  });
+
+  it("holds the WS1 walk to a free-only identity before any page or AI call (#2861 path B)", () => {
+    expect(freeOnlyEligibility({ id: "00000000-0000-4000-8000-000000000000", email: "x@example.com", email_confirmed_at: "2026-01-01" })).toEqual({ text: false, images: false });
+    expect(freeOnlyEligibility(null)).toEqual({ text: false, images: false });
+    const smokeId = internal.smokeUserIds[0];
+    expect(freeOnlyEligibility({ id: smokeId }).text).toBe(true);
+    const exempt = internal.exemptFromFreeProviders[0].userId;
+    expect(freeOnlyEligibility({ id: exempt }).images).toBe(false);
+    const walk = readFileSync("scripts/ws1-walk.mts", "utf8");
+    const gate = walk.indexOf("freeOnlyEligibility(user)");
+    expect(gate).toBeGreaterThan(walk.indexOf("await signInBrowser("));
+    expect(gate).toBeLessThan(walk.indexOf("page.goto("));
+    expect(walk).toContain("Coverage NOT run");
   });
 });

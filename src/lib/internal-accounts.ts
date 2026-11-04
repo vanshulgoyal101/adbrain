@@ -26,6 +26,11 @@ export function isSmokeUser(user: AccountIdentity): boolean {
   return Boolean(user && internal.smokeUserIds.includes(user.id));
 }
 
+/** #2861: which AI work an account may run free-only: text (a listed smoke user) and images (verified internal, not exempt). */
+export function freeOnlyEligibility(user: AccountIdentity): { text: boolean; images: boolean } {
+  return { text: isSmokeUser(user), images: isInternalUser(user) && !isExemptFromFreeProviders(user) };
+}
+
 /**
  * #1324: the smoke/demo login is connected to a real ad account. A business it owns may read, validate and pause
  * on Meta, but nothing else, unless its ad account is a listed test account.
