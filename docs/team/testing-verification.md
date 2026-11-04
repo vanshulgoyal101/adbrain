@@ -77,6 +77,18 @@ keyboard filter selection, painted focus and overflow at 320, 360, 390 and
 1440px. Server actions and network requests are blocked; it does not replace an
 authenticated production walk or real-device testing.
 
+For upload error rows without credentials or Storage writes:
+
+```sh
+npm run test:media-upload-layout
+```
+
+[The upload check](../../scripts/check-media-upload-layout.mjs) renders the
+real sheet and application CSS at 320, 360, 390, 480 and 1440px in Chromium and
+WebKit, in English and Hindi. Synthetic failed photo and video uploads exercise
+readable messages, 44px actions, keyboard focus, retry and removal. The transport
+is mocked; this does not verify live Storage or real-device Safari.
+
 ### Enquiry Checks
 
 For the saved-enquiry workflow, with installed Google Chrome and fully synthetic

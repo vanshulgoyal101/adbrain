@@ -134,7 +134,7 @@ function ItemLine({ t, item, onRetry, onRemove, allowVideo }: { t: MediaT; item:
   const usableWithLimits = item.status === "ready" && item.prepared?.fit.level === "feed";
   const tone = item.status === "refused" || item.status === "failed" ? "text-red-700" : item.status === "added" ? "text-emerald-700" : usableWithLimits ? "text-amber-800" : "text-slate-600";
   return (
-    <li className="flex items-start gap-3 py-2">
+    <li className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-start gap-x-3 py-2">
       {item.thumb && item.prepared
         ? item.prepared.kind === "video"
           ? <video src={item.thumb} muted playsInline preload="metadata" aria-hidden="true" className="h-11 w-11 shrink-0 rounded-md bg-slate-100 object-cover" />
@@ -142,31 +142,33 @@ function ItemLine({ t, item, onRetry, onRemove, allowVideo }: { t: MediaT; item:
         : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-slate-100" aria-hidden="true">
           {item.status === "refused" && <FileX className="h-5 w-5 text-slate-500" />}
         </span>}
-      <span className="mt-0.5 shrink-0" aria-hidden="true">
-        {item.status === "added" || item.status === "duplicate" ? <Check className="h-4 w-4 text-emerald-600" />
-          : item.status === "refused" || item.status === "failed" ? <TriangleAlert className="h-4 w-4 text-red-600" />
-          : usableWithLimits ? <TriangleAlert className="h-4 w-4 text-amber-600" />
-          : item.status === "ready" ? <Check className="h-4 w-4 text-emerald-600" />
-          : item.status === "queued" ? <Clock className="h-4 w-4 text-slate-400" />
-          : <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-slate-900">{item.name}</span>
+      <span className="col-start-2 row-start-1 min-w-0">
+        <span className="flex min-w-0 items-start gap-2">
+          <span className="mt-0.5 shrink-0" aria-hidden="true">
+            {item.status === "added" || item.status === "duplicate" ? <Check className="h-4 w-4 text-emerald-600" />
+              : item.status === "refused" || item.status === "failed" ? <TriangleAlert className="h-4 w-4 text-red-600" />
+              : usableWithLimits ? <TriangleAlert className="h-4 w-4 text-amber-600" />
+              : item.status === "ready" ? <Check className="h-4 w-4 text-emerald-600" />
+              : item.status === "queued" ? <Clock className="h-4 w-4 text-slate-400" />
+              : <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+          </span>
+          <span className="min-w-0 truncate text-sm font-medium text-slate-900">{item.name}</span>
+        </span>
         {item.prepared?.kind === "video" && <span className="block text-xs text-slate-500">{megabytes(item.prepared.bytes)}</span>}
-        <span className={`block text-xs ${tone}`}>
+        <span className={`block break-words text-xs ${tone}`}>
           {item.status === "checking" ? t("upload.checking") : item.status === "queued" ? t("upload.queued") : item.status === "uploading" ? t("upload.uploading") : item.status === "added" ? t("upload.added") : item.message}
         </span>
         {item.status === "uploading" && <progress aria-label={t("upload.uploading")} className="mt-1 h-1 w-full" />}
       </span>
       {item.status === "failed" && item.prepared && (
         <button type="button" onClick={onRetry} disabled={item.prepared.kind === "video" && !allowVideo}
-          className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md px-3 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50">
+          className="col-span-2 col-start-2 row-start-2 inline-flex min-h-11 items-center gap-1 justify-self-start rounded-md px-3 text-sm font-medium text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
           <RotateCcw className="h-4 w-4" aria-hidden="true" /> {t("upload.tryAgain")}
         </button>
       )}
       {item.status !== "queued" && item.status !== "uploading" && (
         <button type="button" onClick={onRemove} aria-label={t("upload.remove", { name: item.name })}
-          className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+          className="col-start-3 row-start-1 inline-flex size-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
