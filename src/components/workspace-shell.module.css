@@ -22,6 +22,7 @@
 .avatar::before { content: attr(data-initial); }
 .legal { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px 0; color: var(--muted); }
 .legal a:hover { color: var(--primary-hover); text-decoration: underline; }
+.legal a { display: inline-flex; align-items: center; min-height: 44px; }
 .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .header { display: none; }
 .breadcrumb { min-width: 0; flex: 1; font-size: 15px; }

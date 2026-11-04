@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -33,6 +34,47 @@ describe("database migration safety", () => {
     await expect(applyMigration({ query }, "20260919_test.sql", "invalid sql")).rejects.toThrow("failure");
     expect(query).toHaveBeenLastCalledWith("rollback");
     expect(query.mock.calls.some(([sql]) => sql.startsWith("insert into private.schema_migrations"))).toBe(false);
+  });
+  it("executes a wrapped migration inside its own transaction and records the original checksum", async () => {
+    const sql = [
+      "-- A reviewed migration",
+      "begin;",
+      "create table public.runner_fixture (id integer);",
+      "do $body$",
+      "begin",
+      "  perform 1;",
+      "end;",
+      "$body$;",
+      "commit;",
+      "",
+    ].join("\n");
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const name = "20261103_runner_fixture.sql";
+
+    expect(await applyMigration({ query }, name, sql)).toBe("applied");
+    const body = query.mock.calls.find(([statement]) => statement.includes("create table public.runner_fixture"))?.[0];
+    expect(body).toContain("create table public.runner_fixture (id integer);");
+    expect(body).toContain("begin\n  perform 1;\nend;");
+    expect(body).not.toMatch(/^\s*(begin|commit)\s*;/im);
+    expect(query).toHaveBeenCalledWith("insert into private.schema_migrations (name, checksum) values ($1, $2)", [
+      name, createHash("sha256").update(sql).digest("hex"),
+    ]);
+  });
+  it.each([
+    ["an intermediate commit", "begin;\nselect 1;\ncommit;\nselect 2;\ncommit;\n"],
+    ["rollback", "select 1;\nrollback;\n"],
+    ["start transaction", "select 1;\nstart transaction;\n"],
+    ["begin transaction", "select 1;\nbegin transaction;\n"],
+    ["savepoint", "select 1;\nsavepoint example;\n"],
+    ["release savepoint", "select 1;\nrelease savepoint example;\n"],
+    ["rollback to savepoint", "select 1;\nrollback to savepoint example;\n"],
+    ["end", "select 1;\nend;\n"],
+    ["abort", "select 1;\nabort;\n"],
+  ])("rejects %s instead of executing it", async (_description, sql) => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    await expect(applyMigration({ query }, "20261103_runner_fixture.sql", sql)).rejects.toThrow(/controls its own transaction/);
+    expect(query).not.toHaveBeenCalledWith(sql);
+    expect(query.mock.calls.some(([statement]) => statement.startsWith("insert into private.schema_migrations"))).toBe(false);
   });
 });
 

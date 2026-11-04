@@ -229,7 +229,7 @@ type CampaignsProps = {
   /** #1438: the results card's words in the owner's language; English without. */
   verdictWords?: Words<"verdict">;
   /** #1438: the list header, filters and sync lines in the owner's language. */
-  campaignWords?: Words<"campaigns">;
+  campaignWords?: Words<"campaigns">; whatsappWords?: Words<"whatsappMessage">;
   /** #1838: until when Meta asked us to wait before checking again; launched cards say their numbers may be old. */
   metaWaitUntil?: string | null;
   /** #2273: the team's own accounts see the no-Facebook-Reels test control (internal-accounts.ts). */
@@ -305,7 +305,7 @@ function BusinessCampaigns({
   whatsappLedger = null,
   weeklyCap = null,
   verdictWords,
-  campaignWords,
+  campaignWords, whatsappWords,
   metaWaitUntil = null,
   internal = false,
   scope,
@@ -2162,7 +2162,7 @@ function BusinessCampaigns({
                       const suggested = suggestedMessages(ads);
                       const language = whatsappLanguage !== "ad" ? whatsappLanguage : adsLanguage(ads);
                       const current = whatsappMessage ?? savedWhatsAppMessage;
-                      return <CampaignWhatsAppMessageDialog businessId={business.id} businessName={business.name} firstOffer={business.offers?.[0]}
+                      return <CampaignWhatsAppMessageDialog businessId={business.id} businessName={business.name} firstOffer={business.offers?.[0]} words={whatsappWords}
                         initial={current ? draftFromTemplate(current) : draftFromSuggestion(suggested, language)} suggested={suggested}
                         suggestedQuestions={(chosen) => suggestedQuestions(business, chosen === "auto" ? language : chosen)}
                         followsSuggestion={!current} edited={Boolean(whatsappMessage)} onClose={() => setMessageEditorOpen(false)}

@@ -243,6 +243,8 @@ vi.mock("@/lib/meta/connection-access", () => ({
 }));
 vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: mocks.metaClientForBusiness }));
 vi.mock("@/lib/audit", () => ({ logEvent: vi.fn() }));
+// #784: the owner's own photo needs a rights confirmation; its own tests live in media-consent.test.ts.
+vi.mock("@/lib/media/consent", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/media/consent")>()), hasCurrentMediaConsent: async () => true }));
 // #253's bindings have their own tests (whatsapp-bindings.test.ts); here the number is already bound.
 vi.mock("@/lib/meta/whatsapp-bindings", () => ({
   boundWhatsAppNumbers: async () => ["+919876543210"],

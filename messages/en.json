@@ -961,6 +961,7 @@
         "REVIEW_AD_POLICY": "Edit the ad's wording",
         "REVIEW_INTERESTS_UNRESOLVED": "Edit the interests",
         "REVIEW_WHATSAPP_MESSAGE": "Edit the WhatsApp message",
+        "REVIEW_MEDIA_RIGHTS": "Confirm your photo rights",
         "REVIEW_TRACKING": "Check tracking in Your business",
         "REVIEW_GOAL_WORDS": "Choose your ads"
       }
@@ -1568,6 +1569,7 @@
     "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
     "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
     "whatsappMessage": "Your WhatsApp message: {problem}",
+    "mediaRights": "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta.",
     "noLeadForm": "Choose an active lead form from your Facebook Page in the Lead form field.",
     "noWebsite": "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.",
     "adPolicy": "\"{term}\" in the ad \"{named, select, yes {{headline}} other {without a headline}}\" is {kind, select, health {a health promise} other {a promise}} Meta rejects. Edit the ad to describe the service instead.",
@@ -1588,12 +1590,13 @@
     "websiteStatus": "Your website {host} answered with an error{coded, select, yes { ({status})} other {}} when AdBrain opened it. Check the address on the Your business page, or make sure the site is up, then review again.",
     "websiteBlocked": "{host} isn't a public website address. Add your business's public site on the Your business page.",
     "websiteRedirect": "Your website {host} sends visitors on to {known, select, yes {{finalHost}} other {another site}}. Add the address of your own site on the Your business page, so the ad opens your business.",
-    "trackingNone": "Your ad account has no website tracking (Meta pixel) yet, so Meta can't count {goal, select, leads {signups from this ad} other {sales from this ad}}. Add tracking to your site, or choose the visits goal.",
-    "trackingChoose": "Choose which website tracking counts {goal, select, leads {your signups} other {your sales}} on the Your business page, then review again.",
+    "trackingNone": "No website tracking source is available to this ad account, so Meta can't count {goal, select, leads {website leads} other {sales}} from this ad. Check that this ad account can use your Meta pixel, or set one up in Events Manager. Until then, choose the visits goal.",
+    "trackingChoose": "Choose which website tracking counts {goal, select, leads {your website leads} other {your sales}} on the Your business page, then review again.",
     "trackingUnreadable": "AdBrain couldn't read your website tracking from Meta. {reconnect, select, yes {Connect Facebook again, then review again.} other {Try reviewing again in a few minutes.}}",
     "trackingQuiet": "Your website tracking reported nothing from {since} to {until}{seen, select, yes { (last heard {lastSeen})} other {}}. Check that it is on your site, then review again, or choose the visits goal.",
-    "trackingEventMissing": "Your website tracking works but reported no {goal, select, leads {signup (Lead)} other {sale (Purchase)}} from {since} to {until}. Make sure your site sends it, then review again, or choose the visits goal.",
-    "goalWords": "The ad {named, select, yes {\"{headline}\"} other {you chose}} asks people {goal, select, leads {to buy, but this campaign looks for signups} other {to sign up, but this campaign looks for sales}}. Choose an ad that fits, or change the goal."
+    "trackingEventMissing": "Your website tracking works but reported no {goal, select, leads {website lead (Lead)} other {sale (Purchase)}} from {since} to {until}. Make sure your site sends it, then review again, or choose the visits goal.",
+    "goalWords": "The ad {named, select, yes {\"{headline}\"} other {you chose}} has a {goal, select, leads {Shop now button, but this campaign is for website leads} other {Sign up button, but this campaign is for sales}}. Choose an ad that fits, or change the goal.",
+    "salesFew": "With few recent purchases, results and spending can vary. We won't increase your budget or change your goal."
   },
   "media": {
     "page": {
@@ -1659,6 +1662,13 @@
       "limitCount": "You can add up to {max} at a time. Add the rest after these finish.",
       "rightsRequired": "Tick the box above to add your photos.",
       "consentFailed": "Your confirmation couldn't be saved. Try again.",
+      "confirmTitle": "Confirm your rights to the photos in your ads",
+      "confirmAction": "Confirm",
+      "confirmSaving": "Saving…",
+      "rightsLegend": "Your rights to these files",
+      "rightsText": "I own these photos and videos, or have permission to use them, including any music and the people shown.",
+      "peopleText": "Everyone recognisable has agreed to appear in your ads.",
+      "musicNote": "Music from films or popular songs can get your ad muted or rejected. Use your own audio or royalty-free music.",
       "format": "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
       "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again."
     },
@@ -1710,7 +1720,22 @@
     "resetButton": "Reset to suggested",
     "preview": "WhatsApp preview",
     "questionsToTap": "Questions to tap",
-    "readyToSend": "Ready to send: "
+    "readyToSend": "Ready to send: ",
+    "campaign": {
+      "title": "WhatsApp message for this campaign",
+      "description": "What customers see after tapping this campaign's ads.",
+      "alsoSave": "Also save as my message",
+      "alsoSaveNote": "New WhatsApp campaigns will start from it. Running campaigns don't change.",
+      "undo": "Undo my edit",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "use": "Use for this campaign",
+      "problems": {
+        "greeting": "Write a welcome of up to 300 characters.",
+        "prefill": "Write a pre-typed message of up to 300 characters.",
+        "questions": "Use 1 to 3 different questions of up to 40 characters."
+      }
+    }
   },
   "create": {
     "title": "Create ads",
