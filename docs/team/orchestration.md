@@ -175,7 +175,9 @@ Each tick:
 VS Code restart ends every chat. Either way, GitHub and git are the memory. Start a new CEO with the text
 from `npm run team-supervisor -- --restart-prompt ceo`. It reads the board and its `decision` queue, adopts
 live worker chats (`list_sessions`, `get_session_context`) and starts each missing role with `create_session`
-(relationship `independent`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
+(relationship `independent`, model `Copilot Fusion`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
+Always pass the model: `create_session` otherwise copies the caller's model, and the automations run on Opus.
+The hourly supervisor and every CEO start team chats on Copilot Fusion and replace a non-Fusion chat at its next idle point.
 Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
 session. The outgoing CEO writes no handover: every decision and promise is already on its issue, and
 scheduled reads are `Next read <time>` comments. If workers still sit inside an earlier CEO's session, the

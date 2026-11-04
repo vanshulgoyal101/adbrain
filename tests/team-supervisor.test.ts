@@ -116,6 +116,7 @@ describe("team-supervisor (#573 A1)", () => {
     const text = restartPrompt("ceo");
     expect(roleFromPrompt(text)).toBe("ceo");
     expect(text).toContain('relationship "independent"');
+    expect(text).toContain('model "Copilot Fusion"');
     expect(text).toContain("never delete another session");
     expect(text).toContain("--restart-prompt <role>");
     expect(text).toContain("wait-for-work.mjs --me ceo");
