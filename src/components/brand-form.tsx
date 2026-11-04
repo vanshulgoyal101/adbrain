@@ -119,6 +119,19 @@ function firstLine(value: string): string {
 
 type BrandSaveState = SaveState & { submittedRevision?: number };
 
+function keepFocusedFieldVisible(event: React.FocusEvent<HTMLFormElement>) {
+  const field = event.target;
+  if (!(field instanceof HTMLElement) || !field.matches("input:not([type=hidden]), select, textarea")) return;
+  const viewport = window.visualViewport;
+  const top = viewport?.offsetTop ?? 0;
+  const bottom = top + (viewport?.height ?? window.innerHeight);
+  const bounds = field.getBoundingClientRect();
+  const hit = document.elementFromPoint?.((bounds.left + bounds.right) / 2, bounds.top + 1);
+  if (bounds.top < top || bounds.bottom > bottom || (hit && !field.contains(hit))) {
+    field.scrollIntoView({ block: "center", inline: "nearest" });
+  }
+}
+
 export function BrandForm({ business, photoCount = 0 }: { business: Business | null; photoCount?: number }) {
   const [form, setForm] = useState(() => ({ fields: fromBusiness(business), revision: 0 }));
   const { fields, revision } = form;
@@ -276,9 +289,13 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-6">
+    <form action={formAction} onFocusCapture={keepFocusedFieldVisible} className="flex flex-col gap-6">
       {confirmDialog}
       {business && <input type="hidden" name="id" value={business.id} />}
+
+      <a href="#brand-save" className="inline-flex min-h-11 w-fit items-center text-sm font-medium text-blue-700 underline underline-offset-4">
+        Jump to Save your business
+      </a>
 
       <div id="brand-identity" className="scroll-mt-6">
       <Card>
@@ -564,8 +581,9 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         </div>
       </section>
 
-      <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)]">
-        <Button type="submit" data-product-event="brand.save" disabled={pending || autofilling}>
+      {/* Leave room for the result and next step on phones without covering the fields. */}
+      <div id="brand-save" role="group" aria-labelledby="brand-save-button" tabIndex={-1} className="scroll-mt-20 flex min-h-32 flex-wrap content-start items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:min-h-0">
+        <Button id="brand-save-button" type="submit" data-product-event="brand.save" disabled={pending || autofilling}>
           {pending ? <Spinner /> : <Save className="h-4 w-4" />}
           Save your business
         </Button>

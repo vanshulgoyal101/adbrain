@@ -265,6 +265,44 @@ describe("<BrandForm> prefill", () => {
     expect(screen.queryByRole("link", { name: "Add real photos" })).not.toBeInTheDocument();
   });
 
+  it("keeps the Save area in flow and a keyboard jump available while saving", async () => {
+    let finishSave!: (result: { ok: boolean }) => void;
+    saveBusiness.mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));
+    render(<BrandForm business={business()} />);
+    const jump = screen.getByRole("link", { name: "Jump to Save your business" });
+    const save = screen.getByRole("button", { name: "Save your business" });
+    const area = screen.getByRole("group", { name: "Save your business" });
+    expect(jump).toHaveAttribute("href", `#${area.id}`);
+    expect(area).toContainElement(save);
+    expect(area).not.toHaveClass("sticky");
+    expect(area).not.toHaveClass("fixed");
+
+    fireEvent.click(save);
+    await waitFor(() => expect(saveBusiness).toHaveBeenCalledOnce());
+    expect(save).toBeDisabled();
+    area.focus();
+    expect(area).toHaveFocus();
+    await act(async () => finishSave({ ok: true }));
+  });
+
+  it("leaves a visible field in place and scrolls a clipped focused field", () => {
+    render(<BrandForm business={business()} />);
+    const description = screen.getByRole("textbox", { name: "Description" });
+    const scroll = vi.fn();
+    Object.defineProperty(description, "scrollIntoView", { value: scroll, configurable: true });
+    const bounds = vi.spyOn(description, "getBoundingClientRect");
+    const rect = (top: number, bottom: number) => ({
+      top, bottom, left: 20, right: 220, width: 200, height: bottom - top, x: 20, y: top, toJSON: () => ({}),
+    }) as DOMRect;
+
+    bounds.mockReturnValue(rect(100, 160));
+    fireEvent.focus(description);
+    expect(scroll).not.toHaveBeenCalled();
+    bounds.mockReturnValue(rect(window.innerHeight - 30, window.innerHeight + 30));
+    fireEvent.focus(description);
+    expect(scroll).toHaveBeenCalledWith({ block: "center", inline: "nearest" });
+  });
+
   it("does not claim a newly edited brand is still saved", async () => {
     render(<BrandForm business={business()} />);
     fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
