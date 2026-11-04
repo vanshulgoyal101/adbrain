@@ -1,3 +1,4 @@
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { NextResponse } from "next/server";
@@ -49,6 +50,8 @@ async function handlePOST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const fenced = refuseWhenFenced(_req);
+  if (fenced) return fenced;
   const { id } = await params;
   const supabase = await createClient();
   const {

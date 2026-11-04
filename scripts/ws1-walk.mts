@@ -9,12 +9,16 @@
 import assert from "node:assert/strict";
 import { chromium, type CDPSession, type Page } from "@playwright/test";
 import { honestCopyFindings } from "../src/lib/copy/honest-copy-rules";
+import { SMOKE_FENCE_HEADER, fenceStop } from "./lib/smoke-fence.mjs";
 import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 
 const origin = "https://adbrain.vanshul.com";
 const env = await localEnv();
 const { WS1_EMAIL: email } = process.env;
 const plant = process.argv.includes("--plant");
+// #2861 --fenced: the server refuses every AI-provider call (autofill, ad generation, redraws), so the walk needs a
+// business whose five fields are filled and whose ads exist; if it would have to generate, it stops as a non-pass.
+const fenced = process.argv.includes("--fenced");
 const LCP_MS = 2500;
 const CLS_MAX = 0.1;
 const BIO = "Sweet Crumbs Bakery, Mohali Phase 7 | Eggless cakes, brownies and custom birthday cakes | Same-day delivery in Mohali, Chandigarh and Zirakpur | Order on WhatsApp 98140 00000 | Flat 10% off on first order";
@@ -86,6 +90,12 @@ try {
     }
     return route.continue();
   });
+  if (fenced) {
+    await context.route("**/*", (route) => {
+      if (new URL(route.request().url()).origin !== origin) return route.fallback();
+      return route.fallback({ headers: { ...route.request().headers(), [SMOKE_FENCE_HEADER]: "draft-only" } });
+    });
+  }
   await context.addInitScript(({ planted }) => {
     const w = window as unknown as { __lcp: number; __cls: number };
     w.__lcp = 0; w.__cls = 0;
@@ -98,6 +108,13 @@ try {
     }, 200);
   }, { planted: plant });
   const page = await context.newPage();
+  if (fenced) {
+    page.on("response", async (response) => {
+      if (response.status() !== 409 || new URL(response.url()).origin !== origin) return;
+      const stopped = fenceStop(await response.json().catch(() => null));
+      if (stopped) check(false, "Draft-only fence", stopped);
+    });
+  }
 
   // #2574: a minted session, not the password form, so Supabase CAPTCHA (#1777) can stay on.
   await signInBrowser(context, origin, email, { config: testSessionConfig(env, origin) });

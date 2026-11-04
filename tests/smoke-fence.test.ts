@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { fenceHeaderValue, fenceStop, SMOKE_FENCE_HEADER as scriptHeader } from "../scripts/lib/smoke-fence.mjs";
 import { alignPrintedNumbers } from "@/lib/creative/chat-number";
-import { assertFenceOwnsDraft, SMOKE_FENCE_HEADER, SmokeFenceError, smokeFenceResponse } from "@/lib/security/smoke-fence";
+import { readFileSync } from "node:fs";
+import { assertFenceOwnsDraft, refuseWhenFenced, SMOKE_FENCE_HEADER, SmokeFenceError, smokeFenceResponse } from "@/lib/security/smoke-fence";
 import { requestIsFenced, smokeFence } from "@/lib/security/smoke-fence-server";
 
 const headerStore = vi.hoisted(() => ({ headers: null as Headers | null }));
@@ -74,5 +75,17 @@ describe("draft-only smoke fence (#2861)", () => {
     expect(await requestIsFenced()).toBe(false);
     headerStore.headers = null;
     expect(await requestIsFenced()).toBe(false);
+  });
+
+  it("refuses every fenced request on the AI-provider routes before any limit or usage, and leaves others alone", async () => {
+    const refused = refuseWhenFenced(req("draft-only"))!;
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error).toMatchObject({ code: "SMOKE_FENCE", effect: "ai_provider" });
+    expect(refuseWhenFenced(req())).toBeNull();
+    for (const route of ["creatives/generate", "creatives/assistant", "creatives/[id]/regenerate", "creatives/[id]/picture", "creatives/[id]/background", "brand/autofill"]) {
+      const source = readFileSync(`src/app/api/${route}/route.ts`, "utf8");
+      const handler = source.slice(source.indexOf("async function handlePOST"));
+      expect(handler.slice(0, 400), route).toContain("refuseWhenFenced(");
+    }
   });
 });

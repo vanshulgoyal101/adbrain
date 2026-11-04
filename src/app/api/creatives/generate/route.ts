@@ -1,3 +1,4 @@
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
 import { creativeFailureMessage, creativeFailureStage, type CreativeFailureStage } from "@/lib/creative/failure-message";
 import { saveCreative } from "@/lib/creative/save";
@@ -117,6 +118,8 @@ interface LiveCreate {
 }
 
 async function handlePOST(req: Request): Promise<Response> {
+  const fenced = refuseWhenFenced(req);
+  if (fenced) return fenced;
   if (!req.headers.get("accept")?.includes("application/x-ndjson")) return generate(req);
   const encoder = new TextEncoder();
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();

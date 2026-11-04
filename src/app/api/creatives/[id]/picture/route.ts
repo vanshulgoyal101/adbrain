@@ -1,3 +1,4 @@
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
@@ -37,6 +38,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /** Re-renders the words printed on an ad's picture over its saved background. No AI call (#280). */
 async function handlePOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const fenced = refuseWhenFenced(req);
+  if (fenced) return fenced;
   const { id } = await params;
   const supabase = await createClient();
   const {
