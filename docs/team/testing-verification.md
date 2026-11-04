@@ -47,6 +47,23 @@ responses. Network requests are fulfilled with fixtures or blocked; server
 actions throw. Screenshots go to ignored `test-results/scroll-layout/`.
 This does not replace authenticated workflow tests or real-device Safari testing.
 
+For Settings streaming and layout shifts without credentials or network access:
+
+```sh
+npm run test:settings-cls
+```
+
+[The Settings check](../../scripts/check-settings-cls.mjs) renders the actual
+Settings layout and loading components with application CSS. It checks full and
+shorter states at 360, 390, 1279, 1280 and 1440 px in Chromium and WebKit.
+It also streams real React Suspense responses at 360, 390 and 1440 px. Chromium
+checks Spend, Meta, the optional checklist and WhatsApp resolving in order,
+including an unavailable state and access to the Spend action. Headless WebKit
+checks the final streamed state; its intermediate frame-scheduled updates did
+not run before the fixture response ended. WebKit also does not expose
+layout-shift entries. The panels are synthetic, so this is not an authenticated
+Settings journey or real-device Safari evidence.
+
 ### Enquiry Checks
 
 For the saved-enquiry workflow, with installed Google Chrome and fully synthetic
