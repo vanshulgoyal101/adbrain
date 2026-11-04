@@ -10,6 +10,7 @@ import { fallbackAudienceTargeting, plannerPlanToDraftInput, rationaleForMatched
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
+import { smokeFence, smokeFenceResponse, SmokeFenceError } from "@/lib/security/smoke-fence";
 import { createClient } from "@/lib/supabase/server";
 import { websiteOpenFor } from "@/lib/campaign/website-gate";
 import type { Json } from "@/lib/types";
@@ -97,6 +98,13 @@ async function handlePOST(req: Request) {
         ),
       ],
     });
+  }
+
+  // #2861: the draft-only smoke runs no provider and stores no usage: an audience plan answers with the default
+  // targeting, and a full plan (which needs a model) stops.
+  if (smokeFence(req)) {
+    if (!audienceDraft) return smokeFenceResponse(currentRequestId(), new SmokeFenceError("planner_provider"));
+    return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft) });
   }
 
   let leadForms: LeadForm[] = [];

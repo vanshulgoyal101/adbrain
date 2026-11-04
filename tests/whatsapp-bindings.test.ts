@@ -41,6 +41,14 @@ describe("WhatsApp number bindings (#253)", () => {
     expect(db.upserts).toEqual([{ business_id: "b", phone_e164: own, source: "owner_pick" }]);
   });
 
+  it("stops before binding when the caller must not write (#2861)", async () => {
+    const stop = new Error("fenced");
+    await expect(whatsappNumberForBusiness("b", meta, own, { onBind: () => { throw stop; } })).rejects.toBe(stop);
+    expect(db.upserts).toEqual([]);
+    db.bound = [own];
+    expect(await whatsappNumberForBusiness("b", meta, own, { onBind: () => { throw stop; } })).toBe(own);
+  });
+
   it("never binds by pick for a managed (2-Tier) business: the parent's WABAs hold other customers' numbers", async () => {
     db.managed = true;
     expect(await whatsappNumberForBusiness("b", meta, other)).toBeNull();

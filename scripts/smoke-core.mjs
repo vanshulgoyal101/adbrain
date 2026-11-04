@@ -5,18 +5,21 @@ import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.m
 import { pictureSources } from "./lib/smoke-pictures.mjs";
 import { forgiveRecoveredBusyTurns } from "./lib/smoke-console.mjs";
 import { createFailureLines, parseCreateStream } from "./lib/smoke-create-failures.mjs";
+import { SMOKE_FENCE_HEADER, fenceHeaderValue, fenceStop } from "./lib/smoke-fence.mjs";
 
 const origin = "https://adbrain.vanshul.com";
 const modes = new Set(process.argv.slice(2));
 const mutating = ["--create", "--campaign", "--picture", "--prepare"];
-if ([...modes].some((mode) => ![...mutating, "--help"].includes(mode))) {
-  throw new Error("Supported modes: --create, --campaign, --picture, --prepare, --help.");
+if ([...modes].some((mode) => ![...mutating, "--draft-only", "--help"].includes(mode))) {
+  throw new Error("Supported modes: --create, --campaign, --picture, --prepare, --draft-only, --help.");
 }
 if (modes.has("--help")) {
-  console.log("npm run smoke:core [-- --create | -- --campaign | -- --picture | -- --prepare]");
+  console.log("npm run smoke:core [-- --create | -- --campaign | -- --picture | -- --prepare] [-- --draft-only]");
   process.exit(0);
 }
 assert.ok(mutating.filter((mode) => modes.has(mode)).length <= 1, "Run only one mutating mode at a time.");
+// #2861: draft-only runs the read-only views and the draft review; every other mode writes more than drafts.
+assert.ok(!modes.has("--draft-only") || !["--create", "--campaign", "--picture"].some((mode) => modes.has(mode)), "--draft-only can't be combined with --create, --campaign or --picture.");
 
 /** Campaigns → open setup → the first approved ad (not yet clicked). A click before hydration is lost, so reopen until one shows. */
 async function approvedAd(page) {
@@ -213,6 +216,8 @@ try {
   let draftDeleteCount = 0;
   let removingDraft = null;
   let pictureAllowed = null;
+  /** #2861: drafts this run saved; under --draft-only the server may change or delete only these. */
+  const ownedDrafts = new Set();
   page.on("pageerror", (error) => errors.push(error.name === "EvalError" ? "CSP eval error" : `page error (${error.name})`));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
@@ -224,6 +229,16 @@ try {
     const status = message.text().match(/\b(?:40[0-9]|50[0-9])\b/)?.[0];
     errors.push(message.text().includes("Content Security Policy") ? `CSP violation at ${path}` : `console error at ${path}${status ? ` (HTTP ${status})` : ""}`);
   });
+  // #2861: a fence refusal on any request (a pre-existing draft, a redraw, a binding) is a failed run, not a pass.
+  if (modes.has("--draft-only")) {
+    page.on("response", async (response) => {
+      if (response.status() !== 409 || new URL(response.url()).origin !== origin) return;
+      const stopped = fenceStop(await response.json().catch(() => null));
+      if (!stopped) return;
+      console.log(`FAIL ${stopped}`);
+      process.exitCode = 1;
+    });
+  }
   page.on("response", (response) => {
     if (response.status() !== 503 || new URL(response.url()).pathname !== "/api/creatives/assistant") return;
     assistantBusy.push(response.json().then((body) => body?.code === "AI_BUSY", () => false));
@@ -269,7 +284,10 @@ try {
       if (draftSave && draftCount++ === 0) {
         const response = await route.fetch();
         const draft = (await response.json().catch(() => null))?.data;
-        if (response.ok() && draft?.draftId) savedDraft = { id: draft.draftId, version: draft.version };
+        if (response.ok() && draft?.draftId) {
+          savedDraft = { id: draft.draftId, version: draft.version };
+          if (UUID.test(draft.draftId)) ownedDrafts.add(draft.draftId);
+        }
         return route.fulfill({ response });
       }
       if (url.pathname === "/api/campaigns/preflight" && preflightCount++ === 0) return route.continue();
@@ -290,6 +308,14 @@ try {
     }
     return route.continue();
   });
+
+  // Registered after the allowlist, so it runs first and hands each same-origin request on with the fence header.
+  if (modes.has("--draft-only")) {
+    await context.route("**/*", (route) => {
+      if (new URL(route.request().url()).origin !== origin) return route.fallback();
+      return route.fallback({ headers: { ...route.request().headers(), [SMOKE_FENCE_HEADER]: fenceHeaderValue(ownedDrafts) } });
+    });
+  }
 
   // #2574: the guard still proves the sign-in page renders and hydrates (a click opens the password form), but never
   // submits it: the session is minted with the service role, so Supabase CAPTCHA (#1777) can stay on.
@@ -372,7 +398,10 @@ try {
         throw message ? new Error(`Prepare stopped: ${message}`) : error;
       });
       campaignSetup = false;
-      const review = (await response.json().catch(() => null))?.data;
+      const body = await response.json().catch(() => null);
+      const review = body?.data;
+      const stopped = fenceStop(body);
+      assert.ok(!stopped, stopped);
       assert.equal(response.status(), 200, `Preflight returned HTTP ${response.status()}`);
       const blockers = (review?.blockers ?? []).map((blocker) => blocker.message);
       const unexpected = blockers.filter((message) => !message.startsWith("Add your business website"));
@@ -420,8 +449,11 @@ try {
         throw message ? new Error(`Go live stopped before its review: ${message}`) : error;
       });
       goLiveSetup = false;
+      const body = await response.json().catch(() => null);
+      const stopped = fenceStop(body);
+      assert.ok(!stopped, stopped);
       assert.equal(response.status(), 200, `Preflight returned HTTP ${response.status()}`);
-      const review = (await response.json().catch(() => null))?.data;
+      const review = body?.data;
       const blockers = review?.blockers ?? [];
       const unexpected = blockers.filter((blocker) => blocker.reason !== "REVIEW_NO_WEBSITE" && !blocker.message?.startsWith("Add your business website"));
       assert.equal(unexpected.length, 0, `Preflight blocked: ${unexpected.map((blocker) => blocker.reason ?? blocker.code).join(", ")}`);

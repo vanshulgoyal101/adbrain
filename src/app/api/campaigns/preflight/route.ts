@@ -13,6 +13,7 @@ import {
 import { BUSINESS_ACCESS_ERRORS } from "@/i18n/locale";
 import { createClient } from "@/lib/supabase/server";
 import { ownerWords, requestLocale } from "@/i18n/request-locale";
+import { smokeFence, smokeFenceResponse, SmokeFenceError } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 
@@ -56,7 +57,7 @@ async function handlePOST(request: Request) {
 
   try {
     const result = await prepareCampaignReview(
-      buildCampaignPreflightLoaders(supabase, actor),
+      buildCampaignPreflightLoaders(supabase, actor, { fence: smokeFence(request) }),
       {
         actor,
         draftId: parsed.data.draftId,
@@ -82,6 +83,7 @@ async function handlePOST(request: Request) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    if (error instanceof SmokeFenceError) return smokeFenceResponse(requestId, error);
     if (error instanceof ConnectionAccessError) {
       const status = error.code === "CONFLICT" ? 409 : error.code === "UNAUTHENTICATED" ? 401 : 503;
       return errorResponse(requestId, status, error.code === "CONFLICT" ? "CONFLICT" : error.code, error.message, status >= 500);

@@ -14,6 +14,7 @@ import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connecti
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { ownerError } from "@/i18n/request-locale";
+import { assertFenceOwnsDraft, smokeFence, smokeFenceResponse, SmokeFenceError } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 
@@ -86,6 +87,12 @@ async function handlePUT(
   const body = draftUpdateRequestSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return errorResponse(requestId, 400, "INVALID_INPUT", "Draft update is invalid.");
   const { id } = await params;
+  try {
+    assertFenceOwnsDraft(smokeFence(request), id);
+  } catch (error) {
+    if (error instanceof SmokeFenceError) return smokeFenceResponse(requestId, error);
+    throw error;
+  }
   const { data: row, error } = await findDraft(supabase, id, user.id);
   if (error || !row) return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
   const authorization = await authorizeDraftBusiness(row.business_id, requestId);
@@ -130,6 +137,12 @@ async function handleDELETE(
   const expectedVersion = Number(new URL(request.url).searchParams.get("version"));
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) return errorResponse(requestId, 400, "INVALID_INPUT", "A valid draft version is required.");
   const { id } = await params;
+  try {
+    assertFenceOwnsDraft(smokeFence(request), id);
+  } catch (error) {
+    if (error instanceof SmokeFenceError) return smokeFenceResponse(requestId, error);
+    throw error;
+  }
   const { data: row, error } = await findDraft(supabase, id, user.id);
   if (error || !row) return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
   const authorization = await authorizeDraftBusiness(row.business_id, requestId);

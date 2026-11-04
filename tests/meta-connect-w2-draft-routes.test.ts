@@ -132,4 +132,40 @@ describe("campaign draft HTTP routes", () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "CONFLICT", message: expect.stringMatching(/campaign operation/) } });
   });
+
+  describe("draft-only smoke fence (#2861)", () => {
+    const fenced = (method: string, drafts?: string, body?: unknown) => new Request(`http://localhost/api/campaign-drafts/${draftId}?version=1`, {
+      method,
+      headers: { "Content-Type": "application/json", "x-adbrain-smoke-fence": drafts ? `draft-only; drafts=${drafts}` : "draft-only" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const params = { params: Promise.resolve({ id: draftId }) };
+
+    it("refuses to update or delete a draft this run didn't create, before any write", async () => {
+      const { PUT, DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      for (const response of [
+        await PUT(fenced("PUT", undefined, { expectedVersion: 1, input }), params),
+        await DELETE(fenced("DELETE", "00000000-0000-4000-8000-000000000000"), params),
+        await DELETE(fenced("DELETE", "not-a-uuid"), params),
+      ]) {
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "SMOKE_FENCE", effect: "existing_draft" } });
+      }
+      expect(mocks.rpc).not.toHaveBeenCalled();
+    });
+
+    it("lets the run update and delete the draft it created", async () => {
+      const { PUT, DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      expect((await PUT(fenced("PUT", draftId, { expectedVersion: 1, input: { ...input, name: "Updated" } }), params)).status).toBe(200);
+      mocks.rpc.mockResolvedValue({ data: [{ id: draftId }], error: null });
+      expect((await DELETE(fenced("DELETE", draftId), params)).status).toBe(200);
+      expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    });
+
+    it("leaves a request without the header unchanged", async () => {
+      const { DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      mocks.rpc.mockResolvedValue({ data: [{ id: draftId }], error: null });
+      expect((await DELETE(new Request(`http://localhost/api/campaign-drafts/${draftId}?version=1`, { method: "DELETE" }), params)).status).toBe(200);
+    });
+  });
 });
