@@ -24,7 +24,7 @@ export const metadata = { title: OWNER_WORDS.business };
 export default async function BrandPage({ searchParams }: { searchParams: Promise<{ all?: string | string[]; again?: string | string[] }> }) {
   const whatsappWordsPromise = requestWords("whatsappMessage");
   void whatsappWordsPromise.catch((error: unknown) =>
-    console.error("[brand.whatsappWords]", error instanceof Error ? error.message : "Unknown error"));
+    console.error("[brand.whatsappWords]", error instanceof Error ? error.message : typeof error));
   const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams]);
   const brandData = business && params.again !== "1"
     ? Promise.all([
@@ -35,7 +35,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
     : null;
   // Setup can return before speculative reads finish; report failures even on that path.
   void brandData?.catch((error: unknown) =>
-    console.error("[brand.data]", error instanceof Error ? error.message : "Unknown error"));
+    console.error("[brand.data]", error instanceof Error ? error.message : typeof error));
   // #1269 (#1251 WS1 step 1): until a first campaign has gone live, Your business is the five-field setup step;
   // `?all=1` opens the full page. If the check fails, the full page shows as before.
   const setup = params.all !== "1" && (!business || !(await hasLaunchedCampaign(business.id).catch(() => true)));

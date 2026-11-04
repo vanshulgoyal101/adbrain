@@ -5,6 +5,7 @@ import en from "../../messages/en.json";
 import hi from "../../messages/hi.json";
 import type { AdInstruction, BrandAsset, Business } from "@/lib/types";
 import type { MetaConnection } from "@/lib/meta/credentials";
+import BrandPage from "@/app/(app)/brand/page";
 
 const reads = vi.hoisted(() => ({
   getPrimaryBusiness: vi.fn(),
@@ -83,8 +84,7 @@ function delay<T>(value: T, ms: number) {
   return new Promise<T>((resolve) => setTimeout(() => resolve(value), ms));
 }
 
-async function brandPage(params: { all?: string; again?: string } = {}) {
-  const { default: BrandPage } = await import("@/app/(app)/brand/page");
+function brandPage(params: { all?: string; again?: string } = {}) {
   return BrandPage({ searchParams: Promise.resolve(params) });
 }
 
@@ -114,7 +114,7 @@ describe("core: Brand page read concurrency (#2849)", () => {
     reads.getPrimaryBusiness.mockReturnValue(lookup.promise);
     const page = brandPage();
     try {
-      await waitFor(() => expect(reads.getPrimaryBusiness).toHaveBeenCalled());
+      expect(reads.getPrimaryBusiness).toHaveBeenCalled();
       expect(reads.requestWords).toHaveBeenCalledWith("whatsappMessage");
     } finally {
       lookup.resolve(business);
@@ -124,10 +124,15 @@ describe("core: Brand page read concurrency (#2849)", () => {
 
   it("starts all business-scoped reads before the launch check finishes", async () => {
     const launch = deferred<boolean>();
-    reads.hasLaunchedCampaign.mockReturnValue(launch.promise);
+    const launchStarted = deferred<void>();
+    reads.hasLaunchedCampaign.mockImplementation(() => {
+      launchStarted.resolve();
+      return launch.promise;
+    });
     const page = brandPage();
     try {
-      await waitFor(() => expect(reads.hasLaunchedCampaign).toHaveBeenCalledWith(business.id));
+      await launchStarted.promise;
+      expect(reads.hasLaunchedCampaign).toHaveBeenCalledWith(business.id);
       expect(reads.getBrandAssets).toHaveBeenCalledWith(business.id);
       expect(reads.getAdInstructions).toHaveBeenCalledWith(business.id);
       expect(reads.getMetaConnection).toHaveBeenCalledWith(business.id);
@@ -270,6 +275,13 @@ describe("core: Brand page read concurrency (#2849)", () => {
     render(await brandPage());
     expect(screen.getByText("First setup: SunPeak; choose language: true")).toBeInTheDocument();
     expect(console.error).toHaveBeenCalledWith("[brand.whatsappWords]", "Language unavailable.");
+  });
+
+  it("reports the type rather than the contents of a non-Error speculative failure", async () => {
+    reads.hasLaunchedCampaign.mockResolvedValue(false);
+    reads.requestWords.mockRejectedValue("private detail");
+    render(await brandPage());
+    expect(console.error).toHaveBeenCalledWith("[brand.whatsappWords]", "string");
   });
 
   it("does not show the message card or read WhatsApp status when Meta is not ready", async () => {
