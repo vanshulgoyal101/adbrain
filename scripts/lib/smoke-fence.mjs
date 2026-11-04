@@ -22,3 +22,16 @@ export function fenceStop(body) {
 
 /** The line for a fenced step that ran without its provider, so a green run never reads as full coverage. */
 export const fenceSkipNote = (body) => (body?.smokeFenced ? "SKIP planner provider coverage: the draft-only fence answered with default targeting (not the full check)" : null);
+
+/**
+ * Whether the checked-out source is the build the origin serves. The walk judges the signed-in identity with the
+ * checked-out `freeOnlyEligibility`; that only proves the served app holds it to free providers when both are the same
+ * commit. Unknown on either side, or a different commit, is a refusal (never a pass).
+ */
+export function policyParity(servedRelease, localSha) {
+  const full = /^[0-9a-f]{40}$/;
+  if (!full.test(localSha ?? "")) return { ok: false, reason: "the checked-out commit is unknown" };
+  if (!full.test(servedRelease ?? "")) return { ok: false, reason: `the origin does not report its release (${servedRelease ? "unrecognised value" : "no X-AdBrain-Release header"})` };
+  if (servedRelease !== localSha) return { ok: false, reason: `the origin serves ${servedRelease.slice(0, 7)} but the walk's policy is ${localSha.slice(0, 7)}` };
+  return { ok: true, reason: "" };
+}

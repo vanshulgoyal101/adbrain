@@ -7,10 +7,11 @@
 // Signs in with TEST_SESSION_SECRET (CI) or the local service role (#2574). WS1_EMAIL must be a confirmed internal address (free image providers, #466) whose business has never gone live.
 // --plant injects a promise into step 3 and slows step 2's pictures, so the run must FAIL (proves the checks bite).
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { chromium, type CDPSession, type Page } from "@playwright/test";
 import { freeOnlyEligibility } from "../src/lib/internal-accounts";
 import { honestCopyFindings } from "../src/lib/copy/honest-copy-rules";
-import { SMOKE_FENCE_HEADER, fenceStop } from "./lib/smoke-fence.mjs";
+import { SMOKE_FENCE_HEADER, fenceStop, policyParity } from "./lib/smoke-fence.mjs";
 import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 
 const origin = "https://adbrain.vanshul.com";
@@ -117,6 +118,17 @@ try {
       const stopped = fenceStop(await response.json().catch(() => null));
       if (stopped) check(false, "Draft-only fence", stopped);
     });
+  }
+
+  // #2861: the eligibility check below runs the checked-out policy, so it only speaks for production when production serves
+  // that same commit. Checked before sign-in or any page; unknown or different is a skip, not a pass.
+  const served = (await fetch(origin, { method: "HEAD", redirect: "follow" }).catch(() => null))?.headers.get("x-adbrain-release") ?? "";
+  const localSha = process.env.GITHUB_SHA || (() => { try { return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(); } catch { return ""; } })();
+  const parity = policyParity(served, localSha);
+  if (!parity.ok) {
+    console.log(`WS1 walk SKIPPED: free-provider eligibility can't be proved for the served app (${parity.reason}); no page opened and no AI call made. Coverage NOT run.`);
+    skipped = true;
+    throw new SkippedWalk();
   }
 
   // #2574: a minted session, not the password form, so Supabase CAPTCHA (#1777) can stay on.

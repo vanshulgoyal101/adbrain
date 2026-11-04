@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fenceHeaderValue, fenceStop, SMOKE_FENCE_HEADER as scriptHeader } from "../scripts/lib/smoke-fence.mjs";
+import { fenceHeaderValue, fenceStop, policyParity, SMOKE_FENCE_HEADER as scriptHeader } from "../scripts/lib/smoke-fence.mjs";
 import { alignPrintedNumbers } from "@/lib/creative/chat-number";
 import { readFileSync } from "node:fs";
 import internal from "@/lib/internal-accounts.json";
@@ -103,5 +103,19 @@ describe("draft-only smoke fence (#2861)", () => {
     expect(gate).toBeGreaterThan(walk.indexOf("await signInBrowser("));
     expect(gate).toBeLessThan(walk.indexOf("page.goto("));
     expect(walk).toContain("Coverage NOT run");
+  });
+});
+
+describe("#2861 path B parity", () => {
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  it("passes only when the served release is the checked-out commit", () => {
+    expect(policyParity(a, a).ok).toBe(true);
+  });
+  it("fails closed on a different, missing or malformed release or an unknown checkout", () => {
+    expect(policyParity(b, a).ok).toBe(false);
+    expect(policyParity("", a).reason).toMatch(/no X-AdBrain-Release/);
+    expect(policyParity("local", a).ok).toBe(false);
+    expect(policyParity(a, "").ok).toBe(false);
   });
 });
