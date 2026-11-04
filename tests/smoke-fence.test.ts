@@ -150,6 +150,20 @@ describe("#2861 WS1 skip outcome", () => {
     });
   });
 
+  describe("#2861 production guard fence", () => {
+    it("runs both production smokes with the server-side draft-only fence enabled", () => {
+      const workflow = readFileSync(".github/workflows/production-guard.yml", "utf8");
+      const coreStart = workflow.indexOf("- name: Read-only core smoke");
+      const ws1Start = workflow.indexOf("- name: WS1 first-timer walk (#1439)", coreStart);
+      const rollbackStart = workflow.indexOf("- name: Roll production back", ws1Start);
+      const coreStep = workflow.slice(coreStart, ws1Start);
+      const ws1Step = workflow.slice(ws1Start, rollbackStart);
+
+      expect(coreStep).toContain("node scripts/smoke-core.mjs --draft-only");
+      expect(ws1Step).toContain("npx tsx scripts/ws1-walk.mts --fenced");
+    });
+  });
+
   it("passes only when the walk ran and every check passed", () => {
     expect(ws1WalkOutcome({ skipped: false, failureCount: 0 })).toEqual({
       status: "PASSED",

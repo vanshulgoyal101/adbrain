@@ -95,7 +95,7 @@ jobs:
         run: |
           smoke() {
             if [ -n "$FORCE_FAIL" ]; then echo "FAIL forced by dispatch"; return 1; fi
-            rc=0; timeout -k 30s 10m node scripts/smoke-core.mjs || rc=$?
+            rc=0; timeout -k 30s 10m node scripts/smoke-core.mjs --draft-only || rc=$?
             if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then echo "FAIL smoke did not finish in 10 min"; fi
             return "$rc"
           }
@@ -114,7 +114,7 @@ jobs:
             echo "WS1 walk SKIPPED: WS1_EMAIL not set; Coverage NOT run." | tee ws1.txt
             rc=1
           else
-            rc=0; timeout -k 30s 9m npx tsx scripts/ws1-walk.mts | tee ws1.txt || rc=$?
+            rc=0; timeout -k 30s 9m npx tsx scripts/ws1-walk.mts --fenced | tee ws1.txt || rc=$?
           fi
           { echo '### WS1 walk'; echo '```'; cat ws1.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
