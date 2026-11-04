@@ -28,7 +28,7 @@ function kick(runs: { status: string; minutesAgo: number }[]) {
   writeFileSync(join(dir, "gh"), `#!/bin/bash\necho "$*" >> "${dir}/gh.log"\n[ "$1 $2" = "run list" ] && cat "${dir}/runs.json"\nexit 0\n`);
   chmodSync(join(dir, "gh"), 0o755);
   execFileSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script()], {
-    env: { PATH: `${dir}:${process.env.PATH}`, STALE_MINUTES: "14" },
+    env: { NODE_ENV: "test", PATH: `${dir}:${process.env.PATH}`, STALE_MINUTES: "14" },
     stdio: "pipe",
   });
   return readFileSync(join(dir, "gh.log"), "utf8").includes("workflow run scheduled-jobs.yml --ref main");
