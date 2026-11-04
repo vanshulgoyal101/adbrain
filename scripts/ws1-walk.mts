@@ -11,7 +11,7 @@ import { execFileSync } from "node:child_process";
 import { chromium, type CDPSession, type Page } from "@playwright/test";
 import { freeOnlyEligibility } from "../src/lib/internal-accounts";
 import { honestCopyFindings } from "../src/lib/copy/honest-copy-rules";
-import { SMOKE_FENCE_HEADER, fenceStop, policyParity } from "./lib/smoke-fence.mjs";
+import { SMOKE_FENCE_HEADER, fenceStop, policyParity, ws1WalkOutcome } from "./lib/smoke-fence.mjs";
 import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 
 const origin = "https://adbrain.vanshul.com";
@@ -203,6 +203,6 @@ try {
   await browser.close();
 }
 check(!metaWrites.length, "No Meta write attempted", metaWrites.join(", "));
-if (skipped) process.exit(0);
-console.log(failures.length ? `WS1 walk FAILED: ${failures.length} check(s)` : "WS1 walk PASSED");
-process.exitCode = failures.length ? 1 : 0;
+const outcome = ws1WalkOutcome({ skipped, failureCount: failures.length });
+console.log(outcome.message);
+process.exitCode = outcome.exitCode;

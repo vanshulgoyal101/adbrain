@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fenceHeaderValue, fenceStop, policyParity, SMOKE_FENCE_HEADER as scriptHeader } from "../scripts/lib/smoke-fence.mjs";
+import { fenceHeaderValue, fenceStop, policyParity, SMOKE_FENCE_HEADER as scriptHeader, ws1WalkOutcome } from "../scripts/lib/smoke-fence.mjs";
 import { alignPrintedNumbers } from "@/lib/creative/chat-number";
 import { readFileSync } from "node:fs";
 import internal from "@/lib/internal-accounts.json";
@@ -138,5 +138,44 @@ describe("#2861 path B parity", () => {
     expect(policyParity("", a).reason).toMatch(/no X-AdBrain-Release/);
     expect(policyParity("local", a).ok).toBe(false);
     expect(policyParity(a, "").ok).toBe(false);
+  });
+});
+
+describe("#2861 WS1 skip outcome", () => {
+  it("fails the walk when coverage is skipped instead of passing", () => {
+    expect(ws1WalkOutcome({ skipped: true, failureCount: 0 })).toEqual({
+      status: "SKIPPED",
+      exitCode: 1,
+      message: "WS1 walk SKIPPED: Coverage NOT run.",
+    });
+  });
+
+  it("passes only when the walk ran and every check passed", () => {
+    expect(ws1WalkOutcome({ skipped: false, failureCount: 0 })).toEqual({
+      status: "PASSED",
+      exitCode: 0,
+      message: "WS1 walk PASSED",
+    });
+    expect(ws1WalkOutcome({ skipped: false, failureCount: 1 })).toEqual({
+      status: "FAILED",
+      exitCode: 1,
+      message: "WS1 walk FAILED: 1 check(s)",
+    });
+  });
+
+  it("fails the production guard when WS1_EMAIL is missing instead of recording a successful skip", () => {
+    const workflow = readFileSync(".github/workflows/production-guard.yml", "utf8");
+    const start = workflow.indexOf("- name: WS1 first-timer walk (#1439)");
+    const end = workflow.indexOf("- name: Roll production back", start);
+    const step = workflow.slice(start, end);
+    expect(step).toContain("WS1 walk SKIPPED");
+    expect(step).toContain('exit "$rc"');
+    expect(step).not.toContain("exit 0");
+
+    const rollbackStart = workflow.indexOf("- name: Roll production back");
+    const alertStart = workflow.indexOf("- name: Open core bug", rollbackStart);
+    const rollback = workflow.slice(rollbackStart, alertStart);
+    expect(rollback).toContain("steps.smoke.outcome == 'failure'");
+    expect(workflow.slice(alertStart)).toContain("WS1 coverage:");
   });
 });

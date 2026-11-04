@@ -30,3 +30,9 @@ export function policyParity(servedRelease, localSha) {
   if (servedRelease !== localSha) return { ok: false, reason: `the origin serves ${servedRelease.slice(0, 7)} but the walk's policy is ${localSha.slice(0, 7)}` };
   return { ok: true, reason: "" };
 }
+
+export function ws1WalkOutcome({ skipped, failureCount }) {
+  if (skipped) return { status: "SKIPPED", exitCode: 1, message: "WS1 walk SKIPPED: Coverage NOT run." };
+  if (failureCount > 0) return { status: "FAILED", exitCode: 1, message: `WS1 walk FAILED: ${failureCount} check(s)` };
+  return { status: "PASSED", exitCode: 0, message: "WS1 walk PASSED" };
+}

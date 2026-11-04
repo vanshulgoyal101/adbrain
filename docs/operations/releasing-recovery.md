@@ -77,8 +77,10 @@ anyone watching (owner-approved automatic rollback, #111):
   from a pasted bio where empty), step 2's two picked ads, and step 3's cap, Connect/payment
   and trust lines, each with LCP ≤ 2.5 s, CLS ≤ 0.1 and the honest-copy rules
   (`src/lib/copy/honest-copy-rules.ts`). Every Meta write is blocked. The result lands in the
-  run summary; a FAIL turns the guard red and opens a core bug, but never rolls back. Skipped while the secrets are
-  unset. `--plant` must make it FAIL (a planted promise and a slowed load).
+  run summary; a FAIL turns the guard red and opens a core bug, but never rolls back. A fail-closed
+  skip (missing `WS1_EMAIL`, unknown or mismatched served release, or an account not held to free
+  providers) is also a non-success: coverage is marked not run, the guard turns red and opens a
+  core bug without rolling back. `--plant` must make it FAIL (a planted promise and a slowed load).
 - **Free pictures, every 4 hours (#2145, #2405):** [`create-smoke.yml`](../../.github/workflows/create-smoke.yml)
   runs `smoke-core.mjs --picture` as the smoke account at :17 past every fourth hour, one run at a time and with
   no retry. It signs in, opens the read-only views and changes the background of the most recent ad that isn't
