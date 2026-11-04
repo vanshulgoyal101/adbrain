@@ -218,6 +218,7 @@ GitHub environment secrets; never in an issue. GitHub's and Vercel's own variabl
 | `META_CONNECT_UI_BASE_URL`, `META_CONNECT_UI_STATIC_ONLY`, `META_OAUTH_INTERACTIVE`, `META_TEST_TRANSFER_SQL` | Local Meta connect checks (`check-meta-connect-ui.mjs`, `check-meta-oauth-entry.mjs`, `check-meta-connect-db.mjs`): target URL, static-only and interactive switches, transfer SQL path | No |
 | `META_TEST_PG_BIN` | `check-meta-connect-db.mjs`, `db-export.mjs`, `restore-drill.mjs`: Postgres binary folder | No |
 | `WORKSPACE_CHECK_URL`, `WORKSPACE_CHECK_WIDTH` | `check-workspace-ux.mjs`: target URL and viewport width | No |
+| `MEDIA_LAYOUT_SCREENSHOT_DIR` | `check-media-upload-layout.mjs`: optional directory for the 320px Hindi failure-state screenshot | No |
 | `BRAND_JSON`, `GOAL`, `APPROVED_JSON`, `WHATSAPP_NUMBER`, `MESSAGES_JSON`, `ONLY`, `OUT` | `record-*-fixtures.ts` inputs and output path for recording real responses | No |
 
 `npm run env:doctor` and `npm run env:doctor:strict` run
