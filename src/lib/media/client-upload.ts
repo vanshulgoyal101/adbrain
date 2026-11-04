@@ -205,7 +205,8 @@ export async function uploadPrepared(businessId: string, file: Prepared, deps: U
     || typeof signed.path !== "string" || !signed.path || typeof signed.token !== "string" || !signed.token) {
     throw refusal("MEDIA_UNAVAILABLE", { key: "upload.failed" });
   }
-  const { error } = await deps.uploadToSignedUrl(signed.bucket, signed.path, signed.token, file.blob, file.mime).catch((caught: unknown) => ({ error: caught }));
+  const bucket = mediaBucket(file.kind);
+  const { error } = await deps.uploadToSignedUrl(bucket, signed.path, signed.token, file.blob, file.mime).catch((caught: unknown) => ({ error: caught }));
   if (error) throw refusal("MEDIA_NETWORK", { key: "upload.failed" });
   const finalized = await postJson(deps, "/api/media/finalize", { id: signed.id }, file.kind);
   if (finalized.ok !== true) throw refusal("MEDIA_UNAVAILABLE", { key: "upload.failed" });
