@@ -16,12 +16,19 @@ describe("WhatsApp chat ads status (#235)", () => {
   });
 
   it("shows ready numbers masked, with where each one comes from", () => {
-    render(<WhatsAppStatusPanel businessId={businessId} initialStatus={{ state: "ready", numbers: [{ masked: "+91 ••••• 4842", source: "business" }] }} />);
+    render(<WhatsAppStatusPanel businessId={businessId} initialStatus={{ state: "ready", numbers: [{ masked: "+91 ••••• 4842", source: "business", choiceId: "a".repeat(64) }] }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Ready: +91 ••••• 4842 (your WhatsApp Business account)");
   });
 
+  it("does not imply the complete business-number list was checked when only the Page is available", () => {
+    render(<WhatsAppStatusPanel businessId={businessId} initialStatus={{
+      state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page", choiceId: "a".repeat(64) }], businessUnavailable: true,
+    }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Some WhatsApp Business numbers could not be checked");
+  });
+
   it("guides the link while no number is linked, then picks up the link on Check again", async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page" }] }));
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page", choiceId: "a".repeat(64) }] }));
     vi.stubGlobal("fetch", fetchMock);
     render(<WhatsAppStatusPanel businessId={businessId} initialStatus={{ state: "not_linked" }} />);
     expect(screen.getByText(/Settings → Linked accounts → WhatsApp/)).toBeInTheDocument();
@@ -34,7 +41,7 @@ describe("WhatsApp chat ads status (#235)", () => {
 
   it("says unavailable instead of guessing when Meta can't be read", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => Response.json({ error: "nope" }, { status: 500 })));
-    render(<WhatsAppStatusPanel businessId={businessId} initialStatus={{ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page" }] }} />);
+    render(<WhatsAppStatusPanel businessId={businessId} initialStatus={{ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page", choiceId: "a".repeat(64) }] }} />);
     fireEvent.click(screen.getByRole("button", { name: /check again/i }));
     expect(await screen.findByText(/WhatsApp status is unavailable/)).toBeInTheDocument();
   });

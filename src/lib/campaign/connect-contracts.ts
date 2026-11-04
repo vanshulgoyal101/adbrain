@@ -54,6 +54,9 @@ export const targetingInputSchema = z
 export type TargetingInputDTO = z.infer<typeof targetingInputSchema>;
 
 export const websiteGoalSchema = z.enum(["visits", "leads", "sales"] satisfies WebsiteGoal[]);
+export const whatsappNumberSchema = z.union([z.string().regex(/^\+[1-9]\d{6,14}$/), z.string().regex(maskedWhatsAppNumberPattern)]);
+export const whatsappNumberSourceSchema = z.enum(["page", "business"]);
+export const whatsappNumberChoiceIdSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const validWebsiteGoal = (value: { destination?: string; websiteGoal?: WebsiteGoal }) =>
   value.websiteGoal === undefined || value.destination === "website";
 
@@ -71,7 +74,11 @@ export const draftInputSchema = z
     /** #2710: absent means visits; conversion goals remain closed at Review until their launch gates exist. */
     websiteGoal: websiteGoalSchema.optional(),
     /** WhatsApp button number when it differs from the Page's, in full or masked as AdBrain shows it ("+91 ••••• 4842"); verified against Meta at review. */
-    whatsappNumber: z.union([z.string().regex(/^\+[1-9]\d{6,14}$/), z.string().regex(maskedWhatsAppNumberPattern)]).optional(),
+    whatsappNumber: whatsappNumberSchema.optional(),
+    /** The owner's explicit choice; legacy masked drafts require a new selection. */
+    whatsappNumberSource: whatsappNumberSourceSchema.optional(),
+    /** A business-scoped identifier for the exact number shown as a mask. */
+    whatsappNumberChoiceId: whatsappNumberChoiceIdSchema.optional(),
     /** #493: the language of the WhatsApp message the customer sends; "ad" (default) follows the ads. */
     whatsappLanguage: z.enum(["ad", "en", "hi", "hinglish", "pa"]).optional(),
     /** #840: this campaign's own WhatsApp message ("Edit for this campaign"); it wins over the saved one. */
@@ -82,7 +89,13 @@ export const draftInputSchema = z
     excludeFacebookReels: z.boolean().optional(),
   })
   .strict()
-  .refine(validWebsiteGoal, { message: "Website goals require the website destination.", path: ["websiteGoal"] });
+  .refine(validWebsiteGoal, { message: "Website goals require the website destination.", path: ["websiteGoal"] })
+  .refine((value) => !value.whatsappNumberSource || (value.destination === "whatsapp" && value.whatsappNumber), {
+    message: "A WhatsApp number source requires a WhatsApp number.", path: ["whatsappNumberSource"],
+  })
+  .refine((value) => !value.whatsappNumberChoiceId || (value.whatsappNumber && value.whatsappNumberSource), {
+    message: "A WhatsApp choice requires its number and source.", path: ["whatsappNumberChoiceId"],
+  });
 export type DraftInput = z.infer<typeof draftInputSchema>;
 
 export const draftDtoSchema = z.object({
@@ -125,6 +138,7 @@ export const reviewDtoSchema = z.object({
   /** #2714: the Brand's tracking a signup or sales goal was reviewed with; launch optimises for this one only. */
   pixelId: z.string().regex(/^\d{1,32}$/).optional(),
   whatsappNumber: z.string().regex(/^\+[1-9]\d{6,14}$/).nullable().optional(),
+  whatsappNumberSource: whatsappNumberSourceSchema.optional(),
   /** #2599: a website ad's link exactly as Review opened and hashed it; launch sends this, never a fresh Brand read. */
   websiteUrl: z.string().url().max(2_000).nullable().optional(),
   currency: z.literal("INR"),

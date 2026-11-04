@@ -13,6 +13,7 @@ import type { WebsiteReach } from "@/lib/campaign/website-reach";
 import { isAdvertiserWebsite, websiteAdLink, websiteBlocker } from "@/lib/campaign/website-review";
 import { creativesBlockerMessage, named, trackingBlockerWords, websiteBlockerWords } from "@/lib/campaign/review-blocker-words";
 import { conversionGoal, goalWordsMismatch, trackingBlocker, type ReviewTracking } from "@/lib/campaign/website-tracking";
+import type { WhatsAppNumberSource } from "@/lib/types/campaign";
 
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
@@ -68,6 +69,7 @@ export interface PreflightInput {
   creatives: PreflightCreative[];
   form: PreflightForm | null;
   whatsappNumber?: string | null;
+  whatsappNumberSource?: WhatsAppNumberSource;
   /** #840: the WhatsApp message launch will send, and why it can't (claims, links) if so. */
   whatsappMessage?: ResolvedWhatsAppMessage | null;
   whatsappMessageProblem?: string | null;
@@ -121,6 +123,7 @@ export interface CanonicalReviewPayload {
   leadFormId: string | null;
   destination: ReviewDestination;
   whatsappNumber: string | null;
+  whatsappNumberSource?: WhatsAppNumberSource;
   websiteUrl?: string | null;
   websiteGoal?: Exclude<DraftInput["websiteGoal"], "visits">;
   pixelId?: string | null;
@@ -187,6 +190,7 @@ export function buildCanonicalReviewPayload(
     leadFormId: reviewDestination(input.draft) === "instant_form" ? input.draft.leadFormId : null,
     destination: input.draft.destination ?? "instant_form",
     whatsappNumber: input.draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
+    ...(input.draft.destination === "whatsapp" && input.whatsappNumberSource ? { whatsappNumberSource: input.whatsappNumberSource } : {}),
     // #2599: only for website ads, so other plans keep their hash; a Brand website edit after Review changes the plan.
     ...(reviewDestination(input.draft) === "website" ? { websiteUrl: websiteAdLink(input.website) } : {}),
     // #2710: visits keep the phase-1 hash; conversion goals must never review as traffic.
@@ -244,7 +248,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   if (draft.destination === "whatsapp") {
     // #681: without Meta access the number can't be read; the connection blocker above is the one fix.
     if (input.connection?.canCreatePaused && (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber))) {
-      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", say("whatsappNotLinked")));
+      blockers.push(draft.whatsappNumber
+        ? blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_CHOOSE", say("whatsappChoose"))
+        : blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", say("whatsappNotLinked")));
     }
     if (input.whatsappMessageProblem) {
       blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_MESSAGE", say("whatsappMessage", { problem: input.whatsappMessageProblem })));
@@ -355,6 +361,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     creativeHash,
     destination: draft.destination ?? "instant_form",
     whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
+    ...(draft.destination === "whatsapp" && input.whatsappNumberSource ? { whatsappNumberSource: input.whatsappNumberSource } : {}),
     ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
     ...(payload.websiteGoal ? { websiteGoal: payload.websiteGoal } : {}),
     ...(payload.pixelId ? { pixelId: payload.pixelId } : {}),

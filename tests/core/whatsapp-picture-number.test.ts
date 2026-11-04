@@ -60,7 +60,7 @@ async function prepare(destination: "whatsapp" | "instant_form", printed: string
     findDraft: async () => draft(destination),
     findCreatives: async () => [creative(printed)],
     findForm: async () => ({ id: "form-1", businessId: actor.businessId, active: true }),
-    findWhatsAppNumber: async () => chatNumber,
+    findWhatsAppNumber: async () => ({ number: chatNumber, source: "page" }),
     redrawPictureNumber: redraw,
     getConnection: async () => ({
       generation: 4,

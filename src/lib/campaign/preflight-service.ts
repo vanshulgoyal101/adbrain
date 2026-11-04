@@ -14,6 +14,7 @@ import type { LeadDestination } from "@/lib/types/campaign";
 import type { ReviewDestination } from "@/lib/campaign/plan-check";
 import { websiteAdLink } from "@/lib/campaign/website-review";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
+import type { WhatsAppNumberSource } from "@/lib/meta/whatsapp-status-shared";
 import { conversionGoal, websiteGoalOpen, type ConversionGoal, type ReviewTracking } from "@/lib/campaign/website-tracking";
 
 export type PreflightActor = {
@@ -25,7 +26,8 @@ export type PreflightLoaders = {
   findDraft: (actor: PreflightActor, draftId: string) => Promise<DraftRecord | null>;
   findCreatives: (businessId: string, creativeIds: string[]) => Promise<PreflightCreative[]>;
   findForm: (businessId: string, formId: string) => Promise<PreflightForm | null>;
-  findWhatsAppNumber?: (actor: PreflightActor, requested?: string) => Promise<string | null>;
+  findWhatsAppNumber?: (actor: PreflightActor, requested?: string, source?: WhatsAppNumberSource, choiceId?: string) =>
+    Promise<{ number: string; source: WhatsAppNumberSource } | null>;
   findWebsite?: (actor: PreflightActor) => Promise<string | null>;
   /** #2599: opens a website ad's link; Review blocks the ad unless it reaches the advertiser's own site. */
   checkWebsite?: (url: string) => Promise<WebsiteReach>;
@@ -83,14 +85,16 @@ export async function prepareCampaignReview(
   // #2710/#2714: a signup or sales goal stays closed to every account until the CEO opens it (websiteGoalOpen).
   if (destination === "website" && !(websiteGoalOpen(draft.input.websiteGoal) && await input.websiteOpen?.())) return { kind: "website_closed" };
   const goal = conversionGoal(draft.input.destination, draft.input.websiteGoal);
-  const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts, tracking] = await Promise.all([
+  const [connection, creatives, form, geo, whatsappChoice, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts, tracking] = await Promise.all([
     loaders.getConnection(input.actor),
     loaders.findCreatives(input.actor.businessId, draft.input.creativeIds),
     destination === "instant_form" && draft.input.leadFormId
       ? loaders.findForm(input.actor.businessId, draft.input.leadFormId)
       : Promise.resolve(null),
     loaders.resolveGeo(input.actor, draft),
-    draft.input.destination === "whatsapp" ? loaders.findWhatsAppNumber?.(input.actor, draft.input.whatsappNumber) ?? Promise.resolve(null) : Promise.resolve(null),
+    draft.input.destination === "whatsapp"
+      ? loaders.findWhatsAppNumber?.(input.actor, draft.input.whatsappNumber, draft.input.whatsappNumberSource, draft.input.whatsappNumberChoiceId) ?? Promise.resolve(null)
+      : Promise.resolve(null),
     destination === "whatsapp" ? Promise.resolve([undefined, undefined] as const) : websiteAndReach(loaders, input.actor, destination === "website"),
     // Only a warning depends on it: an unreadable history means no budget warning, never a failed review.
     // TODO(#2601): website ads compare against their cost per landing-page view once results count them.
@@ -105,6 +109,7 @@ export async function prepareCampaignReview(
   ]);
   // #2274: the picture prints the chat's number, not an older Brand phone. Before the creative hash, so
   // Review and launch both see the redrawn picture.
+  const whatsappNumber = whatsappChoice?.number ?? null;
   const redraw = loaders.redrawPictureNumber;
   const aligned = draft.input.destination === "whatsapp" && whatsappNumber && /^\+[1-9]\d{6,14}$/.test(whatsappNumber) && redraw
     ? await alignPrintedNumbers(creatives, whatsappNumber, (creative, phone) => redraw(input.actor, creative.id, phone))
@@ -125,6 +130,7 @@ export async function prepareCampaignReview(
       pictureNotice: aligned.notice,
       form,
       whatsappNumber,
+      whatsappNumberSource: whatsappChoice?.source,
       whatsappMessage: whatsappMessage?.message ?? null,
       whatsappMessageProblem: whatsappMessage?.problem ?? null,
       website,

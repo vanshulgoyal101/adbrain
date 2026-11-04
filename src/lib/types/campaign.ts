@@ -5,6 +5,8 @@ import type { Database } from "./database";
 export type LeadDestination = "whatsapp" | "instant_form" | "call" | "website";
 export type WebsiteGoal = "visits" | "leads" | "sales";
 export type CampaignStatus = "draft" | "active" | "paused" | "completed";
+export type WhatsAppNumberSource = "page" | "business";
+export type WhatsAppNumberChoice = { masked: string; source: WhatsAppNumberSource; choiceId: string };
 
 export type CampaignTables = {
   campaigns: {

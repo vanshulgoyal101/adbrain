@@ -22,6 +22,9 @@ const recommended: DraftInput["targeting"] = {
   audience: { interestNames: ["Solar energy"], rationale: "Homeowners near the offer." },
 };
 const selected = { adAccountId: "act_1", accountName: "Solar account", pageId: "page_1", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata", metaBusinessId: null };
+const PAGE_CHOICE = "a".repeat(64);
+const BUSINESS_CHOICE = "b".repeat(64);
+const OLD_CHOICE = "c".repeat(64);
 let saved: DraftDTO;
 let whatsapp: () => Promise<Response>;
 
@@ -53,7 +56,10 @@ beforeEach(() => {
     // The server resolves the masked choice to the full number (core: whatsapp-number.test.ts).
     destination: saved.input.destination, whatsappNumber: saved.input.whatsappNumber === "+91 ••••• 4842" ? "+919800004842" : null,
   }));
-  whatsapp = async () => Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page" }, { masked: "+91 ••••• 4842", source: "business" }] });
+  whatsapp = async () => Response.json({ state: "ready", numbers: [
+    { masked: "+91 ••••• 0874", source: "page", choiceId: PAGE_CHOICE },
+    { masked: "+91 ••••• 4842", source: "business", choiceId: BUSINESS_CHOICE },
+  ] });
   vi.stubGlobal("fetch", vi.fn(async (url: string) => url.startsWith("/api/meta/whatsapp") ? whatsapp() : Response.json(url === "/api/campaigns/plan"
     ? { ready: true, targeting: recommended }
     : { forms: [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }] })));
@@ -70,12 +76,12 @@ describe("campaign WhatsApp button number (#235)", () => {
       "+91 ••••• 4842 (your WhatsApp Business account)",
     ]);
     expect(screen.getByText("WhatsApp chat +91 ••••• 0874")).toBeInTheDocument();
-    fireEvent.change(picker, { target: { value: "+91 ••••• 4842" } });
+    fireEvent.change(picker, { target: { value: BUSINESS_CHOICE } });
     expect(screen.getByText("WhatsApp chat +91 ••••• 4842")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     await screen.findByText("WhatsApp chat +919800004842");
-    expect(saved.input).toMatchObject({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842", leadFormId: null });
+    expect(saved.input).toMatchObject({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "business", whatsappNumberChoiceId: BUSINESS_CHOICE, leadFormId: null });
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
@@ -105,7 +111,7 @@ describe("campaign WhatsApp button number (#235)", () => {
     expect(screen.getByRole("radio", { name: "Instant form" })).toBeChecked();
     expect(screen.queryByRole("button", { name: /Use an Instant form for now/ })).toBeNull();
     unmount();
-    whatsapp = async () => Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 4842", source: "page" }] });
+    whatsapp = async () => Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 4842", source: "page", choiceId: PAGE_CHOICE }] });
     view();
     await statusRead();
     await settle();
@@ -119,11 +125,11 @@ describe("campaign WhatsApp button number (#235)", () => {
     view();
     await statusRead();
     fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
-    answer(Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page" }] }));
+    answer(Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page", choiceId: PAGE_CHOICE }] }));
     await settle();
     expect(screen.getByRole("radio", { name: "Instant form" })).toBeChecked();
     fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
-    expect(screen.getByLabelText("WhatsApp button number")).toHaveValue("+91 ••••• 0874");
+    expect(screen.getByLabelText("WhatsApp button number")).toHaveValue(PAGE_CHOICE);
   });
 
   it("keeps a restored lead-form draft on the lead form", async () => {
@@ -152,10 +158,80 @@ describe("campaign WhatsApp button number (#235)", () => {
     mocks.draft.mockResolvedValue(older);
     view();
     fireEvent.click(await screen.findByRole("button", { name: /^Diwali WhatsApp/ }));
-    await waitFor(() => expect(screen.getByLabelText("WhatsApp button number")).toHaveValue("+91 ••••• 4842"));
+    await waitFor(() => expect(screen.getByLabelText("WhatsApp button number")).toHaveDisplayValue("+91 ••••• 4842 (previously selected; check this number)"));
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledTimes(1));
-    expect(mocks.updateDraft.mock.lastCall![2]).toMatchObject({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842" });
+    expect(mocks.updateDraft.mock.lastCall![2]).toMatchObject({ destination: "whatsapp", whatsappNumber: "+919800004842" });
+  });
+
+  it.each([
+    { name: "a different Page mask", mask: "+91 ••••• 4842", source: "business" as const },
+    { name: "the same Page mask", mask: "+91 ••••• 0874", source: "business" as const },
+    { name: "a legacy choice with the same Page mask", mask: "+91 ••••• 0874", source: undefined },
+  ])("preserves $name when Meta cannot read business numbers", async ({ mask, source }) => {
+    const previous: DraftDTO = { draftId: "44444444-4444-4444-8444-444444444444", version: 3, expiresAt: "2099-01-01T00:00:00.000Z", input: {
+      businessId: business.id, name: "Saved WhatsApp", goal: "Enquiries", mode: "manual", creativeIds: [creative.id], dailyBudgetRupees: 280,
+      leadFormId: null, destination: "whatsapp", whatsappNumber: mask,
+      ...(source ? { whatsappNumberSource: source, whatsappNumberChoiceId: OLD_CHOICE } : {}), targeting: recommended, abTest: false,
+    } };
+    saved = previous;
+    mocks.drafts.mockResolvedValue([previous]);
+    mocks.draft.mockResolvedValue(previous);
+    whatsapp = async () => Response.json({
+      state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page", choiceId: PAGE_CHOICE }], businessUnavailable: true,
+    });
+    view();
+    fireEvent.click(await screen.findByRole("button", { name: /^Saved WhatsApp/ }));
+    const picker = await screen.findByLabelText("WhatsApp button number");
+    await waitFor(() => expect(picker).toHaveDisplayValue(`${mask} (previously selected; check this number)`));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledTimes(1));
+    expect(mocks.updateDraft.mock.lastCall![2]).toMatchObject({
+      destination: "whatsapp", whatsappNumber: mask, ...(source ? { whatsappNumberSource: source, whatsappNumberChoiceId: OLD_CHOICE } : {}),
+    });
+    if (!source) expect(mocks.updateDraft.mock.lastCall![2]).not.toHaveProperty("whatsappNumberSource");
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Use Page number +91 ••••• 0874" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledTimes(2));
+    expect(mocks.updateDraft.mock.lastCall![2]).toMatchObject({
+      whatsappNumber: "+91 ••••• 0874", whatsappNumberSource: "page", whatsappNumberChoiceId: PAGE_CHOICE,
+    });
+  });
+
+  it("distinguishes Page and business choices with the same mask", async () => {
+    whatsapp = async () => Response.json({ state: "ready", numbers: [
+      { masked: "+91 ••••• 0874", source: "page", choiceId: PAGE_CHOICE }, { masked: "+91 ••••• 0874", source: "business", choiceId: BUSINESS_CHOICE },
+    ] });
+    view();
+    const picker = await screen.findByLabelText("WhatsApp button number");
+    expect(picker).toHaveDisplayValue("Choose your WhatsApp number");
+    fireEvent.change(picker, { target: { value: BUSINESS_CHOICE } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
+    expect(saved.input).toMatchObject({ whatsappNumber: "+91 ••••• 0874", whatsappNumberSource: "business", whatsappNumberChoiceId: BUSINESS_CHOICE });
+  });
+
+  it("does not replace a saved business choice with a new number that has the same mask", async () => {
+    const previous: DraftDTO = { draftId: "44444444-4444-4444-8444-444444444444", version: 3, expiresAt: "2099-01-01T00:00:00.000Z", input: {
+      businessId: business.id, name: "Saved WhatsApp", goal: "Enquiries", mode: "manual", creativeIds: [creative.id], dailyBudgetRupees: 280,
+      leadFormId: null, destination: "whatsapp", whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "business",
+      whatsappNumberChoiceId: OLD_CHOICE, targeting: recommended, abTest: false,
+    } };
+    saved = previous;
+    mocks.drafts.mockResolvedValue([previous]);
+    mocks.draft.mockResolvedValue(previous);
+    view();
+    fireEvent.click(await screen.findByRole("button", { name: /^Saved WhatsApp/ }));
+    const picker = await screen.findByLabelText("WhatsApp button number");
+    await waitFor(() => expect(picker).toHaveDisplayValue("+91 ••••• 4842 (previously selected; check this number)"));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledTimes(1));
+    expect(mocks.updateDraft.mock.lastCall![2]).toMatchObject({ whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "business", whatsappNumberChoiceId: OLD_CHOICE });
+    fireEvent.change(picker, { target: { value: BUSINESS_CHOICE } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledTimes(2));
+    expect(mocks.updateDraft.mock.lastCall![2]).toMatchObject({ whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "business", whatsappNumberChoiceId: BUSINESS_CHOICE });
   });
 
   it("opens a business outside India on WhatsApp too, listed first and recommended; Instant form stays selectable", async () => {
@@ -166,7 +242,7 @@ describe("campaign WhatsApp button number (#235)", () => {
     expect(first).toHaveAccessibleName("WhatsApp chat (recommended)");
     expect(second).toHaveAccessibleName("Instant form");
     expect(first).toBeChecked();
-    expect(screen.getByLabelText("WhatsApp button number")).toHaveValue("+91 ••••• 0874");
+    expect(screen.getByLabelText("WhatsApp button number")).toHaveValue(PAGE_CHOICE);
     fireEvent.click(second);
     expect(second).toBeChecked();
     expect(screen.getByLabelText("Lead form")).toBeInTheDocument();

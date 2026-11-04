@@ -9,7 +9,7 @@ Consent, account selection, managed accounts, disconnect and the WhatsApp webhoo
 | Method | Path | Input / result | Effect |
 | --- | --- | --- | --- |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
-| GET | `/api/meta/whatsapp` | `businessId` -> `{state: "ready", numbers: [{masked, source: "page" \| "business"}]} \| {state: "not_linked" \| "unavailable"} \| 429 {state: "busy"}` | Owned business only; a Meta throttle (e.g. 80008) is 429 busy, any other failed read is `unavailable`; read-only Graph; numbers leave the server masked ("+91 ••••• 4842"); 20 per 5 min (#235) |
+| GET | `/api/meta/whatsapp` | `businessId` -> `{state: "ready", numbers: [{masked, source: "page" \| "business"}], businessUnavailable?: true} \| {state: "not_linked" \| "unavailable"} \| 429 {state: "busy"} \| 503 {state: "unavailable"}` | Owned business only; a Meta throttle (including HTTP 429 or code 80008) is 429 busy, and a failed or incomplete read is 503 unavailable. When WABA access is denied but a Page number is verified, `businessUnavailable` signals the partial list; an explicit Page choice remains usable and a saved business or legacy choice is not silently replaced. Read-only Graph; numbers leave the server masked ("+91 ••••• 4842"); 20 per 5 min (#235) |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
 | POST | `/api/meta/connections/change` | Business/intent -> envelope attempt (or 409 `REAUTH_REQUIRED`) | 'Change': lists the pairs the saved grant allows, no new Facebook login; commit via `select` |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |

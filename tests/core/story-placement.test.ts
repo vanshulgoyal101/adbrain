@@ -76,6 +76,7 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
       name: "Core #333", dailyBudgetRupees: 280, destination: params.destination,
       leadFormId: params.destination === "instant_form" ? "form-1" : undefined,
       whatsappNumber: params.destination === "whatsapp" ? "+919100000874" : undefined,
+      whatsappNumberSource: params.destination === "whatsapp" ? "page" : undefined,
       whatsappGreeting: params.destination === "whatsapp" ? inputs.whatsappGreeting : undefined,
       link: "https://solaride.in",
       creatives: [{ imageUrl: "https://ads.example.test/feed.png", headline: inputs.headline, message: inputs.message, description: inputs.description, storyImage }],

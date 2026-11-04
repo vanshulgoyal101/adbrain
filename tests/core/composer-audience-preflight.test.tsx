@@ -141,7 +141,7 @@ beforeEach(() => {
         destination: "whatsapp", leadFormId: null, whatsappNumber, targeting: null, abTest: false, dropped: 0, source: "campaign",
       } });
     }
-    if (url.startsWith("/api/meta/whatsapp")) return Response.json({ state: "ready", numbers: [{ masked: whatsappNumber, source: "business" }] });
+    if (url.startsWith("/api/meta/whatsapp")) return Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 3210", source: "business", choiceId: "a".repeat(64) }] });
     return Response.json({ forms: [] });
   }));
 });

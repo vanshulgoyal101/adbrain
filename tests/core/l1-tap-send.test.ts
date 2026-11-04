@@ -64,7 +64,7 @@ describe("core: L1 'Tap, then press Send' builds in AdBrain as it is (#1211)", (
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
     const opening = campaignWhatsAppMessage({ draft: { destination: "whatsapp" } as unknown as DraftInput, business: solaride, creatives: ads }).opening;
     await client.createLeadCampaign({
-      name: "L1 readiness", dailyBudgetRupees: 225, destination: "whatsapp", link: "https://solaride.in", whatsappNumber: "+919999990874", whatsappGreeting: opening,
+      name: "L1 readiness", dailyBudgetRupees: 225, destination: "whatsapp", link: "https://solaride.in", whatsappNumber: "+919999990874", whatsappNumberSource: "business", whatsappGreeting: opening,
       creatives: ads.map((ad) => ({ imageUrl: "https://example.com/ad.png", headline: ad.headline, message: ad.primary_text })),
       location: { cities: [{ key: "1021145" }] }, ageMin: 25, ageMax: 55,
     });
