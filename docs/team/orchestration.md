@@ -183,8 +183,10 @@ session. The outgoing CEO writes no handover: every decision and promise is alre
 scheduled reads are `Next read <time>` comments. If workers still sit inside an earlier CEO's session, the
 owner closes it first and the new CEO then starts their independent replacements (worktrees survive). A
 running chat reads no chat messages (steers stay "processing"; queued ones land when the turn ends), so
-reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580) and use `send_message` (queue) only to
-start a chat whose status is idle. `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
+reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580). A chat whose turn has ended can't be
+messaged at all (`send_message` fails with "Unknown chat owner"), so replace it: create the new chat, then
+delete the old one. Restart prompts make workers run the waiter as a sync bash call kept alive with
+`read_bash` (never `stop_bash`) and forbid `ask_user`; both used to end or stall turns. `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
 or `error`.
 
 ### Ready pool (pull, don't wait)
