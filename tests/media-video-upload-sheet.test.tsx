@@ -162,6 +162,27 @@ describe("video upload sheet (#778)", () => {
     expect(screen.getByLabelText("Choose photos")).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
   });
 
+  it.each([
+    ["the quota response is not JSON", () => Promise.resolve(new Response("invalid", { status: 200 }))],
+    ["the quota request fails", () => Promise.reject(new TypeError("offline"))],
+  ])("keeps photos available and retries when %s", async (_reason, fail) => {
+    const request = vi.fn().mockImplementationOnce(fail).mockResolvedValueOnce(json(200, quota()));
+    setup({ request });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't check video limits. Try again; you can still add photos.");
+    expect(screen.getByLabelText("Choose photos")).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByLabelText("Choose photos and videos")).toBeInTheDocument();
+  });
+
+  it("keeps photos available when video uploads are disabled", async () => {
+    const disabled = quota();
+    disabled.uploads.videos.enabled = false;
+    setup({ request: vi.fn(async () => json(200, disabled)) });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Video uploads aren't available right now. You can still add photos.");
+    expect(screen.getByLabelText("Choose photos")).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
   it("lets a picked video be removed before signing", async () => {
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: (file: File) => `blob:${file.name}`, revokeObjectURL: vi.fn() }));
     const { request } = setup();

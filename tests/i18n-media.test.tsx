@@ -60,6 +60,16 @@ describe("Photos in Hindi (#778 walk 1)", () => {
     expect(within(sheet).getByRole("button", { name: "1 वीडियो जोड़ें" })).toBeTruthy();
   });
 
+  it("shows a failed video quota check in Hindi while leaving photos available", async () => {
+    const request = vi.fn(async () => new Response("unavailable", { status: 503 }));
+    render(<MediaLibrary words={words} business={{ id: "b1", vertical: null }} media={[]} creatives={[]} brandAssets={[]} consented startOpen videoEnabled
+      deps={{ fetch: request, uploadToSignedUrl: vi.fn() }} />);
+    const sheet = screen.getByRole("dialog", { name: "फ़ोटो और वीडियो जोड़ें" });
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("वीडियो की सीमा जाँच नहीं पाई। फिर से कोशिश करें; आप फ़ोटो जोड़ सकते हैं।");
+    expect(within(sheet).getByLabelText("फ़ोटो चुनें")).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
+    expect(within(sheet).getByRole("button", { name: "फिर से कोशिश करें" })).toBeTruthy();
+  });
+
   it("shows the shared Hindi rights and music copy once when consent is needed", async () => {
     const request = vi.fn(async () => new Response(JSON.stringify({
       ok: true, uploads: { videos: { enabled: true, used: 0, limit: 3, maxSeconds: 60, maxBytes: 50 * 1024 * 1024 } },

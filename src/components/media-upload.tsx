@@ -231,10 +231,8 @@ export function MediaUploadSheet({ t, open, onOpenChange, uploads, businessId, v
     void (async () => {
       try {
         const response = await request(`/api/media?businessId=${encodeURIComponent(businessId)}`, { signal: controller.signal });
-        if (!response.ok) throw new Error("Video quota unavailable");
-        const next = videoQuota(await response.json());
-        if (!next) throw new Error("Invalid video quota response");
-        if (active) setQuotaResult({ key: quotaKey, quota: next, state: next.enabled ? "ready" : "unavailable" });
+        const next = response.ok ? videoQuota(await response.json()) : null;
+        if (active) setQuotaResult({ key: quotaKey, quota: next, state: !next ? "error" : next.enabled ? "ready" : "unavailable" });
       } catch {
         if (active) setQuotaResult({ key: quotaKey, quota: null, state: "error" });
       } finally {
