@@ -15,13 +15,16 @@ const ad = (id: string) => ({ id, image_url: `https://example.test/${id}.png`, h
 afterEach(() => vi.restoreAllMocks());
 
 describe("<ReadyAdsNextStep>", () => {
-  // #2697: no Tester, date or WhatsApp promise; Meta's review is what's pending.
-  const obsolete = /Tester|invite|working day|this week|opens soon|WhatsApp you/i;
+  const pending = "Connecting a new Facebook account requires Meta approval for AdBrain. You can make, approve and download ads now.";
+  const requested = "Your request is recorded. You can connect Facebook once Meta approves AdBrain. Until then, your approved ads stay here for you to download and share.";
+  const pendingHi = "नया Facebook अकाउंट जोड़ने के लिए AdBrain को Meta की मंज़ूरी चाहिए। आप अभी विज्ञापन बना, मंज़ूर और डाउनलोड कर सकते हैं।";
+  const requestedHi = "आपका अनुरोध दर्ज हो गया है। Meta से AdBrain को मंज़ूरी मिलने के बाद आप Facebook जोड़ सकेंगे। तब तक आपके मंज़ूर किए गए विज्ञापन यहीं रहेंगे, ताकि आप उन्हें डाउनलोड करके शेयर कर सकें।";
+  const obsolete = /Tester|invite|working day|this week|opens soon|WhatsApp you|still reviewing|approval is still pending|we'll (notify|message|email)/i;
 
-  it("leads with sharing the newest approved ad and says plainly that Meta's review is pending", () => {
+  it("leads with sharing the newest approved ad and explains Facebook access", () => {
     const { container } = render(<ReadyAdsNextStep approved={[ad("new"), ad("old")]} businessId={BUSINESS} />);
     expect(screen.getByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
-    expect(screen.getByText("Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.")).toBeInTheDocument();
+    expect(screen.getByText(pending)).toBeInTheDocument();
     expect(container.textContent).not.toMatch(obsolete);
     expect(screen.getByRole("button", { name: "Share new" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Your ad: Headline new" })).toHaveAttribute("src", "https://example.test/new.png");
@@ -51,13 +54,14 @@ describe("<ReadyAdsNextStep>", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("didn't finish");
   });
 
-  it("records a Facebook access request on the server and says it does not switch access on", async () => {
+  it("records a Facebook access request on the server and explains what happens next", async () => {
     const send = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true }));
     const { container } = render(<ReadyAdsNextStep approved={[ad("a")]} businessId={BUSINESS} />);
     const ask = screen.getByRole("button", { name: "Ask for Facebook access" });
     expect(ask).toHaveAttribute("data-product-event", "meta.access_request");
     fireEvent.click(ask);
-    expect(await screen.findByRole("status")).toHaveTextContent("Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.");
+    expect(await screen.findByRole("status")).toHaveTextContent(requested);
+    expect(screen.getByText(pending)).toBeInTheDocument();
     expect(send).toHaveBeenCalledWith("/api/meta/access-request", expect.objectContaining({ method: "POST", body: JSON.stringify({ businessId: BUSINESS }) }));
     expect(container.textContent).not.toMatch(obsolete);
     expect(screen.getByRole("link", { name: "Connect Facebook" })).toHaveAttribute("href", "/settings");
@@ -83,15 +87,16 @@ describe("<ReadyAdsNextStep>", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("Hindi: the same review status, request and failure, in the owner's language", async () => {
+  it("Hindi: the same access status, request and failure, in the owner's language", async () => {
     const words = { locale: "hi" as const, messages: hi.setup };
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(null, { status: 503 })).mockResolvedValueOnce(Response.json({ ok: true }));
     render(<ReadyAdsNextStep approved={[ad("a")]} businessId={BUSINESS} words={words} />);
     expect(screen.getByRole("heading", { name: hi.setup.readyAds.title })).toBeInTheDocument();
-    expect(screen.getByText(hi.setup.access.pending)).toBeInTheDocument();
+    expect(screen.getByText(pendingHi)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: hi.setup.readyAds.ask }));
     expect(await screen.findByRole("alert")).toHaveTextContent(hi.setup.access.requestFailed);
     fireEvent.click(screen.getByRole("button", { name: hi.setup.readyAds.ask }));
-    expect(await screen.findByRole("status")).toHaveTextContent(hi.setup.access.requested);
+    expect(await screen.findByRole("status")).toHaveTextContent(requestedHi);
+    expect(screen.getByText(pendingHi)).toBeInTheDocument();
   });
 });

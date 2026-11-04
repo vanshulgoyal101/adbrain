@@ -275,21 +275,22 @@ describe("#1901: Go live says whose picture each ad is", () => {
 });
 });
 
-// #1989/#2697: until App Review passes (#156) a new Facebook account can't connect; Meta shows "app not available"
-// inside the Facebook dialog, which AdBrain can't see. Step 3 says Meta's review is pending, before and after a try,
-// with no Tester invite or date promise, and says whether the access request (#2538) was recorded.
-describe("core: step 3 says Meta's review is pending and what a request does (#1989, #2697)", () => {
-  const pending = "Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.";
-  const requested = "Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.";
+// #1989/#2697: Meta can show "app not available" inside the Facebook dialog, which AdBrain can't see.
+// Step 3 explains the access request without asserting an unverified review status or promising a date.
+describe("core: step 3 explains Facebook access and a recorded request (#1989, #2697, #2847)", () => {
+  const pending = "Connecting a new Facebook account requires Meta approval for AdBrain. You can make, approve and download ads now.";
+  const requested = "Your request is recorded. You can connect Facebook once Meta approves AdBrain. Until then, your approved ads stay here for you to download and share.";
+  const pendingHi = "नया Facebook अकाउंट जोड़ने के लिए AdBrain को Meta की मंज़ूरी चाहिए। आप अभी विज्ञापन बना, मंज़ूर और डाउनलोड कर सकते हैं।";
+  const requestedHi = "आपका अनुरोध दर्ज हो गया है। Meta से AdBrain को मंज़ूरी मिलने के बाद आप Facebook जोड़ सकेंगे। तब तक आपके मंज़ूर किए गए विज्ञापन यहीं रहेंगे, ताकि आप उन्हें डाउनलोड करके शेयर कर सकें।";
   const failed = "Your request did not send. Check your connection and try again.";
-  const obsolete = /Tester|invite|working day|we'll add you|we need to add you/i;
+  const obsolete = /Tester|invite|working day|we'll add you|we need to add you|still reviewing|approval is still pending|we'll (notify|message|email)/i;
   function step3({ pageConnected = false, appReviewPending = true, locale = "en" as "en" | "hi" } = {}) {
     return render(<SetupGoLive business={business} ads={ads} pageConnected={pageConnected} funding="own" appReviewPending={appReviewPending}
       words={locale === "hi" ? { locale, messages: hi.setup } : undefined} whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
   }
   beforeEach(() => { cleanup(); window.sessionStorage.clear(); });
 
-  it("before the first tap: the review status beside Connect, and no invite link or Try again", () => {
+  it("before the first tap: explains access beside Connect, with no invite link or Try again", () => {
     const { container } = step3();
     expect(screen.getByText(pending)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /invites/i })).toBeNull();
@@ -318,7 +319,7 @@ describe("core: step 3 says Meta's review is pending and what a request does (#1
   const stubFetch = (impl: () => Promise<Response>) => { const fn = vi.fn(impl); vi.stubGlobal("fetch", fn); return fn; };
   const accessCall = ["/api/meta/access-request", expect.objectContaining({ method: "POST", keepalive: true, body: JSON.stringify({ businessId: "b1" }) })];
 
-  it("a try that didn't connect records one request and says it doesn't switch access on", async () => {
+  it("a try that didn't connect records one request and explains what happens next", async () => {
     const fetchMock = stubFetch(async () => new Response("{}"));
     try {
       const { container } = step3();
@@ -326,6 +327,7 @@ describe("core: step 3 says Meta's review is pending and what a request does (#1
       expect(fetchMock).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
       expect(await screen.findByText(requested)).toBeInTheDocument();
+      expect(screen.getByText(pending)).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledWith(...accessCall);
       expect(container.textContent).not.toMatch(obsolete);
       expect(screen.getByText("Not connected")).toBeInTheDocument();
@@ -397,10 +399,11 @@ describe("core: step 3 says Meta's review is pending and what a request does (#1
     const fetchMock = stubFetch(async () => new Response("{}"));
     try {
       step3({ locale: "hi" });
-      expect(screen.getByText(hi.setup.access.pending)).toBeInTheDocument();
+      expect(screen.getByText(pendingHi)).toBeInTheDocument();
       fireEvent.click(bar().getByRole("button", { name: "Facebook पेज जोड़ें" }));
       fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
-      expect(await screen.findByText(hi.setup.access.requested)).toBeInTheDocument();
+      expect(await screen.findByText(requestedHi)).toBeInTheDocument();
+      expect(screen.getByText(pendingHi)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "फिर से कोशिश करें" })).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally { vi.unstubAllGlobals(); }
