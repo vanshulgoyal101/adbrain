@@ -1,7 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/planner/groq-website.json";
+import { draftDtoSchema } from "@/lib/campaign/connect-contracts";
 import { PLANNER_PROMPT_VERSION } from "@/lib/campaign/planner";
+import { prepareCampaignReview, type PreflightLoaders } from "@/lib/campaign/preflight-service";
 
 // #2599 (CTO, #2595 item 5): a website plan through the real route and real runPlanner, replaying Groq's real reply
 // to this exact prompt (recorded free, no Meta call). Only the LLM transport, auth, rate limit and data reads are stubbed.
@@ -101,8 +103,103 @@ describe("core: a website plan with Groq's real replies (#2599)", () => {
     expect(status).toBe(200);
     expect(result.ready).toBe(true);
     expect(result.draft.input).toMatchObject({ destination: "website", leadFormId: null, creativeIds: [creativeId], dailyBudgetRupees: 300 });
+    expect(result.draft.input).not.toHaveProperty("websiteGoal");
     expect(mocks.prompts).toHaveLength(1);
     expect(mocks.inserted).toHaveBeenCalledOnce();
     expect(mocks.metaReads).toEqual(["resolveAudienceInterests"]);
+  });
+
+  it.each(["leads", "sales"] as const)("saves the chosen %s goal and keeps Review closed", async (websiteGoal) => {
+    body = { goal, destination: "website", websiteGoal, answers };
+    const { status, body: result } = await plan();
+    expect(status).toBe(200);
+    expect(mocks.prompts[0]).toEqual(planTurn.messages);
+    const draft = draftDtoSchema.parse(result.draft);
+    expect(draft.input).toMatchObject({ destination: "website", websiteGoal, leadFormId: null, dailyBudgetRupees: 300 });
+    expect(mocks.inserted).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({ destination: "website", websiteGoal, dailyBudgetRupees: 300 }),
+    }));
+
+    const read = vi.fn(async () => { throw new Error("Review read a provider before the conversion gate"); });
+    const loaders: PreflightLoaders = {
+      findDraft: async () => ({
+        id: draft.draftId, businessId: business.id, ownerId: "user-1", version: draft.version,
+        input: draft.input, expiresAt: draft.expiresAt, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      }),
+      findCreatives: read,
+      findForm: read,
+      getConnection: read,
+      resolveGeo: read,
+      hash: () => { throw new Error("Review hashed a closed conversion goal"); },
+    };
+    expect(await prepareCampaignReview(loaders, {
+      actor: { businessId: business.id, userId: "user-1" }, draftId: draft.draftId,
+      requestedDraftVersion: draft.version, now: new Date().toISOString(), websiteOpen: () => true,
+    })).toEqual({ kind: "website_closed" });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("preserves an explicitly chosen visits goal", async () => {
+    body = { goal, destination: "website", websiteGoal: "visits", answers };
+    const { status, body: result } = await plan();
+    expect(status).toBe(200);
+    expect(result.draft.input).toMatchObject({ destination: "website", websiteGoal: "visits", dailyBudgetRupees: 300 });
+  });
+
+  it.each([
+    { destination: "website", websiteGoal: "unknown" },
+    { destination: "website", websiteGoal: null },
+    { destination: "whatsapp", websiteGoal: "sales" },
+    { destination: "instant_form", websiteGoal: "leads" },
+    { websiteGoal: "sales" },
+  ])("rejects a website goal that does not match the destination: %o", async (selection) => {
+    body = { goal, ...selection, answers };
+    expect((await plan()).status).toBe(400);
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(mocks.meta).not.toHaveBeenCalled();
+    expect(mocks.inserted).not.toHaveBeenCalled();
+  });
+
+  it("rejects a goal that conflicts with the audience draft", async () => {
+    const audienceDraft = {
+      businessId: business.id, name: "Website leads", goal, mode: "manual", creativeIds: [creativeId],
+      dailyBudgetRupees: 300, leadFormId: null, destination: "website", websiteGoal: "leads", targeting: {}, abTest: false,
+    };
+    body = { goal, audienceDraft, websiteGoal: "sales" };
+    expect((await plan()).status).toBe(400);
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(mocks.meta).not.toHaveBeenCalled();
+    expect(mocks.inserted).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { destination: "whatsapp", requestedGoal: "leads" },
+    { destination: "instant_form", requestedGoal: undefined },
+  ])("rejects a non-website destination that conflicts with a website audience goal: %o", async ({ destination, requestedGoal }) => {
+    const audienceDraft = {
+      businessId: business.id, name: "Website leads", goal, mode: "manual", creativeIds: [creativeId],
+      dailyBudgetRupees: 300, leadFormId: null, destination: "website", websiteGoal: "leads", targeting: {}, abTest: false,
+    };
+    body = { goal, audienceDraft, destination, ...(requestedGoal ? { websiteGoal: requestedGoal } : {}), answers };
+    expect((await plan()).status).toBe(400);
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(mocks.meta).not.toHaveBeenCalled();
+    expect(mocks.inserted).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { savedGoal: "leads", requestedGoal: "leads" },
+    { savedGoal: undefined, requestedGoal: "visits" },
+  ])("accepts an audience draft with an equivalent goal: %o", async ({ savedGoal, requestedGoal }) => {
+    const audienceDraft = {
+      businessId: business.id, name: "Website draft", goal, mode: "manual", creativeIds: [creativeId],
+      dailyBudgetRupees: 300, leadFormId: null, destination: "website",
+      ...(savedGoal ? { websiteGoal: savedGoal } : {}), targeting: {}, abTest: false,
+    };
+    body = { goal, audienceDraft, websiteGoal: requestedGoal, answers };
+    const { status, body: result } = await plan();
+    expect(status).toBe(200);
+    expect(result).toMatchObject({ ready: true, targeting: expect.any(Object) });
+    expect(mocks.inserted).not.toHaveBeenCalled();
   });
 });
