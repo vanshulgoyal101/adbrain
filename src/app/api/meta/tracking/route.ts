@@ -2,16 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { BUSINESS_ACCESS_ERRORS } from "@/i18n/locale";
 import { ownerWords } from "@/i18n/request-locale";
+import { ConnectionAccessError, readAccountTracking, requireOwnedBusiness } from "@/lib/campaign/tracking-runtime";
 import { websiteOpenFor } from "@/lib/campaign/website-gate";
-import {
-  ConnectionAccessError,
-  getConnectionStatus,
-  requireOwnedBusiness,
-  withMetaConnection,
-} from "@/lib/meta/connection-access";
 import type { ErrorCode } from "@/lib/meta/connect-contracts";
-import { cachedTrackingStatus } from "@/lib/meta/pixels";
-import { accountTrackingDtoSchema } from "@/lib/meta/tracking-contracts";
 import { currentRequestId, observeRoute, recordProductEvent } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { isSignedOutAuthError } from "@/lib/supabase/auth-error";
@@ -85,39 +78,16 @@ export const GET = observeRoute("/api/meta/tracking", "GET", async (request: Req
         say(unavailable ? "somethingDidntAnswer" : "aiBusy"), true, limited.headers.get("Retry-After"));
     }
 
-    const before = await getConnectionStatus(actor);
-    if (before.businessId !== actor.businessId) {
-      throw new ConnectionAccessError("CONFLICT", "Meta connection changed.");
-    }
-    if (before.authorization === "reauth_required" || before.authorization === "revoked") {
+    const read = await readAccountTracking(actor, parsed.data.fresh === "1");
+    if (read.kind === "reauth_required") {
       recordProductEvent({ kind: "workflow", name: "meta.tracking", outcome: "rejected", businessId: actor.businessId,
         attributes: { errorCode: "TRACKING_REAUTH_REQUIRED" } });
       return failure(requestId, 409, "REAUTH_REQUIRED", say("metaAccessStopped"));
     }
-    if (before.authorization !== "connected" || !before.selected) {
-      throw new ConnectionAccessError("CONFLICT", "Meta connection changed.");
-    }
-    const binding = { adAccountId: before.selected.adAccountId, pageId: before.selected.pageId };
-    const read = await withMetaConnection(actor, {
-      purpose: "read_insights", expectedGeneration: before.generation, binding, event: false,
-    }, async (meta, connection) => {
-      if (connection.businessId !== actor.businessId || connection.generation !== before.generation
-        || connection.selected?.adAccountId !== binding.adAccountId || connection.selected?.pageId !== binding.pageId) {
-        throw new ConnectionAccessError("CONFLICT", "Meta connection changed.");
-      }
-      const status = await cachedTrackingStatus(meta, connection, { fresh: parsed.data.fresh === "1" });
-      return accountTrackingDtoSchema.parse({ businessId: actor.businessId, connectionGeneration: connection.generation, binding, status });
-    });
-    const current = await getConnectionStatus(actor);
-    if (current.businessId !== actor.businessId || current.authorization !== "connected"
-      || current.generation !== read.connectionGeneration || current.selected?.adAccountId !== read.binding.adAccountId
-      || current.selected?.pageId !== read.binding.pageId) {
-      throw new ConnectionAccessError("CONFLICT", "Meta connection changed.");
-    }
-    const unreadable = read.status.state === "unreadable";
+    const unreadable = read.data.status.state === "unreadable";
     recordProductEvent({ kind: "workflow", name: "meta.tracking", outcome: unreadable ? "partial" : "success", businessId: actor.businessId,
-      attributes: unreadable ? { errorCode: `TRACKING_${read.status.unreadable?.toUpperCase() ?? "UNREADABLE"}` } : {} });
-    return NextResponse.json({ ok: true, data: read, requestId }, { headers: { "Cache-Control": "no-store" } });
+      attributes: unreadable ? { errorCode: `TRACKING_${read.data.status.unreadable?.toUpperCase() ?? "UNREADABLE"}` } : {} });
+    return NextResponse.json({ ok: true, data: read.data, requestId }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const code = error instanceof ConnectionAccessError ? error.code : "UNAVAILABLE";
     const status = accessStatus[code];
