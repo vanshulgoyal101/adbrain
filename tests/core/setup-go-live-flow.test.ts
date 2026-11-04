@@ -313,6 +313,14 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(calls).not.toContain("POST /api/campaign-drafts");
   });
 
+  it("a genuine 'not linked' answer still proceeds, with the WhatsApp destination kept and no number (#2841)", async () => {
+    const { deps, calls, draft } = await api({ whatsapp: { status: 200, body: { state: "not_linked" } } });
+    await goLive(deps, input);
+    expect(calls).toContain("POST /api/campaign-drafts");
+    expect(draft()).toMatchObject({ destination: "whatsapp" });
+    expect(draft()?.whatsappNumber || "").toBe("");
+  });
+
   it("not connected: asks to connect and calls nothing else", async () => {
     const { deps, calls } = await api();
     deps.client = { ...deps.client, status: async () => ({ ...connection, authorization: "reauth_required" }) };

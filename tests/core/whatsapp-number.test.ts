@@ -9,8 +9,11 @@ import refused from "./fixtures/meta/whatsapp-business-refused.json";
 import { MetaClient } from "@/lib/meta/client";
 import { readWhatsAppStatus } from "@/lib/meta/whatsapp-status";
 
+const limiter = vi.hoisted(() => ({ rateLimitResponse: vi.fn(async () => null) }));
+vi.mock("@/lib/security/rate-limit", () => limiter);
+
 const access = vi.hoisted(() => ({ requireOwnedBusiness: vi.fn(), getConnectionStatus: vi.fn(), withMetaConnection: vi.fn() }));
-vi.mock("@/lib/meta/connection-access", () => access);
+vi.mock("@/lib/meta/connection-access", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/meta/connection-access")>()), ...access }));
 
 const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 
@@ -159,6 +162,23 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
       ? { ...entry, status: 400, body: { error: { message: "Error validating access token", type: "OAuthException", code: 190 } } } : entry);
     replay(tape);
     await expect(new MetaClient(creds).whatsappNumbers()).rejects.toMatchObject({ code: 190 });
+  });
+
+  it("#2841: a Meta rate limit (80008, HTTP 400, as seen Nov 3) is 'unavailable' through the route, never a zero-number answer", async () => {
+    const throttled = { error: { message: "(#80008) There have been too many calls to this WhatsApp Business account.", type: "OAuthException", code: 80008 } };
+    const tape = recorded.tape.map((entry) => entry.path.includes(WABA) ? { ...entry, status: 400, body: throttled } : entry);
+    access.requireOwnedBusiness.mockResolvedValue({ userId: "u1" });
+    access.getConnectionStatus.mockResolvedValue({ selected: {}, capabilities: { canCreatePaused: { state: "available" } } });
+    access.withMetaConnection.mockImplementation((_context, _options, run: (meta: MetaClient) => unknown) => run(new MetaClient(creds)));
+    const { GET } = await import("@/app/api/meta/whatsapp/route");
+    const ask = () => GET(new Request("http://localhost/api/meta/whatsapp?businessId=11111111-1111-4111-8111-111111111111"));
+    replay(tape);
+    const answer = await ask();
+    expect({ status: answer.status, body: await answer.json() }).toEqual({ status: 200, body: { state: "unavailable" } });
+    vi.restoreAllMocks();
+    // A real "no number linked" answer stays a distinct, successful not_linked.
+    replay(recorded.tape.map((entry) => entry.path.includes(WABA) ? { ...entry, body: { data: [] } } : entry));
+    expect(await (await ask()).json()).toEqual({ state: "not_linked" });
   });
 
   // #1199: production Oct 28 06:52Z, this exact GET hit the 15 s timeout and the whole Launch failed.
