@@ -1,3 +1,5 @@
+import { whatsappMessageTranslator } from "@/i18n/words";
+
 /**
  * #1081 (W2): the business's past WhatsApp handoff, people who opened WhatsApp from an ad vs those
  * who then sent a message, and whether a pre-typed ask is too general to send.
@@ -18,9 +20,9 @@ export function handoffRate(results: { whatsapp_opens?: number | null; conversat
   return opens >= HANDOFF_MIN_OPENS ? { opens, messages: Math.min(messages, opens) } : null;
 }
 
-export function handoffLine({ opens, messages }: Handoff): string {
+export function handoffLine({ opens, messages }: Handoff, t = whatsappMessageTranslator()): string {
   const percent = Math.round((messages / opens) * 100);
-  return `Your past WhatsApp ads: ${opens.toLocaleString("en-IN")} taps on the WhatsApp button, ${messages.toLocaleString("en-IN")} sent a message (${percent}%).`;
+  return t("tap.handoff", { opens: opens.toLocaleString("en-IN"), messages: messages.toLocaleString("en-IN"), percent });
 }
 
 const GREETING = /^(hi|hii+|hello|hey|namaste|namaskar|नमस्ते|ਸਤ ਸ੍ਰੀ ਅਕਾਲ)\b[!,.\s]*/iu;

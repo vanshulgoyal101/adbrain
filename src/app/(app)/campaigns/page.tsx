@@ -133,7 +133,7 @@ export default async function CampaignsPage({
     const initialDaily = lastDaily === null ? undefined
       : BUDGET_PRESETS.reduce((best, amount) => Math.abs(amount - lastDaily) < Math.abs(best - lastDaily) ? amount : best);
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding} returning={again} initialDaily={initialDaily}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWords()} appReviewPending={metaAppReviewPending()} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWords()} whatsappWords={await requestWords("whatsappMessage")} appReviewPending={metaAppReviewPending()} />;
   }
 
   const campaignWords = await requestWords("campaigns");

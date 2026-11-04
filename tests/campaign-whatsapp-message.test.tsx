@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import { WhenTheyTap, whenTheyTapLine } from "@/components/when-they-tap";
-import { setupTranslator } from "@/i18n/setup-words";
+import { whatsappMessageTranslator } from "@/i18n/words";
 import hi from "../messages/hi.json";
 import en from "../messages/en.json";
 import { WHATSAPP_UNVERIFIED_STEP } from "@/lib/meta/setup-checklist";
@@ -206,7 +206,7 @@ describe("When they tap (#840)", () => {
   });
 
   it("speaks the owner's language on step 3 (#2749)", () => {
-    const t = setupTranslator({ locale: "hi", messages: hi.setup });
+    const t = whatsappMessageTranslator({ locale: "hi", messages: hi.whatsappMessage });
     expect(whenTheyTapLine({ source: "saved", language: "hi", greeting: "नमस्ते", autofill: "", iceBreakers: ["दाम?", "पता?"] }, t)).toBe("ग्राहकों को आपका स्वागत मैसेज और टैप करने के लिए 2 सवाल दिखेंगे: 'दाम?', 'पता?'।");
     expect(whenTheyTapLine({ source: "saved", language: "hi", greeting: "नमस्ते", autofill: "जानकारी दें" }, t)).toBe("ग्राहकों को आपका स्वागत मैसेज और भेजने के लिए तैयार 'जानकारी दें' दिखेगा।");
   });

@@ -3,6 +3,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { WhenTheyTap } from "@/components/when-they-tap";
 import { handoffLine, handoffRate, isGenericAsk } from "@/lib/campaign/whatsapp-handoff";
+import { whatsappMessageTranslator } from "@/i18n/words";
+import hi from "../messages/hi.json";
 
 const offers = ["Free site survey", "Diwali offer: 10% off rooftop solar installation"];
 
@@ -52,5 +54,19 @@ describe("#1081: When they tap shows the rate and the note", () => {
     expect(screen.queryByText(/Your past WhatsApp ads/)).toBeNull();
     rerender(<WhenTheyTap message={{ ...message, iceBreakers: ["Price?"] }} businessName="Solaride" adsLanguage="en" onEdit={vi.fn()} offers={offers} />);
     expect(screen.queryByText(/is general/)).toBeNull();
+  });
+
+  it("speaks the owner's Hindi on Campaigns' review (#1438)", () => {
+    const words = { locale: "hi" as const, messages: hi.whatsappMessage };
+    expect(handoffLine({ opens: 1200, messages: 30 }, whatsappMessageTranslator(words))).toBe("आपके पिछले WhatsApp ऐड: WhatsApp बटन पर 1,200 टैप, 30 ने मैसेज भेजा (3%)।");
+    const onEdit = vi.fn();
+    render(<WhenTheyTap message={{ ...message, language: "hi" }} businessName="Solaride" adsLanguage="en" onEdit={onEdit} handoff={{ opens: 28, messages: 1 }} offers={offers} words={words} />);
+    expect(screen.getByRole("region", { name: "टैप करने पर" })).toBeInTheDocument();
+    expect(screen.getByText("· AdBrain का सुझाव")).toBeInTheDocument();
+    expect(screen.getByText("आपके पिछले WhatsApp ऐड: WhatsApp बटन पर 28 टैप, 1 ने मैसेज भेजा (4%)।")).toBeInTheDocument();
+    expect(screen.getByText(/बहुत आम है।/)).toBeInTheDocument();
+    expect(screen.getByText(/आपके ऐड अंग्रेज़ी में हैं; आपका WhatsApp मैसेज हिंदी में है।/)).toBeInTheDocument();
+    screen.getByRole("button", { name: "बदलें" }).click();
+    expect(onEdit).toHaveBeenCalled();
   });
 });
