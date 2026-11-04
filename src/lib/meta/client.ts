@@ -5,14 +5,17 @@ import { GRAPH } from "@/lib/meta/graph-version";
 import { FACEBOOK_FEED_POSITIONS, FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
 import type { CampaignDeliverySnapshot } from "./types";
-import { conversionGoalFromAdSets, destinationFromAdSets, type CampaignDestination, type ConversionGoal } from "@/lib/campaign/outcomes";
+import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
+import type { ConversionGoal } from "@/lib/campaign/website-tracking";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
 import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
-import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
+import { conversionGoalFromAdSets, conversionHistoryMatches, decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { ConnectionAccessError } from "./connection-access-error";
+import { MetaError, MetaThrottledError, isMetaReadInterruption, isThrottleCode, metaErrorCode, throttleWaitMs } from "./errors";
+export { MetaError, MetaThrottledError, isMetaReauthError, isMetaReadInterruption, isThrottleCode, metaErrorCode, optionalAdResultsFailure, throttleWaitMs, type MetaErrorDetails } from "./errors";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
@@ -264,62 +267,7 @@ function sameAudience(targeting: Record<string, unknown> | undefined, sent: Reco
     && (!changes.languages || norm(storedLocales(numbers(targeting.locales))) === norm(storedLocales(numbers(sent.locales))));
 }
 
-export class MetaError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-    readonly code?: number,
-    readonly subcode?: number,
-    /** #615: Meta's own diagnosis for telemetry; never tokens or request bodies. */
-    readonly details?: MetaErrorDetails,
-  ) {
-    super(message);
-    this.name = "MetaError";
-  }
-}
-
-/** #1838: Meta's rate limits: app (4), user/account (17, 613, 80000–80014), Page (32). */
-export function isThrottleCode(code: number | undefined): boolean {
-  return code === 4 || code === 17 || code === 32 || code === 613 || (code !== undefined && code >= 80000 && code <= 80014);
-}
-
-/**
- * #1838 (Reviewer, CTO): Meta is throttling us. `scope` says who waits (the whole app, one ad account, one Page) and
- * `retryAfterMs` for how long (Meta's own estimate from the usage headers, else 15 min). Crons skip on it; a person's
- * pause or activation is still tried. `reason` maps 1:1 to ADR-001's ChannelError code later.
- */
-export class MetaThrottledError extends MetaError {
-  readonly reason = "rate_limited" as const;
-  constructor(message: string, status: number | undefined, code: number | undefined, subcode: number | undefined,
-    readonly scope: "app" | "account" | "page", readonly retryAfterMs: number, details?: MetaErrorDetails) {
-    super(message, status, code, subcode, details);
-    this.name = "MetaThrottledError";
-  }
-}
-
 const THROTTLE_DEFAULT_MS = 15 * 60_000;
-
-/** Meta's estimated wait from `x-business-use-case-usage` (minutes) or `x-ad-account-usage` (seconds); null if none. */
-export function throttleWaitMs(headers: Headers): number | null {
-  const waits: number[] = [];
-  try {
-    const usage = JSON.parse(headers.get("x-business-use-case-usage") ?? "{}") as Record<string, { estimated_time_to_regain_access?: number }[]>;
-    for (const rows of Object.values(usage)) for (const row of Array.isArray(rows) ? rows : []) {
-      if (typeof row?.estimated_time_to_regain_access === "number") waits.push(row.estimated_time_to_regain_access * 60_000);
-    }
-  } catch {}
-  try {
-    const account = JSON.parse(headers.get("x-ad-account-usage") ?? "{}") as { reset_time_duration?: number };
-    if (typeof account.reset_time_duration === "number") waits.push(account.reset_time_duration * 1000);
-  } catch {}
-  const longest = Math.max(0, ...waits.filter((wait) => Number.isFinite(wait)));
-  return longest > 0 ? longest : null;
-}
-
-/** #757: Graph 190 (any subcode: expired, password change, checkpoint, permission removed) means the token is dead. */
-export function isMetaReauthError(error: unknown): error is MetaError {
-  return error instanceof MetaError && error.code === 190;
-}
 
 /**
  * #735: a create that failed after Meta made the campaign but before any ad set, where AdBrain then
@@ -333,8 +281,6 @@ export class MetaCreateRolledBackError extends MetaError {
     this.name = "MetaCreateRolledBackError";
   }
 }
-
-export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
 
 type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };
 
@@ -611,12 +557,6 @@ export function withoutAudienceNetwork(targeting: Record<string, unknown>, optio
 /** #334: every ad set runs with Advantage+ audience (area and age_min hard). The learning ledger records it (#588). */
 const ADVANTAGE_AUDIENCE = true;
 
-/** A short, loggable code for a failed Graph call: Meta's code/subcode, else the HTTP status. */
-export function metaErrorCode(error: unknown): string {
-  if (error instanceof MetaError) return error.code ? `${error.code}${error.subcode ? `.${error.subcode}` : ""}` : `http.${error.status ?? "unknown"}`;
-  return error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unknown";
-}
-
 const GET_RETRY_DELAY_MS = 500;
 
 /** #1199: a failure a repeat of the same read can cure: our 15 s timeout, a dropped connection, or a Meta 5xx. */
@@ -841,7 +781,7 @@ export class MetaClient {
     if (!res.ok || (json as { error?: unknown }).error) {
       const err = (json as { error?: GraphErrorBody }).error;
       const details = { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) };
-      if (isThrottleCode(err?.code)) {
+      if (res.status === 429 || isThrottleCode(err?.code)) {
         throw new MetaThrottledError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
           err?.code === 4 ? "app" : err?.code === 32 ? "page" : "account", throttleWaitMs(res.headers) ?? THROTTLE_DEFAULT_MS, details);
       }
@@ -1642,15 +1582,60 @@ export class MetaClient {
     return { destination, conversionGoal: destination === "website" ? conversionGoalFromAdSets(adSets.data) : null, state };
   }
 
-  async getCampaignInsights(campaignId: string, options?: { weekly?: boolean }): Promise<CampaignInsights> {
+  private async conversionHistoryMatches(campaignId: string, goal: ConversionGoal): Promise<boolean> {
+    const filtering = encodeURIComponent(JSON.stringify([{ field: "effective_status", operator: "IN", value: ["DELETED", "ARCHIVED", "PAUSED", "ACTIVE"] }]));
+    try {
+      const history = await this.graph<unknown>(
+        `${encodeURIComponent(campaignId)}/adsets?fields=id,status,effective_status,promoted_object,destination_type&limit=100&filtering=${filtering}`,
+      );
+      return conversionHistoryMatches(history, goal, this.creds.pageId);
+    } catch (error) {
+      if (this.executionSignal?.aborted || isMetaReadInterruption(error)) throw error;
+      if (error instanceof MetaError || error instanceof TypeError || (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name))) return false;
+      throw error;
+    }
+  }
+
+  private async readInsights(path: (includeValues: boolean) => string, goal: ConversionGoal | null) {
+    try {
+      return { data: await this.graph<unknown>(path(Boolean(goal))), valuesAvailable: true };
+    } catch (error) {
+      const rejectedField = error instanceof MetaError && error.status === 400 && error.code === 100;
+      const timedOutWithoutDeadline = error instanceof Error && error.name === "TimeoutError" && !this.executionSignal;
+      if (!goal || this.executionSignal?.aborted || timedOutWithoutDeadline || error instanceof MetaThrottledError || !(rejectedField || transientReadFailure(error))) throw error;
+      return { data: await this.graph<unknown>(path(false)), valuesAvailable: false };
+    }
+  }
+
+  async getCampaignState(campaignId: string): Promise<MetaCampaignState | null> {
+    return (await this.readCampaignBinding(campaignId, true)).state;
+  }
+
+  async getCampaignInsights(campaignId: string, options?: { weekly?: boolean; onOptionalReadFailure?: () => void }): Promise<CampaignInsights> {
     const binding = await this.readCampaignBinding(campaignId, true);
     const { destination, state } = binding;
     // The weekly spend check needs spend only, so it never asks for conversions.
     const conversionGoal = options?.weekly ? null : binding.conversionGoal;
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
-    const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,${conversionGoal ? "action_values," : ""}date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
-    const insights = decodeCampaignInsights(data, destination, { requireSpend: options?.weekly, conversionGoal });
-    return state ? { ...insights, metaState: state } : insights;
+    const node = encodeURIComponent(campaignId);
+    const [read, history] = await Promise.all([
+      this.readInsights(includeValues => `${node}/insights?fields=impressions,clicks,spend,actions,${includeValues ? "action_values," : ""}date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`, conversionGoal),
+      (conversionGoal ? this.conversionHistoryMatches(campaignId, conversionGoal) : Promise.resolve(true))
+        .then(matches => ({ matches }), (error: unknown) => ({ error })),
+    ]);
+    if ("error" in history) {
+      decodeCampaignInsights(read.data, destination, { requireSpend: options?.weekly });
+      options?.onOptionalReadFailure?.();
+      throw history.error;
+    }
+    const verifiedGoal = history.matches ? conversionGoal : null;
+    const usableGoal = read.valuesAvailable ? verifiedGoal : null;
+    const insights = decodeCampaignInsights(read.data, destination, { requireSpend: options?.weekly, conversionGoal: usableGoal });
+    return {
+      ...insights,
+      ...(conversionGoal && !usableGoal ? { ...(verifiedGoal ? { conversionGoal: verifiedGoal } : {}), conversionsUnavailable: true as const } : {}),
+      ...(state ? { metaState: state } : {}),
+    };
   }
 
   /**
@@ -1662,12 +1647,15 @@ export class MetaClient {
     const { destination, conversionGoal } = await this.readCampaignBinding(campaignId, false);
     const node = encodeURIComponent(campaignId);
     const period = options?.day ? `time_range=${encodeURIComponent(JSON.stringify({ since: options.day, until: options.day }))}` : "date_preset=maximum";
-    const [ads, insights] = await Promise.all([
+    const [ads, read, historyMatches] = await Promise.all([
       // Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and refuses DELETED (1815001).
       this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100&effective_status=${encodeURIComponent(JSON.stringify(LISTED_AD_STATUSES))}`),
-      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions${conversionGoal ? ",action_values" : ""}&${period}&limit=100`),
+      this.readInsights(includeValues => `${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions${includeValues ? ",action_values" : ""}&${period}&limit=100`, conversionGoal),
+      conversionGoal ? this.conversionHistoryMatches(campaignId, conversionGoal) : Promise.resolve(true),
     ]);
-    return decodeAdResults(ads, insights, destination, conversionGoal);
+    const usableGoal = historyMatches && read.valuesAvailable ? conversionGoal : null;
+    const results = decodeAdResults(ads, read.data, destination, usableGoal);
+    return conversionGoal && !usableGoal ? results.map(ad => ({ ...ad, conversionsUnavailable: true as const })) : results;
   }
 
   /** Read-only lifetime spend (account currency, exact paise) for customer cost evidence (#216). */

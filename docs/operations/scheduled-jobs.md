@@ -82,6 +82,11 @@ prevent complete enforcement. Both refresh-time and daily enforcement can lag;
 neither is a hard real-time spend stop. Manually invoking enforce-spend can mutate
 Meta and requires authorization, even though the method is GET.
 
+When a capped run's stored end time has passed and the spend decision has not already
+required a pause, the sweep rechecks the bound Meta campaign and ad-set state without
+requesting insights or conversion fields. A verified extension keeps the run active;
+an unreadable state remains fail-closed.
+
 Keepalive is not a promise that a provider will never pause a project. For an
 outage, inspect provider status and restore through the authorized dashboard.
 Do not infer every DNS/TLS failure is an inactivity pause.

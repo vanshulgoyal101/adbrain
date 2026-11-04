@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ConversionGoal } from "@/lib/campaign/website-tracking";
 
 export const campaignDestinationSchema = z.enum(["instant_form", "whatsapp", "call", "website", "mixed", "unknown"]);
 export type CampaignDestination = z.infer<typeof campaignDestinationSchema>;
@@ -63,22 +64,9 @@ export function campaignDestination(
  * `actions` and the value in `action_values` under the same action type. Visits have no conversion.
  */
 export const WEBSITE_CONVERSIONS = {
-  leads: { customEventType: "LEAD", metaActions: ["offsite_conversion.fb_pixel_lead"], metaValueActions: ["offsite_conversion.fb_pixel_lead"] },
-  sales: { customEventType: "PURCHASE", metaActions: ["offsite_conversion.fb_pixel_purchase"], metaValueActions: ["offsite_conversion.fb_pixel_purchase"] },
-} as const;
-export type ConversionGoal = keyof typeof WEBSITE_CONVERSIONS;
-
-/**
- * #2716: a website campaign's conversion goal, from its ad sets' promoted pixel event (the binding read already asks
- * for `promoted_object`). Null for visits, and for anything AdBrain didn't build (mixed or other events), so its
- * conversions are never guessed.
- */
-export function conversionGoalFromAdSets(adSets: ReadonlyArray<{ promoted_object?: { custom_event_type?: string } }>): ConversionGoal | null {
-  const events = new Set(adSets.map(adSet => adSet.promoted_object?.custom_event_type));
-  if (events.size !== 1) return null;
-  const [event] = events;
-  return event === WEBSITE_CONVERSIONS.leads.customEventType ? "leads" : event === WEBSITE_CONVERSIONS.sales.customEventType ? "sales" : null;
-}
+  leads: { metaActions: ["offsite_conversion.fb_pixel_lead"], metaValueActions: ["offsite_conversion.fb_pixel_lead"] },
+  sales: { metaActions: ["offsite_conversion.fb_pixel_purchase"], metaValueActions: ["offsite_conversion.fb_pixel_purchase"] },
+} as const satisfies Record<ConversionGoal, { metaActions: readonly string[]; metaValueActions: readonly string[] }>;
 
 export function destinationFromAdSets(adSets: ReadonlyArray<{ destination_type?: string }>): CampaignDestination {
   if (!adSets.length || adSets.some(adSet => !adSet.destination_type)) return "unknown";

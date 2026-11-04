@@ -14,7 +14,7 @@ vi.mock("@/lib/security/ssrf", () => ({
 }));
 
 const { MetaClient, MetaError } = await import("@/lib/meta/client");
-const { graphEndpoint } = await import("@/lib/meta/graph-event");
+const { graphEndpoint, graphOutcome } = await import("@/lib/meta/graph-event");
 const { metaErrorAttributes } = await import("@/lib/meta/connection-access");
 const { sanitizeProductEvent } = await import("@/lib/observability/events");
 
@@ -89,6 +89,16 @@ describe("core: Meta call events (#451 L2)", () => {
     expect(event?.attributes).toMatchObject(attributes);
     expect(JSON.stringify(event)).not.toMatch(/secret-token|ACCOUNT|PAGE|Jaipur/);
     expect(metaErrorAttributes(new Error("plain"))).toEqual({});
+  });
+
+  it("records a bodyless HTTP 429 as throttling, not an ordinary rejection", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 429 }));
+    const meta = new MetaClient({ adAccountId: "act_ACCOUNT", pageId: "PAGE", accessToken: "secret-token" });
+    await expect(meta.getCampaignInsights("1234")).rejects.toMatchObject({ reason: "rate_limited" });
+    expect(events).toEqual([expect.objectContaining({
+      name: "meta.graph", outcome: "failed", attributes: expect.objectContaining({ status: 429, errorCode: "META_HTTP_429" }),
+    })]);
+    expect(graphOutcome({ status: 400, code: 80010 })).toBe("failed");
   });
 
   it("a network failure is logged as failed without a status", async () => {

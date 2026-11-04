@@ -3,7 +3,7 @@ import { ownerError } from "@/i18n/request-locale";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
-import { CampaignGoneError, friendlyMetaError, type AdResult, type AdReview } from "@/lib/meta/client";
+import { CampaignGoneError, friendlyMetaError, isMetaReadInterruption, optionalAdResultsFailure, type AdResult, type AdReview } from "@/lib/meta/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
@@ -78,6 +78,7 @@ async function handlePOST(
   let insights;
   let review: AdReview[] | null = null;
   let ads: AdResult[] | null = null;
+  let optionalReadInterrupted = false;
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
     ({ insights, review, ads } = await withMetaConnection(
@@ -91,13 +92,19 @@ async function handlePOST(
         expectedGeneration: storedBinding.metaConnectionGeneration,
       },
       async (meta) => ({
-        insights: await meta.getCampaignInsights(campaign.meta_campaign_id!),
+        insights: await meta.getCampaignInsights(campaign.meta_campaign_id!, { onOptionalReadFailure: () => { optionalReadInterrupted = true; } }),
         review: await meta.readAdReview(campaign.meta_campaign_id!).catch(() => null),
-        // #783: per-ad results ride along; a failure keeps the last stored rows.
-        ads: adResultsEnabled() ? await meta.getAdResults(campaign.meta_campaign_id!).catch(() => null) : null,
+        // #783: ordinary per-ad failures keep the last rows; throttling and expired credentials must surface.
+        ads: adResultsEnabled() ? await meta.getAdResults(campaign.meta_campaign_id!).catch(error => {
+          optionalReadInterrupted = isMetaReadInterruption(error);
+          return optionalAdResultsFailure(error);
+        }) : null,
       }),
     ));
   } catch (err) {
+    if (optionalReadInterrupted) {
+      return NextResponse.json({ error: friendlyMetaError(err, await ownerError("refreshFailed")), autoPaused: [], protectionConfirmed: false }, { status: 502 });
+    }
     if (err instanceof CampaignGoneError) {
       // #721: no spend can come from a deleted campaign; end it here so Manage stops treating it as paused.
       const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {};

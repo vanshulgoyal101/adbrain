@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   updateCampaignStatus: vi.fn(),
   pauseCampaignTree: vi.fn(),
   getCampaignInsights: vi.fn(),
+  getCampaignState: vi.fn(),
   getCustomerBalance: vi.fn(),
   confirmCustomerCampaign: vi.fn(),
   readLifetimeSpendPaise: vi.fn(),
@@ -123,8 +124,9 @@ beforeEach(() => {
   const start = new Date(`${periodEnd}T00:00:00Z`);
   start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7);
   mocks.getCampaignInsights.mockResolvedValue({ spend: 7000, periodStart: start.toISOString().slice(0, 10), periodEnd });
+  mocks.getCampaignState.mockResolvedValue(null);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, getCampaignInsights: mocks.getCampaignInsights, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readCampaignStopped: mocks.readCampaignStopped }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, getCampaignInsights: mocks.getCampaignInsights, getCampaignState: mocks.getCampaignState, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readCampaignStopped: mocks.readCampaignStopped }, {
       generation: 4,
       selected: {
         metaBusinessId: null,
@@ -161,13 +163,18 @@ describe("managed child account spending limits on the sweep (#522, QA #560)", (
       return { incomplete: false, results };
     });
     const started = Date.now();
-    const response = await sweep();
-    expect(response.status).toBe(200);
-    expect((await response.json()).managedSpendCaps).toEqual(results);
-    const { deadline } = mocks.sweepManaged.mock.calls[0][0];
-    expect(deadline).toBeGreaterThan(started);
-    expect(deadline).toBeLessThanOrEqual(started + 50_000);
-    expect(mocks.requireScheduledBusiness).toHaveBeenCalledWith("managed-1", expect.any(Request));
+    const clock = vi.spyOn(Date, "now").mockReturnValue(started);
+    try {
+      const response = await sweep();
+      expect(response.status).toBe(200);
+      expect((await response.json()).managedSpendCaps).toEqual(results);
+      const { deadline } = mocks.sweepManaged.mock.calls[0][0];
+      expect(deadline).toBeGreaterThan(started);
+      expect(deadline).toBeLessThanOrEqual(started + 50_000);
+      expect(mocks.requireScheduledBusiness).toHaveBeenCalledWith("managed-1", expect.any(Request));
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("reports the run incomplete when the sweep deferred, failed or couldn't list accounts", async () => {
@@ -383,25 +390,99 @@ describe("scheduled spend binding boundary", () => {
     configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
     mocks.ownAccount = true;
     const state = metaState(new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d{3}Z$/, "+0000"));
-    mocks.getCampaignInsights.mockResolvedValue({ spend: 0, metaState: state });
+    mocks.getCampaignState.mockResolvedValue(state);
     mocks.saveOutsideChanges.mockResolvedValue({ changed: true, raised: false });
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
     const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
     expect(response.status).toBe(200);
-    expect(mocks.getCampaignInsights).toHaveBeenCalledWith("meta-campaign-1");
+    expect(mocks.getCampaignState).toHaveBeenCalledWith("meta-campaign-1");
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
     expect(mocks.saveOutsideChanges).toHaveBeenCalledWith(expect.objectContaining({ businessId: "business-1" }), expect.objectContaining({ id: "campaign-1" }), state);
     expect((await response.json()).swept).toEqual([]);
   });
 
-  it.each([
-    ["Meta holds the same past end time", () => ({ spend: 0, metaState: metaState(endedCap.cap.endTime) })],
-    ["Meta's answer has no end time", () => ({ spend: 0, metaState: { status: "ACTIVE", adSets: [] } })],
-    ["Meta can't be read", () => Promise.reject(new Error("Meta unavailable"))],
-  ])("still stops an ended capped run when %s (#2290)", async (_case, insights) => {
+  it("checks an extended run's end time without requesting insights", async () => {
     configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
     mocks.ownAccount = true;
-    mocks.getCampaignInsights.mockImplementation(async () => insights());
+    mocks.saveOutsideChanges.mockResolvedValue({ changed: true, raised: false });
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    const adSet = {
+      id: "capped-1", status: "ACTIVE", end_time: future, destination_type: "WEBSITE",
+      promoted_object: { page_id: "page_123", custom_event_type: "PURCHASE" },
+    };
+    const paths: string[] = [];
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if ((init?.method ?? "GET") !== "GET") throw new Error("This test must not write to Meta.");
+      const url = new URL(String(input));
+      paths.push(url.pathname + url.search);
+      if (url.pathname.endsWith("/meta-campaign-1")) return Response.json({ id: "meta-campaign-1", account_id: "123", status: "ACTIVE" });
+      if (url.pathname.endsWith("/meta-campaign-1/adsets")) return Response.json({ data: [adSet] });
+      if (url.pathname.endsWith("/meta-campaign-1/insights")) return new Response(null, { status: 429 });
+      throw new Error(`Unexpected Graph read: ${url.pathname}`);
+    });
+    try {
+      const { MetaClient } = await import("@/lib/meta/client");
+      const client = new MetaClient({ adAccountId: "act_123", pageId: "page_123", accessToken: "test-token" });
+      mocks.getCampaignState.mockImplementation((campaignId: string) => client.getCampaignState(campaignId));
+      const { GET } = await import("@/app/api/cron/enforce-spend/route");
+      const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+      expect(response.status).toBe(200);
+      expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+      expect(mocks.pauseCampaignTree).not.toHaveBeenCalled();
+      expect(mocks.saveOutsideChanges).toHaveBeenCalledWith(
+        expect.objectContaining({ businessId: "business-1" }),
+        expect.objectContaining({ id: "campaign-1" }),
+        expect.objectContaining({ adSets: [expect.objectContaining({ endTime: future })] }),
+      );
+      expect(paths.some((path) => path.includes("/insights") || path.includes("filtering="))).toBe(false);
+      expect((await response.json()).swept).toEqual([]);
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  it("does not pause an under-cap mixed campaign for a malformed optional pixel count", async () => {
+    configureAdmin([boundCampaign]);
+    mocks.ownAccount = true;
+    const { periodStart, periodEnd } = await mocks.getCampaignInsights();
+    mocks.getCampaignInsights.mockClear();
+    const adSets = [
+      { id: "website", destination_type: "WEBSITE", promoted_object: { page_id: "page_123", custom_event_type: "PURCHASE" } },
+      { id: "form", destination_type: "ON_AD", promoted_object: { page_id: "page_123" } },
+    ];
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if ((init?.method ?? "GET") !== "GET") throw new Error("This test must not write to Meta.");
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/meta-campaign-1")) return Response.json({ id: "meta-campaign-1", account_id: "123", status: "ACTIVE" });
+      if (url.pathname.endsWith("/meta-campaign-1/adsets")) return Response.json({ data: adSets });
+      if (url.pathname.endsWith("/meta-campaign-1/insights")) return Response.json({ data: [{
+        spend: "120", actions: [{ action_type: "offsite_conversion.fb_pixel_purchase", value: null }],
+        date_start: periodStart, date_stop: periodEnd,
+      }] });
+      throw new Error(`Unexpected Graph read: ${url.pathname}`);
+    });
+    try {
+      const { MetaClient } = await import("@/lib/meta/client");
+      const client = new MetaClient({ adAccountId: "act_123", pageId: "page_123", accessToken: "test-token" });
+      mocks.getCampaignInsights.mockImplementation((campaignId: string, options?: { weekly?: boolean }) => client.getCampaignInsights(campaignId, options));
+      const { GET } = await import("@/app/api/cron/enforce-spend/route");
+      const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: ["Bearer", "cron-secret"].join(" ") } }));
+      expect(response.status).toBe(200);
+      expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+      expect((await response.json()).swept).toEqual([]);
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  it.each([
+    ["Meta holds the same past end time", () => metaState(endedCap.cap.endTime)],
+    ["Meta's answer has no end time", () => ({ status: "ACTIVE", adSets: [] })],
+    ["Meta can't be read", () => Promise.reject(new Error("Meta unavailable"))],
+  ])("still stops an ended capped run when %s (#2290)", async (_case, state) => {
+    configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    mocks.getCampaignState.mockImplementation(async () => state());
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
     const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
     expect(response.status).toBe(200);

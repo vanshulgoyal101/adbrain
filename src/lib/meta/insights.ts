@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { outcomeDefinition, WEBSITE_CONVERSIONS, type CampaignDestination, type ConversionGoal } from "@/lib/campaign/outcomes";
+import { outcomeDefinition, WEBSITE_CONVERSIONS, type CampaignDestination } from "@/lib/campaign/outcomes";
+import type { ConversionGoal } from "@/lib/campaign/website-tracking";
+import { websiteConversionEvent } from "@/lib/meta/destinations";
 
 export interface CampaignInsights {
   destination?: CampaignDestination;
@@ -43,18 +45,45 @@ export interface MetaCampaignState {
   adSets: Array<{ id: string; status?: string; dailyBudget?: string; lifetimeBudget?: string; endTime?: string }>;
 }
 
+/**
+ * #2716: a website campaign's conversion goal from its ad sets' promoted pixel event. Mixed or unknown events
+ * remain unknown, so their conversions are never guessed.
+ */
+export function conversionGoalFromAdSets(adSets: ReadonlyArray<{ promoted_object?: { custom_event_type?: string } }>): ConversionGoal | null {
+  const events = new Set(adSets.map(adSet => adSet.promoted_object?.custom_event_type));
+  if (events.size !== 1) return null;
+  const [event] = events;
+  return (["leads", "sales"] as const).find(goal => websiteConversionEvent(goal) === event) ?? null;
+}
+
+const conversionHistorySchema = z.object({
+  data: z.array(z.object({
+    id: z.string(),
+    destination_type: z.literal("WEBSITE"),
+    promoted_object: z.object({ page_id: z.string(), custom_event_type: z.string() }),
+  })).max(100),
+  paging: z.object({ next: z.string().optional() }).optional(),
+});
+
+export function conversionHistoryMatches(payload: unknown, goal: ConversionGoal, pageId: string): boolean {
+  const parsed = conversionHistorySchema.safeParse(payload);
+  return parsed.success && !parsed.data.paging?.next
+    && parsed.data.data.every(adSet => adSet.promoted_object.page_id === pageId
+      && adSet.promoted_object.custom_event_type === websiteConversionEvent(goal));
+}
+
 const amountSchema = z.string().regex(/^\d+(?:\.\d+)?$/).transform(Number)
   .pipe(z.number().nonnegative().max(Number.MAX_SAFE_INTEGER));
 const countSchema = amountSchema.pipe(z.number().int());
+const actionValuesSchema = z.array(z.object({ action_type: z.string(), value: z.string() }));
 const rowSchema = z.object({
   impressions: countSchema.optional(),
   clicks: countSchema.optional(),
   spend: amountSchema.optional(),
   date_start: z.iso.date().optional(),
   date_stop: z.iso.date().optional(),
-  actions: z.array(z.object({ action_type: z.string(), value: z.string() })).optional(),
-  /** #2716: requested only for a website leads/sales goal. */
-  action_values: z.array(z.object({ action_type: z.string(), value: z.string() })).optional(),
+  actions: z.array(z.object({ action_type: z.string(), value: z.unknown() })).optional(),
+  action_values: z.unknown().optional(),
 });
 type InsightRow = z.infer<typeof rowSchema>;
 const insightsSchema = z.object({
@@ -62,35 +91,32 @@ const insightsSchema = z.object({
   paging: z.object({ next: z.string().optional() }).optional(),
 });
 
+const websiteConversionActions = new Set(Object.values(WEBSITE_CONVERSIONS).flatMap<string>(definition => definition.metaActions));
+
+function validActions(row: InsightRow | undefined): boolean {
+  return row?.actions?.every(action => typeof action.value === "string"
+    || websiteConversionActions.has(action.action_type)) ?? true;
+}
+
+function readAction(actions: InsightRow["actions"], names: readonly string[], schema: z.ZodType<number>) {
+  for (const name of names) {
+    const matches = actions?.filter(action => action.action_type === name) ?? [];
+    if (matches.length > 1) return { state: "ambiguous" as const };
+    if (matches.length === 1) {
+      const parsed = schema.safeParse(matches[0].value);
+      return parsed.success ? { state: "value" as const, value: parsed.data } : { state: "invalid" as const };
+    }
+  }
+  return { state: "missing" as const };
+}
+
 /** One action's count in an insights row (Meta lists each action type at most once). */
 function actionCounter(row: InsightRow | undefined) {
   return (names: readonly string[]) => {
-    for (const name of names) {
-      const matches = row?.actions?.filter(action => action.action_type === name) ?? [];
-      if (matches.length > 1) throw new Error("Campaign insight actions are ambiguous.");
-      if (matches.length === 1) {
-        const count = countSchema.safeParse(matches[0].value);
-        if (!count.success) throw new Error("Campaign insight count is invalid.");
-        return count.data;
-      }
-    }
-    return 0;
-  };
-}
-
-/** #2716: one action's value in an insights row (`action_values`); null when Meta lists none, so absent never reads as ₹0. */
-function actionValue(row: InsightRow | undefined) {
-  return (names: readonly string[]) => {
-    for (const name of names) {
-      const matches = row?.action_values?.filter(action => action.action_type === name) ?? [];
-      if (matches.length > 1) throw new Error("Campaign insight action values are ambiguous.");
-      if (matches.length === 1) {
-        const amount = amountSchema.safeParse(matches[0].value);
-        if (!amount.success) throw new Error("Campaign insight value is invalid.");
-        return amount.data;
-      }
-    }
-    return null;
+    const result = readAction(row?.actions, names, countSchema);
+    if (result.state === "ambiguous") throw new Error("Campaign insight actions are ambiguous.");
+    if (result.state === "invalid") throw new Error("Campaign insight count is invalid.");
+    return result.state === "value" ? result.value : 0;
   };
 }
 
@@ -98,14 +124,20 @@ function actionValue(row: InsightRow | undefined) {
  * #2716: a website leads/sales goal's conversions, read from the same row as its page views. Best effort: a bad
  * conversion field never fails the read, because spend, page views and the spend checks depend on it.
  */
-function conversionFigures(row: InsightRow | undefined, goal: ConversionGoal, spend: number) {
+function conversionFigures(row: InsightRow | undefined, goal: ConversionGoal) {
   const action = WEBSITE_CONVERSIONS[goal];
-  try {
-    const conversions = actionCounter(row)(action.metaActions);
-    return { conversionGoal: goal, conversions, conversionValue: actionValue(row)(action.metaValueActions), costPerConversion: conversions > 0 ? spend / conversions : null };
-  } catch {
+  const count = readAction(row?.actions, action.metaActions, countSchema);
+  const values = actionValuesSchema.safeParse(row?.action_values === undefined ? [] : row.action_values);
+  if (!values.success || count.state === "ambiguous" || count.state === "invalid") {
     return { conversionGoal: goal, conversionsUnavailable: true as const };
   }
+  const value = readAction(values.data, action.metaValueActions, amountSchema);
+  if (value.state === "ambiguous" || value.state === "invalid") return { conversionGoal: goal, conversionsUnavailable: true as const };
+  const conversions = count.state === "value" ? count.value : 0;
+  const conversionValue = value.state === "value" ? value.value : null;
+  if (conversions === 0 && conversionValue !== null && conversionValue > 0) return { conversionGoal: goal, conversionsUnavailable: true as const };
+  const costPerConversion = conversions > 0 && row?.spend !== undefined ? row.spend / conversions : null;
+  return { conversionGoal: goal, conversions, conversionValue, costPerConversion };
 }
 
 function adConversions(figures: ReturnType<typeof conversionFigures>) {
@@ -127,6 +159,8 @@ export function decodeCampaignInsights(payload: unknown, destination: CampaignDe
   const parsed = insightsSchema.safeParse(payload);
   if (!parsed.success || parsed.data.paging?.next) throw new Error("Campaign insights are incomplete or invalid.");
   const row = parsed.data.data[0];
+  const conversionGoal = destination === "website" ? options?.conversionGoal : null;
+  if (!validActions(row)) throw new Error("Campaign insights are incomplete or invalid.");
   if (options?.requireSpend && row && row.spend === undefined) throw new Error("Campaign spend observation is unavailable.");
   if (row?.date_start && row.date_stop && row.date_start > row.date_stop) throw new Error("Campaign insight dates are invalid.");
   const actionCount = actionCounter(row);
@@ -142,7 +176,7 @@ export function decodeCampaignInsights(payload: unknown, destination: CampaignDe
     spend, leads, cpl: leads > 0 ? spend / leads : null,
     ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null, whatsappOpens: actionCount(LINK_CLICK_ACTIONS) } : {}),
     ...(destination === "website" ? websiteFigures(spend, resultCount(actionCount, destination), actionCount(LINK_CLICK_ACTIONS)) : {}),
-    ...(destination === "website" && options?.conversionGoal ? conversionFigures(row, options.conversionGoal, spend) : {}),
+    ...(conversionGoal ? conversionFigures(row, conversionGoal) : {}),
     ...(row ? {} : { noDelivery: true as const }),
   };
 }
@@ -197,8 +231,10 @@ export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, d
   const ads = adListSchema.safeParse(adsPayload);
   const insights = adInsightsSchema.safeParse(insightsPayload);
   if (!ads.success || !insights.success || ads.data.paging?.next || insights.data.paging?.next) throw new Error("Ad results are incomplete or invalid.");
+  const goal = destination === "website" ? conversionGoal : null;
   const rows = new Map<string, InsightRow>();
   for (const row of insights.data.data) {
+    if (!validActions(row)) throw new Error("Ad results are incomplete or invalid.");
     if (rows.has(row.ad_id)) throw new Error("Ad results are ambiguous.");
     rows.set(row.ad_id, row);
   }
@@ -217,7 +253,7 @@ export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, d
       results, costPerResult: results > 0 ? spend / results : null,
       ...(destination === "whatsapp" ? { whatsappOpens: count(LINK_CLICK_ACTIONS) } : {}),
       ...(destination === "website" ? { landingPageViews: results } : {}),
-      ...(destination === "website" && conversionGoal ? adConversions(conversionFigures(row, conversionGoal, spend)) : {}),
+      ...(goal ? adConversions(conversionFigures(row, goal)) : {}),
       replaced: !known.has(ad.id) || ad.effective_status === "ARCHIVED",
     };
   });
