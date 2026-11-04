@@ -51,6 +51,7 @@ const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_p
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const mediaBucketVideoMigration = await readFile(join(root, "db/migrations/20261104_media_bucket_video.sql"), "utf8");
 const tokenPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_token_purge.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
@@ -3524,6 +3525,36 @@ async function verify(database, source, integrityMigration, customerOnly = false
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
+      // #748 (#2653 = A): videos get their own private bucket; `media` stays 8 MB images (QA 2 on #2735). Applied twice.
+      await db.query(mediaBucketVideoMigration);
+      await db.query(mediaBucketVideoMigration);
+      await check(`${database}: media-video bucket: 50 MB MP4/MOV, owners read only their own, nobody else writes (#748)`, async () => {
+        const buckets = (await db.query("select id, public, file_size_limit::int as size, allowed_mime_types as types from storage.buckets where id in ('media','media-video') order by id")).rows;
+        assert.deepEqual(buckets, [
+          { id: "media", public: false, size: 8388608, types: ["image/jpeg", "image/png", "image/webp"] },
+          { id: "media-video", public: false, size: 52428800, types: ["video/mp4", "video/quicktime"] },
+        ]);
+        // Supabase grants these on storage.objects; RLS decides the rows.
+        await db.query("grant usage on schema storage to anon, authenticated; grant select, insert on storage.objects to anon, authenticated");
+        const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+        await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+        await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Video'),($3,$4,'Other video')", [business, owner, otherBusiness, other]);
+        await db.query("insert into storage.objects(bucket_id,name) values ('media-video',$1::text||'/a.mp4'),('media-video',$2::text||'/b.mp4')", [business, otherBusiness]);
+        const session = client(database);
+        await session.connect();
+        try {
+          await session.query("begin");
+          await session.query("set local role authenticated");
+          await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+          assert.deepEqual((await session.query("select name from storage.objects where bucket_id='media-video'")).rows.map(row => row.name), [`${business}/a.mp4`]);
+          await assert.rejects(session.query("insert into storage.objects(bucket_id,name) values ('media-video',$1::text||'/own.mp4')", [business]), { code: "42501" });
+          await session.query("rollback");
+          await session.query("begin");
+          await session.query("set local role anon");
+          assert.equal((await session.query("select count(*)::int as n from storage.objects where bucket_id='media-video'")).rows[0].n, 0);
+        } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+        await db.query("delete from storage.objects where bucket_id='media-video'");
+      });
       await verifyMetaThrottle(db,database);
       if (database !== "customer_legacy_upgrade") await verifySecurityDefiners(db, database, check);
       return;
