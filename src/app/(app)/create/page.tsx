@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requestWords, setupWords } from "@/i18n/request-locale";
+import { namespaceMessages } from "@/i18n/locale";
 import { createAdsTranslator } from "@/i18n/words";
 import { Building2 } from "lucide-react";
 import { openingLine } from "@/lib/campaign/result-evidence";
@@ -19,6 +20,7 @@ import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimary
 import { occasionsFor } from "@/lib/seasonal";
 import { mediaUploadsEnabled, pickedMediaViews } from "@/lib/media/store";
 import { createClient } from "@/lib/supabase/server";
+import { getEnv } from "@/lib/env";
 
 export const metadata = {
   title: "Create ads",
@@ -84,6 +86,8 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
   const pickedIds = mediaUploadsEnabled() ? String(params.photos ?? "").split(",").filter(Boolean) : [];
   const [assets, evidence, photos] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => []),
     pickedIds.length ? createClient().then((client) => pickedMediaViews(client, business.id, pickedIds)).catch(() => []) : []]);
+  const pick = photos.length ? namespaceMessages(words.locale, "setup").ads : undefined;
+  const photoPickWords = pick && { tapToPick: pick.tapToPick, picked: pick.picked, pickOne: pick.pickOne };
   const hasPhotos = assets.some((a) => a.type === "product_photo");
   const visualsMissing = [!business.logo_url && t("logo"), !hasPhotos && t("photos")].filter(Boolean);
 
@@ -98,7 +102,8 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         </nav>
       )}
       <div id="create-flow" className="scroll-mt-4">
-      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)} words={words} photos={photos}>
+      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)} words={words} photos={photos} photoPickWords={photoPickWords}
+        overlayAvailable={photos.length ? getEnv().AD_DESIGN_OVERLAY : undefined}>
         <aside aria-label={t("details")} className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
             <span lang={lang}>{t("using", { name: business.name })}</span>{" "}

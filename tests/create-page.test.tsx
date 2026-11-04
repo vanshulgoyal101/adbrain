@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Business } from "@/lib/types";
 
@@ -13,8 +13,14 @@ vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, h
 const setupProps = vi.hoisted(() => vi.fn());
 vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
 const mediaOn = vi.hoisted(() => ({ value: false }));
-const pickedMediaViews = vi.hoisted(() => vi.fn<(client: unknown, businessId: string, ids: string[]) => Promise<unknown[]>>(async () => []));
-vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => mediaOn.value, pickedMediaViews }));
+const videoOn = vi.hoisted(() => ({ value: false }));
+const overlayOn = vi.hoisted(() => ({ value: true }));
+vi.mock("@/lib/env", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/env")>();
+  return { ...actual, getEnv: () => ({ AD_DESIGN_OVERLAY: overlayOn.value }) };
+});
+const pickedMediaViews = vi.hoisted(() => vi.fn<(client: unknown, businessId: string, ids: string[], allowVideos?: boolean) => Promise<unknown[]>>(async () => []));
+vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => mediaOn.value, mediaVideoEnabled: () => videoOn.value, pickedMediaViews }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rls: true }) }));
 const assistantProps = vi.hoisted(() => vi.fn());
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: (props: unknown) => { assistantProps(props); return <div>Assistant</div>; } }));
@@ -206,6 +212,23 @@ describe("Create page for a first-timer (#1270)", () => {
     }
   });
 
+  it("#780: the picked-photo form respects the server's drawing setting", async () => {
+    getPrimaryBusiness.mockResolvedValue(usable);
+    const photo = { id: "11111111-1111-4111-8111-111111111111", kind: "image", name: "Shop front", tags: [], width: 1080, height: 1350, bytes: 1, durationMs: null, fit: null, url: "https://example.com/p.jpg", createdAt: "2026-11-03T00:00:00Z" };
+    pickedMediaViews.mockResolvedValue([photo]);
+    mediaOn.value = true;
+    overlayOn.value = false;
+    try {
+      const { default: CreatePage } = await import("@/app/(app)/create/page");
+      render(await CreatePage({ searchParams: Promise.resolve({ all: "1", photos: photo.id }) }));
+      fireEvent.click(screen.getByRole("radio", { name: "I'll write them" }));
+      expect(screen.queryByRole("checkbox", { name: "Put the headline on the photo" })).toBeNull();
+    } finally {
+      mediaOn.value = false;
+      overlayOn.value = true;
+    }
+  });
+
   it("no service area is not usable: step 2 sends the first-timer back to step 1 (#1136 CEO)", async () => {
     getPrimaryBusiness.mockResolvedValue({ ...usable, locations: [" "] });
     hasLaunchedCampaign.mockResolvedValue(false);
@@ -216,6 +239,51 @@ describe("Create page for a first-timer (#1270)", () => {
 });
 
 describe("Create page in Hindi (#1438)", () => {
+  it("#780: a selected video opens the owner-written editor instead of the photo AI path", async () => {
+    const clip = {
+      id: "33333333-3333-4333-8333-333333333333", kind: "video", name: "Shop reel", tags: [], width: 1080, height: 1920, bytes: 1,
+      durationMs: 30_000, fit: null, url: "https://example.com/shop.mp4", createdAt: "2026-11-03T00:00:00Z",
+    };
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    pickedMediaViews.mockResolvedValueOnce([clip]);
+    mediaOn.value = true;
+    videoOn.value = true;
+    try {
+      const { default: CreatePage } = await import("@/app/(app)/create/page");
+      render(await CreatePage({ searchParams: Promise.resolve({ all: "1", media: clip.id }) }));
+      expect(pickedMediaViews).toHaveBeenCalledWith({ rls: true }, sparse.id, [clip.id], true);
+      expect(screen.getByRole("form", { name: "Your words for each ad" })).toBeInTheDocument();
+      expect(screen.queryByText("Assistant")).toBeNull();
+    } finally {
+      mediaOn.value = false;
+      videoOn.value = false;
+    }
+  });
+
+  it("#780: passes the Hindi selection words to owner-written ads", async () => {
+    const photo = { id: "11111111-1111-4111-8111-111111111111", kind: "image", name: "Shop", tags: [], width: 1080, height: 1350, bytes: 1, durationMs: null, fit: null, url: "https://example.com/p.jpg", createdAt: "2026-11-03T00:00:00Z" };
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    pickedMediaViews.mockResolvedValue([photo]);
+    appLanguage.value = "hi";
+    mediaOn.value = true;
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      creatives: [{ id: "c1", headline: "मेरी दुकान", image_url: null, status: "draft" }], warnings: [[]],
+    })));
+    try {
+      const { default: CreatePage } = await import("@/app/(app)/create/page");
+      render(await CreatePage({ searchParams: Promise.resolve({ all: "1", photos: photo.id }) }));
+      fireEvent.click(screen.getByRole("radio", { name: "ख़ुद लिखें" }));
+      fireEvent.change(screen.getByLabelText("हेडलाइन"), { target: { value: "मेरी दुकान" } });
+      fireEvent.change(screen.getByLabelText("मुख्य टेक्स्ट"), { target: { value: "आज आइए।" } });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "विज्ञापन सेव करें" })); });
+      expect(screen.getByRole("button", { name: "चुनने के लिए टैप करें: मेरी दुकान" })).toBeInTheDocument();
+    } finally {
+      appLanguage.value = undefined;
+      mediaOn.value = false;
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("says the header, entry choice, steps and business details in Hindi, marked lang='hi'", async () => {
     getPrimaryBusiness.mockResolvedValue(sparse);
     getBrandAssets.mockResolvedValue([]);

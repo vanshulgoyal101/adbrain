@@ -3,8 +3,9 @@ import { z } from "zod";
 import { brandFacts } from "@/lib/creative/brand-facts";
 import { copyClaimWarnings, editableCopySchema } from "@/lib/creative/concept";
 import { buildAdDesign } from "@/lib/creative/design";
+import { ownWordsCopyError } from "@/lib/creative/own-words-validation";
 import { OWNER_PHOTO } from "@/lib/creative/picture-source";
-import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
+import { persistCreativeImageBytes, renderAndPersistDesign } from "@/lib/creative/persist";
 import { saveCreative } from "@/lib/creative/save";
 import { getEnv } from "@/lib/env";
 import { MAX_AD_PHOTOS } from "@/lib/media/rules";
@@ -12,7 +13,7 @@ import type { Business, Creative, Database, Json } from "@/lib/types";
 
 /**
  * #780 slice 2b, "I'll write them": the owner's own words on his library photos. No AI call, so nothing is spent; the
- * words get the same warnings as an edit in Studio (the owner's wording is his call).
+ * words pass the same claim and policy checks before the batch is saved.
  */
 export const OWN_WORDS_VERSION = "own-words-1";
 
@@ -30,27 +31,39 @@ export const ownWordsRequestSchema = z.object({
 });
 
 export type OwnWordsAd = { creative: Creative; warnings: string[] };
+export type OwnWordsPhoto = { bytes: Uint8Array; contentType: string };
+
+export class OwnWordsOverlayUnavailableError extends Error {
+  readonly code = "OWN_WORDS_OVERLAY_UNAVAILABLE";
+  constructor() {
+    super("Putting the headline on the photo isn't available right now. Turn it off and try again.");
+  }
+}
 
 /**
- * Saves one draft ad per item, in order, under one variant group. `photoUrls` are the photos' signed URLs by media id
- * (already checked as the owner's ready photos). Each ad is saved before the next starts, so a failure keeps the
- * earlier ones; the error is returned with them.
+ * Saves one draft ad per item, in order, under one variant group. The route has already verified the owner's ready
+ * photo bytes. Each ad is saved before the next starts, so a failure keeps the earlier ones; the error is returned.
  */
 export async function saveOwnWordsAds(
   supabase: SupabaseClient<Database>,
-  input: { business: Business; items: OwnWordsItem[]; photoUrls: Map<string, string>; instructions?: string; requestId?: string },
+  input: { business: Business; items: OwnWordsItem[]; photos: Map<string, OwnWordsPhoto>; instructions?: string; requestId?: string },
 ): Promise<{ variantGroup: string; ads: OwnWordsAd[]; error?: unknown }> {
-  const { business, items, photoUrls } = input;
+  const { business, items, photos } = input;
   const variantGroup = crypto.randomUUID();
   const overlay = getEnv().AD_DESIGN_OVERLAY;
+  if (!overlay && items.some((item) => item.offer)) {
+    return { variantGroup, ads: [], error: new OwnWordsOverlayUnavailableError() };
+  }
   const facts = brandFacts(business, input.instructions);
+  const copyError = ownWordsCopyError(items, facts, business.vertical);
+  if (copyError) return { variantGroup, ads: [], error: copyError };
   const ads: OwnWordsAd[] = [];
   for (const [index, item] of items.entries()) {
-    const sourceUrl = photoUrls.get(item.mediaId);
-    if (!sourceUrl) return { variantGroup, ads, error: new Error("Photo not read") };
+    const photo = photos.get(item.mediaId);
+    if (!photo) return { variantGroup, ads, error: new Error("Photo not read") };
     const name = `own-${index + 1}`;
     try {
-      const photoUrl = await persistCreativeImage(supabase, business.id, variantGroup, name, sourceUrl);
+      const photoUrl = await persistCreativeImageBytes(supabase, business.id, variantGroup, name, photo.bytes, photo.contentType);
       const design = item.offer
         ? { ...buildAdDesign({ brand: business, copy: item, ownerPhoto: true }), benefits: [] }
         : null;
