@@ -86,7 +86,7 @@ const bootstrap = `
   create schema storage;
   alter default privileges for role postgres in schema storage grant execute on functions to anon, authenticated, service_role;
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
-  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
+  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, metadata jsonb);
   alter table storage.objects enable row level security;
   create function storage.foldername(name text) returns text[] language sql immutable as
     $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1)-1] $$;
@@ -1684,6 +1684,24 @@ async function verifyMediaVideoBudget(db, database) {
     for (const r of results.filter(r => r.status === "rejected")) assert.equal(r.reason.message, "MEDIA_VIDEO_BUDGET");
     return results.filter(r => r.status === "fulfilled").length;
   };
+  await check(`${database}: media video budget: simultaneous final copies and the upload are all accounted (#2653)`, async () => {
+    await reset();
+    const id = (await db.query(...pending(businesses[0], 1))).rows[0].id;
+    const uploadPath = (await db.query("select path from public.media_assets where id=$1", [id])).rows[0].path;
+    const paths = [uploadPath, `${businesses[0]}/${randomUUID()}.mp4`, `${businesses[0]}/${randomUUID()}.mp4`];
+    try {
+      await db.query(
+        "insert into storage.objects(bucket_id,name,metadata) select 'media-video', path, jsonb_build_object('size',$2::bigint) from unnest($1::text[]) path",
+        [paths, 50 * MB],
+      );
+      const actual = Number((await db.query(
+        "select sum((metadata->>'size')::bigint) as n from storage.objects where bucket_id='media-video'",
+      )).rows[0].n);
+      assert.ok(actual <= await reserved(), `${actual} stored bytes exceed the row-only reservation`);
+    } finally {
+      await db.query("delete from storage.objects where bucket_id='media-video' and name=any($1::text[])", [paths]);
+    }
+  });
   await check(`${database}: media video budget: parallel signs across businesses reserve upload object plus verified copy, so one pending row fills 100 of 150 MB (#2653)`, async () => {
     await reset();
     assert.equal(await parallel(Array.from({ length: 8 }, (_, i) => pending(businesses[i % 4], 5))), 1, "a declared 5 MB row still reserves 2 x 50 MB: a token takes up to the bucket cap");

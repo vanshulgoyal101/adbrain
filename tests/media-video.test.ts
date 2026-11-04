@@ -162,6 +162,44 @@ describe("video uploads (#748)", () => {
     expect(db.storageCalls.map((call) => call.op)).toEqual(["sign", "upload", "read"]);
   });
 
+  it("fences a second finalize before either request can write another final copy", async () => {
+    const row = { ...await uploaded(tall) };
+    let release!: () => void;
+    let started!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { started = resolve; });
+    const firstMayFinish = new Promise<void>((resolve) => { release = resolve; });
+    let attempts = 0;
+    db.hooks.beforeUpload = async () => {
+      if (++attempts === 1) {
+        started();
+        await firstMayFinish;
+      }
+    };
+
+    const first = finalizeUpload(db.client, { ...row });
+    await firstStarted;
+    const second = await finalizeUpload(db.client, { ...row }).then(
+      () => ({ status: "fulfilled" }),
+      (error: unknown) => ({ status: "rejected", error }),
+    );
+    release();
+    await first;
+
+    expect(second).toMatchObject({ status: "rejected", error: { code: "MEDIA_FINALIZING" } });
+    expect(db.storageCalls.filter((call) => call.op === "upload")).toHaveLength(1);
+  });
+
+  it("reports a failed upload-path removal and leaves both copies available for reconciliation", async () => {
+    const row = { ...await uploaded(tall) };
+    db.hooks.removeError = (_bucket, paths) => paths.includes(row.path) ? { message: "storage unavailable" } : null;
+
+    await expect(finalizeUpload(db.client, row)).rejects.toMatchObject({ status: 503, code: "MEDIA_UNAVAILABLE" });
+    const saved = db.tables.media_assets[0] as MediaRow;
+    expect(saved.status).toBe("ready");
+    expect(db.objects.has(row.path)).toBe(true);
+    expect(db.objects.has(saved.path)).toBe(true);
+  });
+
   it("finalize reads the real length and type: a browser that lied is refused and the row still counts", async () => {
     const lied = await uploaded(long, { durationMs: 10_000 });
     await expect(finalizeUpload(db.client, lied)).rejects.toMatchObject({ status: 422, code: "MEDIA_TOO_LONG" });

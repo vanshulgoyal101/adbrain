@@ -9,6 +9,10 @@ export function fakeSupabase() {
   const storageCalls: { op: "sign" | "upload" | "read"; bucket: string; path: string }[] = [];
   const removed: string[] = [];
   const insertErrors: { code: string; message: string }[] = [];
+  const hooks: {
+    beforeUpload?: (bucket: string, path: string) => Promise<void>;
+    removeError?: (bucket: string, paths: string[]) => { message: string } | null;
+  } = {};
   const query = (table: string) => {
     const filters: ((row: Row) => boolean)[] = [];
     let order: { column: string; ascending: boolean } | null = null;
@@ -60,11 +64,21 @@ export function fakeSupabase() {
           storageCalls.push({ op: "sign", bucket, path });
           return { data: { path, token: `token-${path}`, signedUrl: `https://storage.test/upload/${path}` }, error: null };
         },
-        upload: async (path: string, body: Uint8Array) => { storageCalls.push({ op: "upload", bucket, path }); objects.set(path, new Uint8Array(body)); return { data: { path }, error: null }; },
+        upload: async (path: string, body: Uint8Array) => {
+          storageCalls.push({ op: "upload", bucket, path });
+          await hooks.beforeUpload?.(bucket, path);
+          objects.set(path, new Uint8Array(body));
+          return { data: { path }, error: null };
+        },
         download: async (path: string) => objects.has(path)
           ? { data: new Blob([objects.get(path)! as BlobPart]), error: null }
           : { data: null, error: { message: "Object not found" } },
-        remove: async (paths: string[]) => { for (const path of paths) { objects.delete(path); removed.push(path); } return { data: [], error: null }; },
+        remove: async (paths: string[]) => {
+          const error = hooks.removeError?.(bucket, paths) ?? null;
+          if (error) return { data: null, error };
+          for (const path of paths) { objects.delete(path); removed.push(path); }
+          return { data: [], error: null };
+        },
         createSignedUrls: async (paths: string[]) => {
           for (const path of paths) storageCalls.push({ op: "read", bucket, path });
           return { data: paths.map((path) => ({ path, signedUrl: `https://storage.test/sign/${path}` })), error: null };
@@ -72,5 +86,5 @@ export function fakeSupabase() {
       }),
     },
   };
-  return { client: client as unknown as SupabaseClient, tables, objects, removed, uploadOptions, insertErrors, storageCalls };
+  return { client: client as unknown as SupabaseClient, tables, objects, removed, uploadOptions, insertErrors, storageCalls, hooks };
 }
