@@ -81,6 +81,15 @@ describe("scheduled Meta safety boundary", () => {
     expect(mocks.record.mock.calls.map(([event]) => event.name)).toEqual(["meta.whatsapp_numbers", "meta.read_insights"]);
   });
 
+  it("lets a caller record a more specific outcome without a results-read event", async () => {
+    const context = await requireScheduledBusiness("business-1", request());
+    await withMetaConnection(context, { purpose: "read_insights", event: false }, vi.fn().mockResolvedValue(null));
+    await expect(withMetaConnection(context, { purpose: "read_insights", event: false }, vi.fn().mockRejectedValue(new Error("offline"))))
+      .rejects.toThrow("offline");
+    expect(mocks.record.mock.calls.map(([event]) => event.name)).not.toContain("meta.read_insights");
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
   it("still rejects activation when its capability is blocked", async () => {
     const context = await requireScheduledBusiness("business-1", request());
     await expect(withMetaConnection(context, { purpose: "activate" }, vi.fn())).rejects.toThrow("Meta has not confirmed access");

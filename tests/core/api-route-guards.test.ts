@@ -100,6 +100,7 @@ const ROUTES: Record<string, Entry> = {
   "meta/managed/provision": { kind: "owner", methods: ["POST"] },
   "meta/oauth/callback": { kind: "owner", methods: ["GET"] },
   "meta/oauth/start": { kind: "public", methods: ["GET"], why: "stub: redirects to Settings (contextual connect); reads and writes nothing" },
+  "meta/tracking": { kind: "owner", methods: ["GET"] },
   "meta/whatsapp": { kind: "owner", methods: ["GET"] },
   "payments/customer-balance": { kind: "owner", methods: ["GET", "POST"] },
   "payments/live/operator": { kind: "delegated", methods: ["GET", "POST"] },
