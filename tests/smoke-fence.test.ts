@@ -4,41 +4,62 @@ import { alignPrintedNumbers } from "@/lib/creative/chat-number";
 import { readFileSync } from "node:fs";
 import internal from "@/lib/internal-accounts.json";
 import { freeOnlyEligibility } from "@/lib/internal-accounts";
-import { assertFenceOwnsDraft, refuseWhenFenced, SMOKE_FENCE_HEADER, SmokeFenceError, smokeFenceResponse } from "@/lib/security/smoke-fence";
-import { requestIsFenced, smokeFence } from "@/lib/security/smoke-fence-server";
+import { assertFenceOwnsDraft, FENCE_CAPABILITY_TTL_MS, refuseWhenFenced, SMOKE_FENCE_HEADER, SmokeFenceError, smokeFenceResponse } from "@/lib/security/smoke-fence";
+import { issueDraftCapability, requestIsFenced, smokeFence } from "@/lib/security/smoke-fence-server";
 
 const headerStore = vi.hoisted(() => ({ headers: null as Headers | null }));
 vi.mock("next/headers", () => ({ headers: async () => { if (!headerStore.headers) throw new Error("outside a request"); return headerStore.headers; } }));
 const SECRET = "s".repeat(40);
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ TEST_SESSION_SECRET: SECRET }) }));
-const signed = (...ids: string[]) => fenceHeaderValue(new Set(ids), SECRET);
+const req = (value?: string) => new Request("http://localhost/api/x", { headers: value === undefined ? {} : { [SMOKE_FENCE_HEADER]: value } });
+const USER = "u-1";
+const created = new Date().toISOString();
+const issued = (draft: string, user = USER, at = created) => {
+  const token = issueDraftCapability(req("draft-only"), user, draft, at)!;
+  return [draft, token] as const;
+};
+const signed = (...ids: string[]) => fenceHeaderValue(new Map(ids.map((draft) => issued(draft))));
 const id = "d123d123-d123-4123-8123-d123d123d123";
 const other = "e123e123-e123-4123-8123-e123e123e123";
-const req = (value?: string) => new Request("http://localhost/api/x", { headers: value === undefined ? {} : { [SMOKE_FENCE_HEADER]: value } });
 
 describe("draft-only smoke fence (#2861)", () => {
-  it("is off without the header, and on with owned drafts when the smoke sends them", () => {
+  it("is off without the header, and owns drafts only through capabilities issued to this user", () => {
     expect(smokeFence(req())).toBeNull();
-    expect([...smokeFence(req("draft-only"))!.ownedDraftIds]).toEqual([]);
-    expect([...smokeFence(req(signed(id, other)))!.ownedDraftIds]).toEqual([id, other]);
+    expect([...smokeFence(req("draft-only"), USER)!.ownedDraftIds]).toEqual([]);
+    expect([...smokeFence(req(signed(id, other)), USER)!.ownedDraftIds]).toEqual([id, other]);
+  });
+
+  it("issues a capability only to a fenced request", () => {
+    expect(issueDraftCapability(req(), USER, id, created)).toBeNull();
+    expect(issueDraftCapability(req("draft-only"), USER, id, "not a date")).toBeNull();
   });
 
   it("fences, owning nothing, on any malformed value (fail closed)", () => {
-    for (const value of ["", "on", "draft-only; drafts=*", `draft-only; drafts=${id};x`, `Draft-Only; drafts=${id}`, "draft-only; drafts=" + "a".repeat(36) + ",".repeat(3)]) {
-      const fence = smokeFence(req(value));
+    for (const value of ["", "on", "draft-only; drafts=*", `draft-only; drafts=${id};x`, `Draft-Only; drafts=${id}`, `draft-only; drafts=${id}`, "draft-only; drafts=" + "a".repeat(36) + ",".repeat(3)]) {
+      const fence = smokeFence(req(value), USER);
       expect(fence, value).not.toBeNull();
       expect(fence!.ownedDraftIds.size, value).toBe(0);
     }
   });
 
-  it("owns no draft when the claim is unsigned, wrongly signed, signed for other ids, or the secret is wrong", () => {
-    const good = signed(id);
-    const forged = [`draft-only; drafts=${id}`, good.replace(/sig=.*/, `sig=${"0".repeat(64)}`), `draft-only; drafts=${other}; sig=${good.split("sig=")[1]}`, fenceHeaderValue(new Set([id]), "x".repeat(40))];
-    for (const value of forged) expect(smokeFence(req(value))!.ownedDraftIds.size, value).toBe(0);
+  it("owns nothing for a forged, another user's, another draft's or an expired capability", () => {
+    const [, token] = issued(id);
+    const [, theirs] = issued(id, "u-2");
+    const [draftId, exp, sig] = token.split(".");
+    const expired = issued(id, USER, new Date(Date.now() - FENCE_CAPABILITY_TTL_MS - 1000).toISOString())[1];
+    const forged = [`${draftId}.${exp}.${"0".repeat(64)}`, theirs, `${other}.${exp}.${sig}`, `${draftId}.${Number(exp) + 1}.${sig}`, expired];
+    for (const value of forged) expect(smokeFence(req(`draft-only; drafts=${value}`), USER)!.ownedDraftIds.size, value).toBe(0);
+    expect(smokeFence(req(signed(id)))!.ownedDraftIds.size).toBe(0);
+  });
+
+  it("refuses a signed pre-existing draft: the capability must match the row's creation time", () => {
+    const fence = smokeFence(req(signed(id)), USER);
+    expect(() => assertFenceOwnsDraft(fence, id, created)).not.toThrow();
+    expect(() => assertFenceOwnsDraft(fence, id, new Date(Date.parse(created) - 3_600_000).toISOString())).toThrow(SmokeFenceError);
   });
 
   it("lets only drafts the run created through, and nothing is checked without a fence", () => {
-    const fence = smokeFence(req(signed(id)));
+    const fence = smokeFence(req(signed(id)), USER);
     expect(() => assertFenceOwnsDraft(fence, id)).not.toThrow();
     expect(() => assertFenceOwnsDraft(fence, other)).toThrow(SmokeFenceError);
     expect(() => assertFenceOwnsDraft(null, other)).not.toThrow();
@@ -53,8 +74,8 @@ describe("draft-only smoke fence (#2861)", () => {
 
   it("shares one header contract with the smoke script, which reports a refusal as not a pass", async () => {
     expect(scriptHeader).toBe(SMOKE_FENCE_HEADER);
-    expect(smokeFence(req(signed()))?.ownedDraftIds.size).toBe(0);
-    expect([...smokeFence(req(signed(id)))!.ownedDraftIds]).toEqual([id]);
+    expect(smokeFence(req(signed()), USER)?.ownedDraftIds.size).toBe(0);
+    expect([...smokeFence(req(signed(id)), USER)!.ownedDraftIds]).toEqual([id]);
     const body = await smokeFenceResponse("r1", new SmokeFenceError("picture_redraw")).json();
     expect(fenceStop(body)).toMatch(/BLOCKED by the draft-only fence \(picture_redraw\).*not a pass/);
     expect(fenceStop({ ok: true })).toBeNull();

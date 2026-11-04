@@ -5,7 +5,7 @@ import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.m
 import { pictureSources } from "./lib/smoke-pictures.mjs";
 import { forgiveRecoveredBusyTurns } from "./lib/smoke-console.mjs";
 import { createFailureLines, parseCreateStream } from "./lib/smoke-create-failures.mjs";
-import { SMOKE_FENCE_HEADER, fenceHeaderValue, fenceSkipNote, fenceStop } from "./lib/smoke-fence.mjs";
+import { FENCE_CAPABILITY_HEADER, SMOKE_FENCE_HEADER, fenceHeaderValue, fenceSkipNote, fenceStop } from "./lib/smoke-fence.mjs";
 
 const origin = "https://adbrain.vanshul.com";
 const modes = new Set(process.argv.slice(2));
@@ -20,8 +20,6 @@ if (modes.has("--help")) {
 assert.ok(mutating.filter((mode) => modes.has(mode)).length <= 1, "Run only one mutating mode at a time.");
 // #2861: draft-only runs the read-only views and the draft review; every other mode writes more than drafts.
 assert.ok(!modes.has("--draft-only") || !["--create", "--campaign", "--picture"].some((mode) => modes.has(mode)), "--draft-only can't be combined with --create, --campaign or --picture.");
-const fenceSecret = process.env.TEST_SESSION_SECRET?.trim() ?? "";
-assert.ok(!modes.has("--draft-only") || fenceSecret.length >= 32, "--draft-only needs TEST_SESSION_SECRET: it signs which drafts this run may change.");
 
 /** Campaigns → open setup → the first approved ad (not yet clicked). A click before hydration is lost, so reopen until one shows. */
 async function approvedAd(page) {
@@ -219,7 +217,7 @@ try {
   let removingDraft = null;
   let pictureAllowed = null;
   /** #2861: drafts this run saved; under --draft-only the server may change or delete only these. */
-  const ownedDrafts = new Set();
+  const ownedDrafts = new Map();
   page.on("pageerror", (error) => errors.push(error.name === "EvalError" ? "CSP eval error" : `page error (${error.name})`));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
@@ -294,7 +292,8 @@ try {
         const draft = (await response.json().catch(() => null))?.data;
         if (response.ok() && draft?.draftId) {
           savedDraft = { id: draft.draftId, version: draft.version };
-          if (UUID.test(draft.draftId)) ownedDrafts.add(draft.draftId);
+          const capability = response.headers()[FENCE_CAPABILITY_HEADER];
+          if (UUID.test(draft.draftId) && capability?.startsWith(`${draft.draftId}.`)) ownedDrafts.set(draft.draftId, capability);
         }
         return route.fulfill({ response });
       }
@@ -321,7 +320,7 @@ try {
   if (modes.has("--draft-only")) {
     await context.route("**/*", (route) => {
       if (new URL(route.request().url()).origin !== origin) return route.fallback();
-      return route.fallback({ headers: { ...route.request().headers(), [SMOKE_FENCE_HEADER]: fenceHeaderValue(ownedDrafts, fenceSecret) } });
+      return route.fallback({ headers: { ...route.request().headers(), [SMOKE_FENCE_HEADER]: fenceHeaderValue(ownedDrafts) } });
     });
   }
 

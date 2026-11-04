@@ -1,21 +1,38 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getEnv } from "@/lib/env";
-import { parseSmokeFence, SMOKE_FENCE_HEADER, type SmokeFence } from "./smoke-fence";
+import { FENCE_CAPABILITY_TTL_MS, parseSmokeFence, SMOKE_FENCE_HEADER, type SmokeFence } from "./smoke-fence";
 
-export const fenceSignature = (secret: string, draftIds: readonly string[]) =>
-  createHmac("sha256", secret).update(`draft-only|${[...draftIds].sort().join(",")}`).digest("hex");
+const sign = (secret: string, userId: string, draftId: string, expiresAt: number) =>
+  createHmac("sha256", secret).update(`fence-draft|${userId}|${draftId}|${expiresAt}`).digest("hex");
 
-/** The fence for this request, or null when it carries none. Without a valid signature (or secret) no draft is owned. */
-export function smokeFence(request: Request): SmokeFence | null {
+const usableSecret = () => {
+  const secret = getEnv().TEST_SESSION_SECRET;
+  return secret.length >= 32 ? secret : null;
+};
+
+/** The capability for a draft a fenced request just created, or null when the request is not fenced or no secret is set. */
+export function issueDraftCapability(request: Request, userId: string, draftId: string, createdAt: string): string | null {
+  const secret = usableSecret();
+  const created = Date.parse(createdAt);
+  if (!secret || !request.headers.has(SMOKE_FENCE_HEADER) || Number.isNaN(created)) return null;
+  const expiresAt = created + FENCE_CAPABILITY_TTL_MS;
+  return `${draftId}.${expiresAt}.${sign(secret, userId, draftId, expiresAt)}`;
+}
+
+/** The fence for this request, or null when it carries none. Drafts are owned only through live capabilities issued to this user. */
+export function smokeFence(request: Request, userId?: string): SmokeFence | null {
   const claim = parseSmokeFence(request);
   if (!claim) return null;
-  if (!claim.claimedDraftIds.length) return { ownedDraftIds: new Set() };
-  const secret = getEnv().TEST_SESSION_SECRET;
-  if (secret.length < 32) return { ownedDraftIds: new Set() };
-  const expected = Buffer.from(fenceSignature(secret, claim.claimedDraftIds));
-  const given = Buffer.from(claim.signature);
-  const valid = given.length === expected.length && timingSafeEqual(given, expected);
-  return { ownedDraftIds: new Set(valid ? claim.claimedDraftIds : []) };
+  const owned = new Map<string, number>();
+  const secret = usableSecret();
+  if (secret && userId) {
+    for (const { id, expiresAt, signature } of claim.claims) {
+      const expected = Buffer.from(sign(secret, userId, id, expiresAt));
+      const given = Buffer.from(signature);
+      if (expiresAt > Date.now() && given.length === expected.length && timingSafeEqual(given, expected)) owned.set(id, expiresAt);
+    }
+  }
+  return { ownedDraftIds: new Set(owned.keys()), capabilityExpiry: owned };
 }
 
 /** Any request under the fence, however deep the call (route or server component), leaves a Meta connection's state alone. Outside a request (cron, worker) it is false. */

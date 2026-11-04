@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fenceHeaderValue } from "../scripts/lib/smoke-fence.mjs";
+import { issueDraftCapability } from "@/lib/security/smoke-fence-server";
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ TEST_SESSION_SECRET: "s".repeat(40) }) }));
 const mocks = vi.hoisted(() => ({
@@ -136,9 +137,12 @@ describe("campaign draft HTTP routes", () => {
   });
 
   describe("draft-only smoke fence (#2861)", () => {
+    const createdAt = "2026-09-07T10:00:00.000Z";
+    beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-09-07T10:10:00.000Z")); });
+    afterEach(() => { vi.useRealTimers(); });
     const fenced = (method: string, drafts?: string, body?: unknown) => new Request(`http://localhost/api/campaign-drafts/${draftId}?version=1`, {
       method,
-      headers: { "Content-Type": "application/json", "x-adbrain-smoke-fence": drafts ? fenceHeaderValue(new Set(drafts.split(",")), "s".repeat(40)) : "draft-only" },
+      headers: { "Content-Type": "application/json", "x-adbrain-smoke-fence": drafts ? fenceHeaderValue(new Map(drafts.split(",").map((id) => [id, issueDraftCapability(new Request("http://localhost", { headers: { "x-adbrain-smoke-fence": "draft-only" } }), userId, id, createdAt)!]))) : "draft-only" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const params = { params: Promise.resolve({ id: draftId }) };
@@ -162,6 +166,14 @@ describe("campaign draft HTTP routes", () => {
       mocks.rpc.mockResolvedValue({ data: [{ id: draftId }], error: null });
       expect((await DELETE(fenced("DELETE", draftId), params)).status).toBe(200);
       expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    });
+
+    it("refuses a signed capability over a draft created before it (prior-run or pre-existing id)", async () => {
+      const { DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      mocks.draftRow = row({ created_at: "2026-09-07T09:00:00.000Z" });
+      const response = await DELETE(fenced("DELETE", draftId), params);
+      expect(response.status).toBe(409);
+      expect(mocks.rpc).not.toHaveBeenCalled();
     });
 
     it("refuses an existing draft named in an unsigned header (spoof)", async () => {

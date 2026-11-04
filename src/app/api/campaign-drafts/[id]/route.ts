@@ -89,13 +89,19 @@ async function handlePUT(
   if (!body.success) return errorResponse(requestId, 400, "INVALID_INPUT", "Draft update is invalid.");
   const { id } = await params;
   try {
-    assertFenceOwnsDraft(smokeFence(request), id);
+    assertFenceOwnsDraft(smokeFence(request, user.id), id);
   } catch (error) {
     if (error instanceof SmokeFenceError) return smokeFenceResponse(requestId, error);
     throw error;
   }
   const { data: row, error } = await findDraft(supabase, id, user.id);
   if (error || !row) return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
+  try {
+    assertFenceOwnsDraft(smokeFence(request, user.id), id, row.created_at);
+  } catch (fenceError) {
+    if (fenceError instanceof SmokeFenceError) return smokeFenceResponse(requestId, fenceError);
+    throw fenceError;
+  }
   const authorization = await authorizeDraftBusiness(row.business_id, requestId);
   if (authorization instanceof Response) return authorization;
   const current = draftRecordFromRow(row);
@@ -139,13 +145,19 @@ async function handleDELETE(
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) return errorResponse(requestId, 400, "INVALID_INPUT", "A valid draft version is required.");
   const { id } = await params;
   try {
-    assertFenceOwnsDraft(smokeFence(request), id);
+    assertFenceOwnsDraft(smokeFence(request, user.id), id);
   } catch (error) {
     if (error instanceof SmokeFenceError) return smokeFenceResponse(requestId, error);
     throw error;
   }
   const { data: row, error } = await findDraft(supabase, id, user.id);
   if (error || !row) return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
+  try {
+    assertFenceOwnsDraft(smokeFence(request, user.id), id, row.created_at);
+  } catch (fenceError) {
+    if (fenceError instanceof SmokeFenceError) return smokeFenceResponse(requestId, fenceError);
+    throw fenceError;
+  }
   const authorization = await authorizeDraftBusiness(row.business_id, requestId);
   if (authorization instanceof Response) return authorization;
   const { data: removed, error: deleteError } = await supabase.rpc("delete_campaign_draft_if_version", {
