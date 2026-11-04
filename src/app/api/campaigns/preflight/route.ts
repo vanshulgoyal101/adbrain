@@ -13,7 +13,8 @@ import {
 import { BUSINESS_ACCESS_ERRORS } from "@/i18n/locale";
 import { createClient } from "@/lib/supabase/server";
 import { ownerWords, requestLocale } from "@/i18n/request-locale";
-import { smokeFence, smokeFenceResponse, SmokeFenceError } from "@/lib/security/smoke-fence";
+import { smokeFenceResponse, SmokeFenceError } from "@/lib/security/smoke-fence";
+import { smokeFence } from "@/lib/security/smoke-fence-server";
 
 export const runtime = "nodejs";
 

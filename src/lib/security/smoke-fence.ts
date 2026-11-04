@@ -1,23 +1,24 @@
 /**
  * #2861: the draft-only smoke fence. The production smoke sends this header on every request when it runs
  * `--draft-only`; the server then refuses every side effect except saving and removing the run's own drafts.
- * The header can only narrow what a request may do, never widen it, so a forged one blocks the sender's own
- * effects and nothing else. Absent means normal behavior. A malformed value still fences, with no drafts owned.
+ * The header can only narrow what a request may do. Draft ownership additionally needs an HMAC of the ids
+ * with the smoke secret, so a caller cannot claim an existing draft. Absent means normal behavior. A malformed value still fences, with no drafts owned.
  */
 export const SMOKE_FENCE_HEADER = "x-adbrain-smoke-fence";
 
-const FENCE_PATTERN = /^draft-only(?:; drafts=([0-9a-f-]{36}(?:,[0-9a-f-]{36}){0,7}))?$/;
+const FENCE_PATTERN = /^draft-only(?:; drafts=([0-9a-f-]{36}(?:,[0-9a-f-]{36}){0,7}); sig=([0-9a-f]{64}))?$/;
 
 export type SmokeFence = {
-  /** Drafts this run created (from its own save responses); the only ones a fenced request may change or delete. */
+  /** Drafts this run created and proved with the smoke secret; the only ones a fenced request may change or delete. */
   ownedDraftIds: ReadonlySet<string>;
 };
 
-export function smokeFence(request: Request): SmokeFence | null {
+/** What the header claims; ownership counts only after `smokeFence` (server) verifies the signature. */
+export function parseSmokeFence(request: Request): { claimedDraftIds: string[]; signature: string } | null {
   const raw = request.headers.get(SMOKE_FENCE_HEADER);
   if (raw === null) return null;
-  const ids = FENCE_PATTERN.exec(raw.trim())?.[1];
-  return { ownedDraftIds: new Set(ids ? ids.split(",") : []) };
+  const match = FENCE_PATTERN.exec(raw.trim());
+  return { claimedDraftIds: match?.[1] ? match[1].split(",") : [], signature: match?.[2] ?? "" };
 }
 
 /** A forbidden side effect was reached under the fence: the request stops, never passes. */

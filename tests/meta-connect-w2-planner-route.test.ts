@@ -451,6 +451,7 @@ describe("guided planner route", () => {
     };
     const withDraft = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", headers, body: JSON.stringify({ goal: "Leads", audienceDraft }) }));
     expect(withDraft.status).toBe(200);
+    expect(await withDraft.json()).toMatchObject({ fallback: true, smokeFenced: true });
     const full = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", headers, body: JSON.stringify({ goal: "Leads" }) }));
     expect(full.status).toBe(409);
     expect((await full.json()).error.code).toBe("SMOKE_FENCE");

@@ -5,7 +5,7 @@ import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.m
 import { pictureSources } from "./lib/smoke-pictures.mjs";
 import { forgiveRecoveredBusyTurns } from "./lib/smoke-console.mjs";
 import { createFailureLines, parseCreateStream } from "./lib/smoke-create-failures.mjs";
-import { SMOKE_FENCE_HEADER, fenceHeaderValue, fenceStop } from "./lib/smoke-fence.mjs";
+import { SMOKE_FENCE_HEADER, fenceHeaderValue, fenceSkipNote, fenceStop } from "./lib/smoke-fence.mjs";
 
 const origin = "https://adbrain.vanshul.com";
 const modes = new Set(process.argv.slice(2));
@@ -20,6 +20,8 @@ if (modes.has("--help")) {
 assert.ok(mutating.filter((mode) => modes.has(mode)).length <= 1, "Run only one mutating mode at a time.");
 // #2861: draft-only runs the read-only views and the draft review; every other mode writes more than drafts.
 assert.ok(!modes.has("--draft-only") || !["--create", "--campaign", "--picture"].some((mode) => modes.has(mode)), "--draft-only can't be combined with --create, --campaign or --picture.");
+const fenceSecret = process.env.TEST_SESSION_SECRET?.trim() ?? "";
+assert.ok(!modes.has("--draft-only") || fenceSecret.length >= 32, "--draft-only needs TEST_SESSION_SECRET: it signs which drafts this run may change.");
 
 /** Campaigns → open setup → the first approved ad (not yet clicked). A click before hydration is lost, so reopen until one shows. */
 async function approvedAd(page) {
@@ -232,7 +234,13 @@ try {
   // #2861: a fence refusal on any request (a pre-existing draft, a redraw, a binding) is a failed run, not a pass.
   if (modes.has("--draft-only")) {
     page.on("response", async (response) => {
-      if (response.status() !== 409 || new URL(response.url()).origin !== origin) return;
+      if (new URL(response.url()).origin !== origin) return;
+      if (response.status() === 200 && new URL(response.url()).pathname === "/api/campaigns/plan") {
+        const skipped = fenceSkipNote(await response.json().catch(() => null));
+        if (skipped) console.log(skipped);
+        return;
+      }
+      if (response.status() !== 409) return;
       const stopped = fenceStop(await response.json().catch(() => null));
       if (!stopped) return;
       console.log(`FAIL ${stopped}`);
@@ -313,7 +321,7 @@ try {
   if (modes.has("--draft-only")) {
     await context.route("**/*", (route) => {
       if (new URL(route.request().url()).origin !== origin) return route.fallback();
-      return route.fallback({ headers: { ...route.request().headers(), [SMOKE_FENCE_HEADER]: fenceHeaderValue(ownedDrafts) } });
+      return route.fallback({ headers: { ...route.request().headers(), [SMOKE_FENCE_HEADER]: fenceHeaderValue(ownedDrafts, fenceSecret) } });
     });
   }
 

@@ -14,7 +14,8 @@ import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connecti
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { ownerError } from "@/i18n/request-locale";
-import { assertFenceOwnsDraft, smokeFence, smokeFenceResponse, SmokeFenceError } from "@/lib/security/smoke-fence";
+import { assertFenceOwnsDraft, smokeFenceResponse, SmokeFenceError } from "@/lib/security/smoke-fence";
+import { smokeFence } from "@/lib/security/smoke-fence-server";
 
 export const runtime = "nodejs";
 

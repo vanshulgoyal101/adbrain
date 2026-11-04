@@ -18,6 +18,7 @@ import { observeIdentity } from "@/lib/observability/context";
 import { recordProductEvent, withEventScope } from "@/lib/observability/logger";
 import { getManagedAccount, hasManagedAssets, isManagedReady, managedConnection, managedCredentials, type ManagedAccount } from "./managed-account";
 import { ConnectionAccessError } from "./connection-access-error";
+import { requestIsFenced } from "@/lib/security/smoke-fence-server";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -294,7 +295,7 @@ async function withConnectionCredentials<Result>(
     return await execute(credentials, connection);
   } catch (error) {
     // #757: Meta refused the owner's token with no deauthorize callback; show the connection as needing Facebook again.
-    if (isMetaReauthError(error) && !options.leaveConnectionUnchanged) {
+    if (isMetaReauthError(error) && !options.leaveConnectionUnchanged && !await requestIsFenced()) {
       await admin.rpc("meta_connection_mark_reauth", { p_business_id: context.businessId, p_generation: connection.generation }).then(() => undefined, () => undefined);
     }
     throw error;
