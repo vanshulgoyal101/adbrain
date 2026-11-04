@@ -88,6 +88,9 @@ real sheet and application CSS at 320, 360, 390, 480 and 1440px in Chromium and
 WebKit, in English and Hindi. Synthetic failed photo and video uploads exercise
 readable messages, 44px actions, keyboard focus, retry and removal. The transport
 is mocked; this does not verify live Storage or real-device Safari.
+Set `MEDIA_LAYOUT_SCREENSHOT_DIR` to a temporary directory to capture the
+320px Hindi failure state for manual inspection; screenshots are evidence, not
+goldens.
 
 ### Enquiry Checks
 
