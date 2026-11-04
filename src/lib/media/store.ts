@@ -212,7 +212,7 @@ async function promote(admin: SupabaseClient, row: MediaRow, stored: Uint8Array,
   // Dev 7 (#1245 attack): the checked bytes go to a new path no upload token was ever signed for, and the row moves
   // there only if it still points at the upload path we read. A token still live for the upload path (a retry's, or one
   // signed while this ran) can then never put unchecked bytes behind a ready one.
-  // TODO(#2644): sweep the one orphan such a token can still leave at the old upload path, and stale pending rows.
+  // The one orphan such a token can still leave at the old upload path is removed by the daily sweep (lib/media/sweep.ts, #2644).
   const uploadPath = row.path;
   const finalPath = `${row.business_id}/${randomUUID()}.${checked.extension}`;
   const { error: writeError } = await admin.storage.from(mediaBucket(row.kind)).upload(finalPath, stored, { upsert: false, contentType: checked.mime });

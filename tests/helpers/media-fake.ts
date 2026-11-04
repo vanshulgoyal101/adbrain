@@ -8,6 +8,7 @@ export function fakeSupabase() {
   const uploadOptions: { path: string; upsert?: boolean }[] = [];
   const storageCalls: { op: "sign" | "upload" | "read"; bucket: string; path: string }[] = [];
   const removed: string[] = [];
+  const objectTimes = new Map<string, string>();
   const insertErrors: { code: string; message: string }[] = [];
   const query = (table: string) => {
     const filters: ((row: Row) => boolean)[] = [];
@@ -65,6 +66,11 @@ export function fakeSupabase() {
           ? { data: new Blob([objects.get(path)! as BlobPart]), error: null }
           : { data: null, error: { message: "Object not found" } },
         remove: async (paths: string[]) => { for (const path of paths) { objects.delete(path); removed.push(path); } return { data: [], error: null }; },
+        list: async (prefix: string) => {
+          const paths = [...objects.keys()];
+          if (!prefix) return { data: [...new Set(paths.map((path) => path.split("/")[0]))].map((name) => ({ name, id: null })), error: null };
+          return { data: paths.filter((path) => path.startsWith(`${prefix}/`)).map((path) => ({ name: path.slice(prefix.length + 1), id: path, created_at: objectTimes.get(path) ?? new Date().toISOString() })), error: null };
+        },
         createSignedUrls: async (paths: string[]) => {
           for (const path of paths) storageCalls.push({ op: "read", bucket, path });
           return { data: paths.map((path) => ({ path, signedUrl: `https://storage.test/sign/${path}` })), error: null };
@@ -72,5 +78,5 @@ export function fakeSupabase() {
       }),
     },
   };
-  return { client: client as unknown as SupabaseClient, tables, objects, removed, uploadOptions, insertErrors, storageCalls };
+  return { client: client as unknown as SupabaseClient, tables, objects, objectTimes, removed, uploadOptions, insertErrors, storageCalls };
 }

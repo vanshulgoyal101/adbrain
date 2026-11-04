@@ -248,6 +248,17 @@ jobs:
           echo "HTTP $code $(jq -c '{ok, skipped, day, sent, results: ([.outcomes[]?.result] | group_by(.) | map({(.[0]): length}) | add)}' daily.json 2>/dev/null || echo '{\"ok\":false}')"
           # Advisory: dark behind OWNER_ALERTS_ENABLED; one owner's failure never fails the scheduler.
           exit 0
+      - name: Media upload sweep (#2644)
+        if: always()
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          # Daily: the four runs in the 04:00Z hour; the sweep is idempotent.
+          [ "$(date -u +%H)" = 04 ] || { echo "Not the sweep hour."; exit 0; }
+          code=$(curl -sS --max-time 60 -o media-sweep.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/media-sweep") || code=000
+          [ "$code" = 404 ] && { echo "media-sweep not deployed yet"; exit 0; }
+          echo "HTTP $code $(jq -c '{ok, stalePending, retiredObjects, orphans, failed}' media-sweep.json 2>/dev/null || echo '{"ok":false}')"
+          # Advisory: a failed clean-up never fails the scheduler.
+          exit 0
       - name: OpenRouter credit (#449) and AI key health (#1569)
         if: always()
         env:
