@@ -12,6 +12,7 @@
 // night exports production to ~/.adbrain-backups and restore-drills it (#884).
 // Kill switch for role runs: touch ~/.adbrain-supervisor/OFF (scheduled-job dispatch and the nightly backup keep running). Log: ~/.adbrain-supervisor/supervisor.log.
 import { execFileSync as rawExecFileSync, spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { cpus, freemem, homedir, loadavg, totalmem } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -79,11 +80,11 @@ export function firstPrompt(head) {
   return null;
 }
 
-/** Roles whose chat (or a headless run) wrote an event in the last idleMin minutes. */
-export function liveRoles(dir = SESSIONS, idleMin = 20, now = Date.now()) {
-  const live = new Set();
+/** Active chats grouped by role, using the same recency and turn checks as liveRoles. */
+export function liveRoleChats(dir = SESSIONS, idleMin = 20, now = Date.now()) {
+  const chats = new Map();
   let entries = [];
-  try { entries = readdirSync(dir); } catch { return live; }
+  try { entries = readdirSync(dir); } catch { return chats; }
   for (const id of entries) {
     const file = join(dir, id, "events.jsonl");
     let stat;
@@ -99,9 +100,18 @@ export function liveRoles(dir = SESSIONS, idleMin = 20, now = Date.now()) {
     // A chat that finished its turn without starting its waiter is idle, however recent its last write.
     if (!midTurn(lastEventType(tail.toString("utf8")))) continue;
     const role = roleFromPrompt(firstPrompt(head.subarray(0, n).toString("utf8")));
-    if (role) live.add(role);
+    if (role) {
+      const roleChats = chats.get(role) ?? [];
+      roleChats.push(id);
+      chats.set(role, roleChats);
+    }
   }
-  return live;
+  return chats;
+}
+
+/** Roles whose chat (or a headless run) wrote an event in the last idleMin minutes. */
+export function liveRoles(dir = SESSIONS, idleMin = 20, now = Date.now()) {
+  return new Set(liveRoleChats(dir, idleMin, now).keys());
 }
 
 /** When each role was last woken, from the state log. */
@@ -117,8 +127,8 @@ export function lastWakes(state) {
  * later roles and every role with queued work gets a wake at least hourly, even past the daily cap.
  * Otherwise, under the cap, the first in order.
  */
-export function pickRole(statuses, live, roles = ORDER, { last = {}, now = Date.now(), capped = false, overdueMin = 60 } = {}) {
-  const ready = roles.filter((role) => statuses[role]?.state === "has-work" && !live.has(role));
+export function pickRole(statuses, live, roles = ORDER, { last = {}, now = Date.now(), capped = false, overdueMin = 60, blocked = new Set() } = {}) {
+  const ready = roles.filter((role) => statuses[role]?.state === "has-work" && !live.has(role) && !blocked.has(role));
   // Waits are capped at two windows, so long-starved roles tie and the bottleneck-first order decides (stable sort).
   const since = (role) => Math.min(last[role] ? now - Date.parse(last[role]) : Infinity, 2 * overdueMin * 60_000);
   const overdue = ready.filter((role) => since(role) >= overdueMin * 60_000).sort((a, b) => since(b) - since(a));
@@ -188,7 +198,7 @@ function ceoPrompt() {
     `You are AdBrain's CEO. The owner closed the previous CEO chat on purpose and will rotate CEO chats often. GitHub and git are your memory, not chat history; you have the owner's full authority.`,
     `1. Read AGENTS.md, then docs/team/orchestration.md (Current Dispatch, role cards, "CEO handover"), Team board #580 with today's priorities, experiments #2360, and .github/skills/multi-worker-delivery/SKILL.md.`,
     `2. Check in, in this order: CI on next and main (\`gh run list --branch next --limit 5\`); open PRs stuck green or red; production smoke and the deploy train; then everything addressed to you: \`gh issue list -l decision --state open\`, \`-l waiting-owner\`, and comments with "→ CEO". Commitments made by earlier CEOs live there or as "Next read <time>" comments; nothing else carries over.`,
-    `3. The team: one live chat per role: ${roles}. Run list_sessions (workspace adbrain) and match chats by title "AdBrain <Role>" or a first prompt starting "You are AdBrain's <Role>". Read each chat's latest turn with get_session_context; adopt every live one, and never start a second chat for a role that has one. For each missing role, create_session with relationship "independent", workspace adbrain, title "AdBrain <Role>", and the prompt from \`npm run team-supervisor -- --restart-prompt <role>\`. Never nest worker chats in your own session and never delete another session: closing your chat must not take a worker down. If worker chats are nested inside an earlier CEO's session, ask the owner to close that session first (their worktrees and branches stay on disk, and each replacement's waiter lists its unsaved worktree), then start the independent replacements, so no role ever has two writers.`,
+    `3. The team: one live chat per role: ${roles}. Run list_sessions (workspace adbrain) and match chats by title "AdBrain <Role>" or a first prompt starting "You are AdBrain's <Role>". Read each chat's latest turn with get_session_context; adopt every live one, and never start a second chat for a role that has one. Re-list before every create_session and confirm the role is still missing; create at most one chat per role in this handover run. Re-list after each create and verify exactly one chat exists for that role. Each restart prompt has a spawn-id; preserve it unchanged for the create request and use it to identify duplicate replays. If duplicates exist, do not create more sessions; report the role to the CTO and continue with other missing roles; never delete another session. For each missing role, create_session with relationship "independent", workspace adbrain, title "AdBrain <Role>", and the prompt from \`npm run team-supervisor -- --restart-prompt <role>\`. Never nest worker chats in your own session: closing your chat must not take a worker down. If worker chats are nested inside an earlier CEO's session, ask the owner to close that session first (their worktrees and branches stay on disk, and each replacement's waiter lists its unsaved worktree), then start the independent replacements, so no role ever has two writers.`,
     `4. Reaching a chat: a running chat reads no chat messages (a steer stays "processing" for hours; a queued one lands only when the turn ends). Reach workers through GitHub: the owner label plus "→ <Role>:" on the issue, or a team-wide rule in the Everyone row of #580, which every waiter run prints. Use send_message (queue) only to start a chat whose status is idle. To stop harm now, kill the process by PID and post the rule on its issue.`,
     `5. Your job: delegate, decide, keep labels and priorities honest, and remove waits. Never build product code. Keep every worker on the #580 outcome filter. Money, Meta writes, secrets, migrations and production settings keep their gates. Ask the owner only in one batched list (label waiting-owner). Answer the owner with one line first, then a short table of what you saw / what it is / status, and at most one owner action.`,
     `6. Leave nothing in chat memory: every decision or promise goes on its GitHub issue the moment you make it, so the next CEO can take over at any time. Between owner requests, run \`node scripts/wait-for-work.mjs --me ceo\` in the foreground from a worktree on current origin/main, and run it again when it exits.`,
@@ -202,6 +212,7 @@ export function restartPrompt(role) {
   if (role === "ceo") return ceoPrompt();
   return [
     `You are AdBrain's ${name}. Your old chat ended (a VS Code restart or a CEO handover), so start fresh.`,
+    `spawn-id: ${randomUUID()}`,
     `Read AGENTS.md, then the Current Dispatch and your role card in docs/team/orchestration.md, then your row and today's priorities on Team board #580.`,
     `Your queue: \`gh issue list -R vanshulgoyal101/adbrain -l owner:${role} --state open\`; work the top item of your #580 row first.`,
     `Work only in your own worktree under ~/Development/copilot/adbrain-wt/ (\`bash scripts/wt.sh <issue>\`). Run commands in the foreground only and never leave anything running. Sign your comments "${name}:".`,
@@ -549,11 +560,14 @@ async function main() {
   if (runsToday(state, new Date(), { all: true }) >= Number(values["max-runs-hard"])) return log(`tick skipped: hard ceiling ${values["max-runs-hard"]} runs reached`);
   const capped = runsToday(state) >= Number(values["max-runs-day"]);
 
-  const live = liveRoles(SESSIONS, Number(values["idle-min"]));
+  const liveChats = liveRoleChats(SESSIONS, Number(values["idle-min"]));
+  const duplicateChats = new Map([...liveChats].filter(([, chats]) => chats.length > 1).map(([role, chats]) => [role, chats.length]));
+  const blocked = new Set(duplicateChats.keys());
+  const live = new Set([...liveChats.keys()].filter((role) => !blocked.has(role)));
   const statuses = {};
-  for (const role of roles) if (!live.has(role)) statuses[role] = probe(role);
-  const pick = pickRole(statuses, live, roles, { last: lastWakes(state), capped, overdueMin: Number(values["overdue-min"]) });
-  const summary = roles.map((r) => `${r}:${live.has(r) ? "live" : statuses[r]?.state}`).join(" ");
+  for (const role of roles) if (!live.has(role) && !blocked.has(role)) statuses[role] = probe(role);
+  const pick = pickRole(statuses, live, roles, { last: lastWakes(state), capped, overdueMin: Number(values["overdue-min"]), blocked });
+  const summary = roles.map((r) => `${r}:${blocked.has(r) ? `duplicate chats (${duplicateChats.get(r)})` : live.has(r) ? "live" : statuses[r]?.state}`).join(" ");
   if (!pick) return log(capped ? `tick: daily cap ${values["max-runs-day"]} reached, nobody overdue (${summary})` : `tick: nothing to wake (${summary})`);
   const overloaded = loadSkip(machineLoad(), {
     maxLoadPerCore: Number(process.env.ADBRAIN_SUPERVISOR_MAX_LOAD ?? 1.5),
