@@ -187,6 +187,7 @@ reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580). Use `send_
 a reachable idle chat with work. An ended-turn chat can reject a queued message with `Unknown chat owner`,
 even from its creator. If it has actionable work, confirm there is no active writer and replace the
 unreachable chat, preserving its branch and worktree; do not assume a failed message woke it.
+Restart prompts spell out the sync waiter loop, kept alive with `read_bash`.
 Restarted workers decide routine questions themselves or post `→ CEO:` on the issue for a CEO decision and
 continue other actionable work; required owner approvals, mandatory confirmations and prompts still apply.
 `npm run team-status` lists each role as `waiting`, `has-work`, `no-work` or `error`.

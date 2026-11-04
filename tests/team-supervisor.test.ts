@@ -109,6 +109,10 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain("timed out), run it again");
     expect(text).not.toMatch(/Stop only when the waiter times out/);
     expect(text).toContain('"Dev 2:"');
+    // Fusion chats ran the waiter async, stopped it and ended their turns (Nov 4); spell out the tool-level loop.
+    expect(text).toMatch(/mode "sync" with initial_wait 600/);
+    expect(text).toMatch(/Never stop_bash the waiter/);
+    expect(text).not.toContain("Never use ask_user:");
     expect(() => restartPrompt("nobody")).toThrow();
   });
 
@@ -120,6 +124,7 @@ describe("team-supervisor (#573 A1)", () => {
       expect(text).toContain('post "→ CEO:"');
       expect(text).toContain("continue other actionable work");
       expect(text).toContain("mandatory confirmations and prompts still apply");
+      expect(text).not.toContain("Never use ask_user:");
     }
   });
 

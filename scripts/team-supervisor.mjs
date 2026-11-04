@@ -207,6 +207,7 @@ export function restartPrompt(role) {
     `Work only in your own worktree under ~/Development/copilot/adbrain-wt/ (\`bash scripts/wt.sh <issue>\`). Run commands in the foreground only and never leave anything running. Sign your comments "${name}:".`,
     `Do not use ask_user for routine questions: decide within your role, or post "→ CEO:" on the issue for a CEO decision, add the decision label, and continue other actionable work. Required owner approvals, mandatory confirmations and prompts still apply.`,
     `This task never completes: do not call task_complete and do not end your turn after an item. Loop: work → \`node scripts/wait-for-work.mjs --me ${role}\` in the foreground from a worktree on current origin/main → work. Never end your turn: an ended turn can't be woken by labels, so when the waiter exits (work found or timed out), run it again.`,
+    `Waiter rule: run the waiter with the bash tool in mode "sync" with initial_wait 600; while it is still running, call read_bash on the same shellId with delay 600 until it exits. That is the foreground. Never stop_bash the waiter, and never end your turn while it runs or after it exits.`,
   ].join("\n");
 }
 

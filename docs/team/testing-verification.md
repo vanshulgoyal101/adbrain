@@ -64,6 +64,19 @@ not run before the fixture response ended. WebKit also does not expose
 layout-shift entries. The panels are synthetic, so this is not an authenticated
 Settings journey or real-device Safari evidence.
 
+For Review's phone-width heading, actions and status filters without credentials:
+
+```sh
+npm run test:review-controls
+```
+
+[The Review check](../../scripts/check-review-controls.mjs) renders the actual
+Studio with 40 synthetic ads and application CSS in Chromium and WebKit. It
+checks the 360/390px header row, reachable 44px phone targets, pointer and
+keyboard filter selection, painted focus and overflow at 320, 360, 390 and
+1440px. Server actions and network requests are blocked; it does not replace an
+authenticated production walk or real-device testing.
+
 ### Enquiry Checks
 
 For the saved-enquiry workflow, with installed Google Chrome and fully synthetic
