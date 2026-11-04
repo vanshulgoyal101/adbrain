@@ -6,6 +6,7 @@ on:
   workflow_run:
     workflows: [CI, Deploy train]
     types: [completed]
+    branches: [main, next]
 
 permissions:
   actions: write
@@ -16,6 +17,12 @@ concurrency:
 
 jobs:
   kick:
+    # workflow_run also fires after untrusted PR CI completions; only trusted refs/events may use actions:write.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      contains(fromJSON('["push","schedule","workflow_dispatch"]'), github.event.workflow_run.event) &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      contains(fromJSON('["main","next"]'), github.event.workflow_run.head_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

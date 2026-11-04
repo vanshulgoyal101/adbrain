@@ -30,8 +30,7 @@ team supervisor's 10-minute tick dispatches it when its latest run started over 
 none is queued or running (#692; the OFF switch stops only role runs, not this, #1525).
 `--install` also loads `in.adbrain.keep-awake` (`caffeinate -s`): with `pmset sleep 1` the Mac slept
 between ticks and this dispatch lapsed for ~2 h at a time (#766). It holds off sleep on the charger only.
-When the Mac is off, [`scheduled-jobs-kick.yml`](../../.github/workflows/scheduled-jobs-kick.yml) is a second, secret-free trigger (#766): every finished `CI` or `Deploy train` run
-dispatches this workflow with the short-lived `GITHUB_TOKEN` (`actions: write`) if its newest run is over 14 minutes old and none is queued or running. It checks out nothing and reads no PR content. It is opportunistic: with no CI activity it cannot fire, so the 20-minute target still needs the pg_cron path (#2593).
+When the Mac is off, [`scheduled-jobs-kick.yml`](../../.github/workflows/scheduled-jobs-kick.yml) is a second, secret-free trigger (#766): a successful `CI` or `Deploy train` push, schedule or manual run from this repository's `main` or `next` branch dispatches this workflow with the short-lived `GITHUB_TOKEN` (`actions: write`) if its newest run is over 14 minutes old and none is queued or running. Fork and pull-request runs are rejected before the privileged job starts. It checks out nothing and reads no PR content. It is opportunistic: with no CI activity it cannot fire, so the 20-minute target still needs the pg_cron path (#2593).
 It first calls `scheduler-health` and opens one `Scheduled job overdue: <job>` `core`
 bug for DevOps per job with no successful run in twice its interval. It then calls
 enforce-spend, `sync-leads`, `payment-health` and `refresh-results` itself. It needs
