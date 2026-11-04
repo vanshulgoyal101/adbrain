@@ -44,15 +44,17 @@ export async function saveAdResults(database: Store, row: { businessId: string; 
 export type StoredAdResult = {
   meta_ad_id: string; ad_name: string | null; effective_status: string | null; delivered: boolean;
   impressions: number; link_clicks: number; conversations: number; leads: number; spend_paise: number; synced_at: string;
-  landing_page_views?: number;
+  landing_page_views?: number; conversions?: number | null; conversion_value?: number | null;
 };
 
 /** The `ad_results` columns a card reads, for every reader of stored per-ad results. */
 export const AD_RESULT_COLUMNS = "meta_ad_id, ad_name, effective_status, delivered, impressions, link_clicks, conversations, leads, landing_page_views, spend_paise, synced_at";
 
-/** #2601: a stored ad's headline result: chats for WhatsApp, landing-page views for a website, form enquiries otherwise. */
-export function storedAdResult(row: StoredAdResult, destination: string | null | undefined): number {
-  return row[outcomeDefinition(destination).adField] ?? 0;
+/** A stored ad's headline result; null means a website conversion count is not available yet. */
+export function storedAdResult(row: StoredAdResult, destination: string | null | undefined, objective?: string | null): number | null {
+  const field = outcomeDefinition(destination, objective).adField;
+  if (field === "conversions") return row.conversions ?? null;
+  return row[field] ?? 0;
 }
 
 /** The AdBrain creative an ad was launched from, so the card shows its picture and headline (Designer, #783). */
@@ -88,26 +90,33 @@ export type AdResultView = {
   /** Meta's effective status at the last refresh (#1045: only a running ad is offered for pausing). */
   status: string | null;
   impressions: number; results: number; spend: number; costPerResult: number | null;
+  conversionsUnavailable?: true; conversionValue?: number; returnOnSpend?: number;
 };
 
-/** The card's rows: results by the campaign's destination (`storedAdResult`); "Best" by #783's rule. */
+/** The card's rows: results by the campaign goal (`storedAdResult`); "Best" by #783's rule. */
 export function adResultViews(
   stored: StoredAdResult[], destination: string | null | undefined,
   linked?: { links: Map<string, AdCreativeLink>; creatives: Map<string, AdCreative> },
+  objective?: string | null,
 ): { ads: AdResultView[]; syncedAt: string | null } {
   const linkOf = (adId: string) => linked?.links.get(adId);
   // A capped run's earlier ad that never delivered is a zero-row duplicate of its running copy.
   const rows = stored.filter(row => row.delivered || linkOf(row.meta_ad_id)?.live !== false);
-  const ads: AdResult[] = rows.map(row => {
-    const results = storedAdResult(row, destination);
+  const ads: (AdResult & { returnOnSpend?: number })[] = rows.map(row => {
+    const storedResults = storedAdResult(row, destination, objective);
+    const conversionsUnavailable = storedResults === null;
+    const results = storedResults ?? 0;
     const spend = row.spend_paise / 100;
+    const conversionValue = conversionsUnavailable ? undefined : row.conversion_value ?? undefined;
     return {
       adId: row.meta_ad_id, name: row.ad_name, effectiveStatus: row.effective_status, creativeId: null, delivered: row.delivered,
       impressions: row.impressions, clicks: row.link_clicks, spend, results, costPerResult: results > 0 ? spend / results : null,
       replaced: row.effective_status === "ARCHIVED" || row.effective_status === "DELETED",
+      ...(conversionsUnavailable ? { conversionsUnavailable: true as const } : {}),
+      ...(conversionValue === undefined ? {} : { conversionValue, ...(spend > 0 ? { returnOnSpend: conversionValue / spend } : {}) }),
     };
   });
-  const best = bestAd(ads);
+  const best = bestAd(ads.filter(ad => !ad.conversionsUnavailable));
   const syncedAt = stored.reduce<string | null>((latest, row) => !latest || row.synced_at > latest ? row.synced_at : latest, null);
   return {
     syncedAt,
@@ -115,7 +124,7 @@ export function adResultViews(
       .map(ad => {
         const link = linkOf(ad.adId);
         const creative = link ? linked?.creatives.get(link.creativeId) ?? null : null;
-        return { adId: ad.adId, name: ad.name, delivered: ad.delivered, replaced: ad.replaced, best: ad === best, creative, earlier: link?.live === false, status: ad.effectiveStatus, impressions: ad.impressions, results: ad.results, spend: ad.spend, costPerResult: ad.costPerResult };
+        return { adId: ad.adId, name: ad.name, delivered: ad.delivered, replaced: ad.replaced, best: ad === best, creative, earlier: link?.live === false, status: ad.effectiveStatus, impressions: ad.impressions, results: ad.results, spend: ad.spend, costPerResult: ad.costPerResult, ...(ad.conversionsUnavailable ? { conversionsUnavailable: true as const } : {}), ...("conversionValue" in ad && ad.conversionValue !== undefined ? { conversionValue: ad.conversionValue, ...("returnOnSpend" in ad && ad.returnOnSpend !== undefined ? { returnOnSpend: ad.returnOnSpend } : {}) } : {}) };
       })
       .sort((left, right) => Number(right.best) - Number(left.best) || Number(left.replaced || left.earlier) - Number(right.replaced || right.earlier) || right.results - left.results || right.spend - left.spend),
   };

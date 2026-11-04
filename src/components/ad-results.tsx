@@ -14,10 +14,10 @@ const SHOWN = 3;
 
 type Loaded = { ads: AdResultView[]; syncedAt: string | null };
 type T = ReturnType<typeof verdictTranslator>;
-/** A WhatsApp campaign's results are chats (Designer on #1048), a website's are visits (#2601), a form's enquiries. */
+/** A WhatsApp campaign's results are chats (Designer on #1048), website results follow the selected goal, forms are enquiries. */
 type Unit = { one: string; many: string };
-const unitFor = (t: T, destination: string | null | undefined): Unit => {
-  const key = resultNounKey(destination);
+const unitFor = (t: T, destination: string | null | undefined, websiteGoal?: "leads" | "sales"): Unit => {
+  const key = resultNounKey(destination, websiteGoal);
   return { one: t(key, { n: 1 }), many: t(key, { n: 2 }) };
 };
 
@@ -49,8 +49,10 @@ function Row({ ad, unit, t }: { ad: AdResultView; unit: Unit; t: T }) {
         </span>
       </span>
       <span className="shrink-0 text-right tabular-nums text-slate-700">
-        {t("ads.count", { n: formatNumber(ad.results), unit: ad.results === 1 ? unit.one : unit.many })}
-        <span className="mt-0.5 block text-xs text-slate-500">{t("ads.per", { cost: ad.costPerResult === null ? "—" : formatMoney(ad.costPerResult), unit: unit.one })}</span>
+        {ad.conversionsUnavailable ? t("ads.conversionUnavailable") : t("ads.count", { n: formatNumber(ad.results), unit: ad.results === 1 ? unit.one : unit.many })}
+        {!ad.conversionsUnavailable && <span className="mt-0.5 block text-xs text-slate-500">{t("ads.per", { cost: ad.costPerResult === null ? "—" : formatMoney(ad.costPerResult), unit: unit.one })}</span>}
+        {ad.conversionValue !== undefined && <span className="mt-0.5 block text-xs text-slate-500">{t("ads.value", { value: formatMoney(ad.conversionValue) })}</span>}
+        {ad.returnOnSpend !== undefined && <span className="mt-0.5 block text-xs text-slate-500">{t("ads.return", { value: ad.returnOnSpend.toFixed(2) })}</span>}
       </span>
     </li>
   );
@@ -64,14 +66,14 @@ const named = (ad: Named, t: T) => `“${adLabel(ad, t)}”`;
  * Never automatic; Keep hides it for 3 days; a pause can be undone here. A suggestion, not a warning:
  * a canvas strip, not amber (#847 keeps amber for Needs review).
  */
-export function PauseOffer({ campaignId, suggestion, destination, onKeep, words }: {
-  campaignId: string; suggestion: PauseSuggestion; destination?: string | null; onKeep?: () => void;
+export function PauseOffer({ campaignId, suggestion, destination, websiteGoal, onKeep, words }: {
+  campaignId: string; suggestion: PauseSuggestion; destination?: string | null; websiteGoal?: "leads" | "sales"; onKeep?: () => void;
   /** #1438: the owner's language (`verdict` namespace); English without. */
   words?: Words<"verdict">;
 }) {
   const { ad, reference } = suggestion;
   const t = verdictTranslator(words);
-  const unit = unitFor(t, destination);
+  const unit = unitFor(t, destination, websiteGoal);
   // Rendered only after the card's client-side load, so localStorage is there on first render.
   const [state, setState] = useState<"offer" | "busy" | "paused" | "resumed" | "already" | "kept" | { error: string }>(
     () => Number(window.localStorage.getItem(keepKey(campaignId, ad.adId)) ?? 0) > Date.now() ? "kept" : "offer",
@@ -137,11 +139,12 @@ export function useWeakAd(campaignId: string, enabled: boolean): [PauseSuggestio
  * #783: "Which ad worked" on a campaign card. Loads the stored per-ad results the first time it opens;
  * hidden altogether while the feature is off (the route answers 404).
  */
-export function AdResults({ campaignId, destination, onRunAgain, runAgainBusy = false, runAgainError = null, offerPause = true, words }: {
+export function AdResults({ campaignId, destination, websiteGoal, onRunAgain, runAgainBusy = false, runAgainError = null, offerPause = true, words }: {
   campaignId: string;
   /** #1274: false while the card's sentence already offers the pause, so it isn't offered twice. */
   offerPause?: boolean;
   destination?: string | null;
+  websiteGoal?: "leads" | "sales";
   /** #1050: with a Best ad, offer to copy the campaign into a new paused one. */
   onRunAgain?: () => void;
   runAgainBusy?: boolean;
@@ -151,7 +154,7 @@ export function AdResults({ campaignId, destination, onRunAgain, runAgainBusy = 
   words?: Words<"verdict">;
 }) {
   const t = verdictTranslator(words);
-  const unit = unitFor(t, destination);
+  const unit = unitFor(t, destination, websiteGoal);
   const [state, setState] = useState<"idle" | "loading" | "off" | "error" | Loaded>("idle");
   const [all, setAll] = useState(false);
 
@@ -173,6 +176,7 @@ export function AdResults({ campaignId, destination, onRunAgain, runAgainBusy = 
   const loaded = typeof state === "object" ? state : null;
   const shown = loaded ? (all ? loaded.ads : loaded.ads.slice(0, SHOWN)) : [];
   const anyResults = loaded?.ads.some(ad => ad.results > 0) ?? false;
+  const conversionDataUnavailable = loaded?.ads.some(ad => ad.conversionsUnavailable) ?? false;
   const hasBest = loaded?.ads.some(ad => ad.best) ?? false;
   // Only an AdBrain ad can be copied; an outside Best ad would only lead to an error.
   const canRunAgain = loaded?.ads.some(ad => ad.best && ad.creative) ?? false;
@@ -191,8 +195,8 @@ export function AdResults({ campaignId, destination, onRunAgain, runAgainBusy = 
         <p className="text-slate-500">{t("ads.none")}</p>
       ) : (
         <div>
-          {suggestion && <PauseOffer campaignId={campaignId} suggestion={suggestion} destination={destination} words={words} />}
-          {!hasBest && <p className="pb-1 text-xs text-slate-500">{anyResults ? t("ads.early", { units: unit.many }) : t("ads.noWinner", { units: unit.many })}</p>}
+          {suggestion && <PauseOffer campaignId={campaignId} suggestion={suggestion} destination={destination} websiteGoal={websiteGoal} words={words} />}
+          {!hasBest && <p className="pb-1 text-xs text-slate-500">{conversionDataUnavailable && !anyResults ? t("ads.conversionDataUnavailable") : anyResults ? t("ads.early", { units: unit.many }) : t("ads.noWinner", { units: unit.many })}</p>}
           <ul className="divide-y divide-slate-100 border-b border-slate-100">
             {shown.map(ad => <Row key={ad.adId} ad={ad} unit={unit} t={t} />)}
           </ul>

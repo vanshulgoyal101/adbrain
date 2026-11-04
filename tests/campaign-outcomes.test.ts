@@ -36,8 +36,51 @@ describe("shared outcome definition", () => {
     expect(outcomeDefinition("website").metaActions).toEqual(["landing_page_view", "omni_landing_page_view"]);
   });
 
-  it.each(["traffic", "leads", "sales", null, undefined])("does not add a website goal for objective %s", (objective) => {
+  it.each(["traffic", null, undefined])("keeps the website visits outcome for objective %s", (objective) => {
     expect(outcomeDefinition("website", objective)).toEqual(outcomeDefinition("website"));
+  });
+
+  it.each([
+    ["leads", "offsite_conversion.fb_pixel_lead", "figures.websiteLeads", "figures.costWebsiteLead"],
+    ["sales", "offsite_conversion.fb_pixel_purchase", "figures.websiteSales", "figures.costWebsiteSale"],
+  ] as const)("uses the %s pixel outcome without turning it into an enquiry", (goal, action, figure, costFigure) => {
+    expect(outcomeDefinition("website", goal)).toMatchObject({
+      campaignField: "conversions",
+      adField: "conversions",
+      insightField: "conversions",
+      metaActions: [action],
+      metaValueActions: [action],
+      unit: "conversion",
+      figure,
+      costFigure,
+      costField: null,
+      insightCostField: "costPerConversion",
+      comparable: true,
+      countsAsEnquiry: false,
+    });
+  });
+
+  it.each([
+    ["leads", "figures.websiteLeads", "figures.costWebsiteLead"],
+    ["sales", "figures.websiteSales", "figures.costWebsiteSale"],
+  ] as const)("calculates the %s result and only exposes a return when Meta sent value", (goal, label, costLabel) => {
+    const conversionFigures = { ...figures, spend: 1200, conversions: 3, conversion_value: 4497 };
+    expect(cardFigures("website", conversionFigures, goal)).toMatchObject({
+      label,
+      value: "3",
+      costLabel,
+      cost: "₹400",
+      conversionValue: "₹4,497",
+      returnOnSpend: 3.7475,
+    });
+
+    const noValue = cardFigures("website", { ...conversionFigures, conversion_value: null }, goal);
+    expect(noValue).not.toHaveProperty("conversionValue");
+    expect(noValue).not.toHaveProperty("returnOnSpend");
+
+    const unavailable = cardFigures("website", { ...conversionFigures, conversions: null }, goal);
+    expect(unavailable).toMatchObject({ label, value: "—", costLabel, cost: "—" });
+    expect(unavailable).not.toHaveProperty("conversionValue");
   });
 
   it.each(["unknown", "mixed", "call"] satisfies CampaignDestination[])("%s retains legacy counts but no card verdict figures", (destination) => {

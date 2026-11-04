@@ -2,6 +2,7 @@ import { verdictTranslator, type Words } from "@/i18n/words";
 import { formatNumber } from "@/lib/format";
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
 import type { LeadDestination } from "@/lib/types/campaign";
+import type { ConversionGoal } from "@/lib/campaign/website-tracking";
 
 /**
  * #1255 (#1226 workstream 2): what an owner should understand about a campaign in 3 seconds: one sentence, one
@@ -32,6 +33,7 @@ export type Comparison =
 
 export type VerdictInput = {
   destination: Exclude<LeadDestination, "call">;
+  websiteGoal?: ConversionGoal;
   status: "active" | "paused" | "completed" | string;
   /** When the campaign was last turned on (ISO); null when unknown. */
   liveSince: string | null;
@@ -70,10 +72,17 @@ const WORDS = {
   instant_form: { one: "enquiry", many: "enquiries", none: "noEnquiries", label: "label.noEnquiries", endedCostly: "endedCostlyEnquiries", earlyNone: "earlyNoEnquiries" },
   website: { one: "visit", many: "visits", none: "noVisits", label: "label.noVisits", endedCostly: "endedCostlyVisits", earlyNone: "earlyNoVisits" },
 } as const;
+const WEBSITE_CONVERSION_WORDS = {
+  leads: { one: "websiteLead", many: "websiteLeads", none: "noWebsiteLeads", label: "label.noWebsiteLeads", endedCostly: "endedCostlyWebsiteLeads", earlyNone: "earlyNoWebsiteLeads" },
+  sales: { one: "websitePurchase", many: "websitePurchases", none: "noWebsiteSales", label: "label.noWebsiteSales", endedCostly: "endedCostlyWebsiteSales", earlyNone: "earlyNoWebsiteSales" },
+} as const;
 
 /** The card's result noun for a destination ("chat", "enquiry", "visit"); enquiries for anything else. */
-export function resultNounKey(destination: string | null | undefined): "card.noun" | "card.nounEnquiry" | "card.nounVisit" {
-  return destination === "whatsapp" ? "card.noun" : destination === "website" ? "card.nounVisit" : "card.nounEnquiry";
+export function resultNounKey(destination: string | null | undefined, objective?: string | null): "card.noun" | "card.nounEnquiry" | "card.nounVisit" | "card.nounWebsiteLead" | "card.nounWebsiteSale" {
+  if (destination === "whatsapp") return "card.noun";
+  if (destination === "website" && objective === "leads") return "card.nounWebsiteLead";
+  if (destination === "website" && objective === "sales") return "card.nounWebsiteSale";
+  return destination === "website" ? "card.nounVisit" : "card.nounEnquiry";
 }
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
@@ -90,7 +99,9 @@ export function restatesStatus(state: VerdictState): boolean {
 export function verdict(input: VerdictInput, words?: Words<"verdict">): Verdict {
   const t = verdictTranslator(words);
   const whatsapp = input.destination === "whatsapp";
-  const kind = WORDS[input.destination];
+  const kind = input.destination === "website" && input.websiteGoal
+    ? WEBSITE_CONVERSION_WORDS[input.websiteGoal]
+    : WORDS[input.destination];
   const chat = t(kind.one);
   const chats = (n: number) => t(kind.many, { n });
   const none = t(kind.none);

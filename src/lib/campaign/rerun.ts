@@ -117,7 +117,8 @@ export function bestCreativeId(
   rows: StoredAdResult[],
   links: { meta_ad_id: string; creative_id: string | null }[],
   destination: string | null | undefined,
+  objective?: string | null,
 ): string | null {
-  const best = adResultViews(rows, destination).ads.find((ad) => ad.best);
+  const best = adResultViews(rows, destination, undefined, objective).ads.find((ad) => ad.best);
   return best ? links.find((link) => link.meta_ad_id === best.adId)?.creative_id ?? null : null;
 }
