@@ -182,12 +182,15 @@ Workers never nest inside a CEO session, so closing a CEO chat leaves them runni
 session. The outgoing CEO writes no handover: every decision and promise is already on its issue, and
 scheduled reads are `Next read <time>` comments. If workers still sit inside an earlier CEO's session, the
 owner closes it first and the new CEO then starts their independent replacements (worktrees survive). A
-running chat reads no chat messages (steers stay "processing"; queued ones land when the turn ends), so
-reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580). A chat whose turn has ended can't be
-messaged at all (`send_message` fails with "Unknown chat owner"), so replace it: create the new chat, then
-delete the old one. Restart prompts make workers run the waiter as a sync bash call kept alive with
-`read_bash` (never `stop_bash`) and forbid `ask_user`; both used to end or stall turns. `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
-or `error`.
+running chat reads no chat messages (steers stay "processing"; queued ones wait for the turn to end), so
+reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580). Use `send_message` (queue) only to wake
+a reachable idle chat with work. An ended-turn chat can reject a queued message with `Unknown chat owner`,
+even from its creator. If it has actionable work, confirm there is no active writer and replace the
+unreachable chat, preserving its branch and worktree; do not assume a failed message woke it.
+Restart prompts spell out the sync waiter loop, kept alive with `read_bash`.
+Restarted workers decide routine questions themselves or post `→ CEO:` on the issue for a CEO decision and
+continue other actionable work; required owner approvals, mandatory confirmations and prompts still apply.
+`npm run team-status` lists each role as `waiting`, `has-work`, `no-work` or `error`.
 
 ### Ready pool (pull, don't wait)
 
