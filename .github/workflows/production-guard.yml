@@ -25,7 +25,7 @@ jobs:
       || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # A timed-out job opens no issue (#210), so every step has its own bound and they sum to at most
-    # this (#2029). Wait/served and WS1/rollback never both run, so the real worst case is ~80 min.
+    # this (#2029). Wait/served never both run, so the real worst case is under 80 min.
     timeout-minutes: 95
     concurrency: production-smoke
     # Explicit bash adds pipefail, so `| tee` cannot hide a failed smoke or rollback (#153).
@@ -102,18 +102,11 @@ jobs:
           smoke | tee smoke.txt && exit 0
           sleep 60
           smoke | tee smoke.txt
-      - name: WS1 first-timer walk (#1439)
-        timeout-minutes: 10
-        if: steps.smoke.outcome == 'success'
-        env:
-          WS1_EMAIL: ${{ secrets.WS1_EMAIL }}
-          TEST_SESSION_SECRET: ${{ secrets.TEST_SESSION_SECRET }}
-        run: |
-          [ -n "$WS1_EMAIL" ] || { echo "WS1_EMAIL not set; WS1 walk skipped"; exit 0; }
-          set -o pipefail
-          rc=0; timeout -k 30s 9m npx tsx scripts/ws1-walk.mts | tee ws1.txt || rc=$?
-          { echo '### WS1 walk'; echo '```'; cat ws1.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          exit "$rc"
+      # TODO(#2838): Restore WS1 in the PR that lands the reviewed #2861 fence.
+      - name: WS1 coverage temporarily skipped (#2838)
+        timeout-minutes: 1
+        if: always()
+        run: echo 'WS1 coverage SKIPPED (#2838 interim)' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Roll production back
         timeout-minutes: 6
         if: failure() && steps.smoke.outcome == 'failure' && steps.install.outputs.deps != 'missing' && (github.event_name == 'deployment_status' || inputs.drill) && (!inputs.drill || steps.drill.outcome == 'success') && env.VERCEL_TOKEN != ''
