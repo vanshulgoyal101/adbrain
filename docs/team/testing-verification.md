@@ -19,6 +19,11 @@ idempotent claim/lease behavior, draft fences, concurrent rate limiting, usage
 aggregate integrity, and product-event retention. It is not a hosted Supabase
 Auth, PostgREST schema-cache, Storage delivery, or real Meta consent test.
 
+For the focused migration-runner checks, run
+`LC_ALL=C LANG=C npm run test:meta-db -- --migration-runner-only`. The temporary
+database exercises wrapped migrations, ledger failures, lock contention,
+checksum drift and the SQL generated for Management API releases.
+
 For an integrated local environment, inspect
 [scripts/local-meta-qa.mjs](../../scripts/local-meta-qa.mjs) and the existing `adbrain-qa`
 Colima profile documented in [Releasing](../operations/releasing.md). The launcher asserts

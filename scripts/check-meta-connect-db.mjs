@@ -114,7 +114,7 @@ async function verifyDefaultPrivilegeMigrationLedger() {
   await db.connect();
   try {
     await db.query(bootstrap);
-    await verifyDefaultPrivilegeLedger(db, check, defaultPrivilegesMigration);
+    await verifyDefaultPrivilegeLedger(db, check, defaultPrivilegesMigration, () => client("default_privilege_ledger"));
   } finally { await db.end(); }
 }
 
@@ -4628,7 +4628,9 @@ try {
       if not exists (select 1 from pg_roles where rolname = 'supabase_admin') then create role supabase_admin superuser; end if;
     end $$;`);
   await admin.end();
-  if (process.argv.includes("--rollback-only")) {
+  if (process.argv.includes("--migration-runner-only")) {
+    await verifyDefaultPrivilegeMigrationLedger();
+  } else if (process.argv.includes("--rollback-only")) {
     await verifyRollback();
   } else {
   const schema = buildSchema(root);
