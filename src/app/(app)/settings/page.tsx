@@ -99,7 +99,7 @@ export default async function SettingsPage({
       </Suspense>
       <div className="space-y-6 xl:grid xl:grid-cols-2 xl:items-start xl:gap-6 xl:space-y-0">
         <div className="min-w-0 space-y-6">
-          <Suspense fallback={<SettingsLoading label={t("meta.title")} status={t("page.loading", { label: t("meta.title") })} />}>
+          <Suspense fallback={<SettingsLoading label={t("meta.title")} status={t("page.loading", { label: t("meta.title") })} column />}>
             {/* #847: WhatsApp sits with the Meta connection it depends on, above Billing. */}
             <ConnectionSettings businessId={business.id} searchParams={searchParams} whatsapp={
               <Suspense fallback={<SettingsLoading label={t("whatsappStatus.title")} status={t("page.loading", { label: t("whatsappStatus.title") })} />}>
@@ -151,8 +151,10 @@ async function PreferenceAndPrivacySettings({ businessId }: { businessId: string
 }
 
 /** `status` is the screen-reader line in the owner's language; panels not yet translated keep the English one. */
-function SettingsLoading({ label, status = `Loading ${label}`, tall }: { label: string; status?: string; tall?: boolean }) {
-  return <section role="status" aria-label={status} className={`${tall ? "min-h-[22rem]" : "min-h-64"} space-y-5 rounded-lg border border-slate-200 bg-white p-6`}>
+function SettingsLoading({ label, status = `Loading ${label}`, tall, column }: { label: string; status?: string; tall?: boolean; column?: boolean }) {
+  // `column`: below xl the Meta column (about 54rem) stacks above Spend, so its fallback holds that height or Spend shifts when the column arrives.
+  const height = column ? "min-h-[54rem] xl:min-h-64" : tall ? "min-h-[22rem]" : "min-h-64";
+  return <section role="status" aria-label={status} className={`${height} space-y-5 rounded-lg border border-slate-200 bg-white p-6`}>
     <h2 className="font-semibold text-slate-900">{label}</h2>
     <div aria-hidden="true" className="space-y-4 motion-safe:animate-pulse">
       <div className="h-4 w-3/4 rounded bg-slate-100" />
