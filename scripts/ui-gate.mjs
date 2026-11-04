@@ -1,12 +1,12 @@
 /**
- * #417 UI gate: screenshots, axe-core violations and Core Web Vitals (LCP, CLS) for the homepage,
- * sign-in and the six owner screens at 390 and 1440 px. Signs in with the smoke account; every
- * write is blocked, so it is read-only.
+ * #417 UI gate: screenshots, axe-core violations and Core Web Vitals (LCP, CLS) for public and
+ * owner screens. Signs in with the smoke account; browser writes are blocked.
  *
  *   npm run ui-gate -- --out .superpowers/ui-gate/before                    # production baseline
  *   npm run ui-gate -- --origin http://localhost:3000 --out .superpowers/ui-gate/after
  *   npm run ui-gate -- --compare .superpowers/ui-gate/before --out .superpowers/ui-gate/after
  *   npm run ui-gate -- --public-only ...   # no sign-in: public pages only (CI has no database)
+ *   npm run ui-gate -- --synthetic --phone-only --visual ... # isolated CI fixture and screenshot comparison
  *
  * --compare exits 1 if any page has more axe violations, LCP worse by over 20% and 250 ms, or CLS
  * worse by over 0.05 than the baseline (the #416 rule: after must be at least as good as before).
@@ -19,6 +19,8 @@ import { parseArgs } from "node:util";
 import { chromium } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { browserCookies, localEnv, mintTestSession, testSessionConfig } from "./lib/test-session.mjs";
+import { syntheticSession } from "./lib/ui-gate-synthetic.mjs";
+import { compareScreenshots, isHydrationError, isVisualRegression, missingScreens } from "./lib/ui-visual.mjs";
 
 const { values: args } = parseArgs({
   options: {
@@ -28,6 +30,10 @@ const { values: args } = parseArgs({
     "compare-only": { type: "boolean", default: false },
     "public-only": { type: "boolean", default: false },
     "low-end": { type: "boolean", default: false },
+    "phone-only": { type: "boolean", default: false },
+    synthetic: { type: "boolean", default: false },
+    visual: { type: "boolean", default: false },
+    "allow-visual-changes": { type: "boolean", default: false },
   },
 });
 const origin = new URL(args.origin).origin;
@@ -35,8 +41,11 @@ assert.ok(origin === "https://adbrain.vanshul.com" || new URL(origin).hostname =
 
 const PUBLIC_PAGES = [["home", "/"], ["login", "/login"], ["ideas", "/ideas"], ["idea", "/ideas/rooftop-solar"], ["privacy", "/privacy"], ["terms", "/terms"], ["guides", "/guides"]];
 const OWNER_PAGES = [["dashboard", "/dashboard"], ["brand", "/brand"], ["create", "/create"], ["review", "/studio"], ["campaigns", "/campaigns"], ["enquiries", "/leads"]];
+const SYNTHETIC_PAGES = [["assets", "/assets"], ["settings", "/settings"], ["connect", "/connect/meta"]];
 // #1226 (7): --low-end walks a 360 px budget Android on slow 4G with a 4x slower CPU (Lighthouse's mobile profile).
-const VIEWPORTS = args["low-end"] ? [[360, 740]] : [[390, 844], [1440, 900]];
+const VIEWPORTS = args["low-end"] ? [[360, 740]] : args["phone-only"] ? [[360, 800], [390, 844]] : [[390, 844], [1440, 900]];
+assert.ok(!(args.synthetic && args["public-only"]), "Synthetic UI checks require authenticated screens.");
+assert.ok(!args["allow-visual-changes"] || args.visual, "Visual-change approval requires --visual.");
 
 async function throttle(page) {
   if (!args["low-end"]) return;
@@ -48,6 +57,12 @@ async function throttle(page) {
 
 /** #2574: the smoke account's session, minted once (no password form, so Supabase CAPTCHA, #1777, can stay on). */
 async function smokeSession() {
+  if (args.synthetic) {
+    const { email, config } = syntheticSession(process.env, args.origin);
+    const session = await mintTestSession(email, { config });
+    assert.equal(session.user.email, email, "The synthetic session belongs to a different user.");
+    return session;
+  }
   const env = await localEnv();
   assert.ok(env.SMOKE_EMAIL, "Set SMOKE_EMAIL (or the ignored .env.smoke).");
   return mintTestSession(env.SMOKE_EMAIL, { config: testSessionConfig(env, origin) });
@@ -69,24 +84,35 @@ async function readOnly(context) {
   });
 }
 
-async function measure(page, path, file) {
+async function measure(page, path, file, prepare) {
+  let pageErrors = 0;
+  let hydrationErrors = 0;
+  page.on("pageerror", () => { pageErrors++; });
+  page.on("console", (message) => {
+    if (message.type() === "error" && isHydrationError(message.text())) hydrationErrors++;
+  });
   await page.addInitScript(() => {
     window.__vitals = { lcp: 0, cls: 0 };
     new PerformanceObserver((list) => { for (const entry of list.getEntries()) window.__vitals.lcp = entry.startTime; }).observe({ type: "largest-contentful-paint", buffered: true });
     new PerformanceObserver((list) => { for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__vitals.cls += entry.value; }).observe({ type: "layout-shift", buffered: true });
   });
-  await page.goto(`${origin}${path}`, { waitUntil: "load" });
+  const response = await page.goto(`${origin}${path}`, { waitUntil: "load" });
+  if (args.synthetic) {
+    assert.ok(response && response.status() < 400, `${path}: navigation failed`);
+    assert.equal(new URL(page.url()).pathname, path, `${path}: unexpected redirect`);
+  }
   await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(1_500);
+  if (prepare) await prepare(page);
   const vitals = await page.evaluate(() => window.__vitals);
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo(0, 0); });
-  await page.screenshot({ path: file, fullPage: true });
+  await page.screenshot({ path: file, fullPage: true, animations: "disabled", caret: "hide" });
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   const violations = axe.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length, targets: v.nodes.slice(0, 10).map((n) => n.target.join(" ")) }));
   const small = (page.viewportSize()?.width ?? 1440) < 500 ? await smallTargets(page) : [];
   // #2748: a page that scrolls sideways at phone width is a bug.
   const overflowPx = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
-  return { lcpMs: Math.round(vitals.lcp), cls: Number(vitals.cls.toFixed(3)), axe: violations.reduce((sum, v) => sum + v.nodes, 0), violations, under44: small.length, smallTargets: small.slice(0, 10), overflowPx };
+  return { lcpMs: Math.round(vitals.lcp), cls: Number(vitals.cls.toFixed(3)), axe: violations.reduce((sum, v) => sum + v.nodes, 0), violations, under44: small.length, smallTargets: small.slice(0, 10), overflowPx, pageErrors, hydrationErrors };
 }
 
 /**
@@ -96,7 +122,10 @@ async function measure(page, path, file) {
 function smallTargets(page) {
   return page.evaluate(() => {
     const out = [];
-    for (const el of document.querySelectorAll("main button, main a[href], main input:not([type=hidden]), main select, main summary, main [role=button], header a[href], footer a[href]")) {
+    const selector = document.querySelector("dialog[open]")
+      ? "dialog[open] button, dialog[open] a[href], dialog[open] input:not([type=hidden]), dialog[open] select, dialog[open] summary, dialog[open] [role=button]"
+      : "main button, main a[href], main input:not([type=hidden]), main select, main summary, main [role=button], header a[href], footer a[href]";
+    for (const el of document.querySelectorAll(selector)) {
       let r = el.getBoundingClientRect();
       if (!r.width || !r.height || getComputedStyle(el).visibility === "hidden" || (r.height >= 44 && r.width >= 24)) continue;
       const label = el.closest("label");
@@ -136,10 +165,18 @@ async function run() {
       await check.goto(`${origin}/dashboard`, { waitUntil: "domcontentloaded" });
       assert.ok(!new URL(check.url()).pathname.startsWith("/login"), "The app sent the minted session to /login.");
       await check.close();
-      for (const [name, path] of OWNER_PAGES) {
+      for (const [name, path] of [...OWNER_PAGES, ...(args.synthetic ? SYNTHETIC_PAGES : [])]) {
         const page = await context.newPage();
         await throttle(page);
         report.pages[`${name}@${width}`] = await measure(page, path, join(args.out, `${name}-${width}.png`));
+        await page.close();
+      }
+      if (args.synthetic && width < 500) {
+        const page = await context.newPage();
+        report.pages[`menu@${width}`] = await measure(page, "/dashboard", join(args.out, `menu-${width}.png`), async (menuPage) => {
+          await menuPage.getByRole("button", { name: "Open navigation" }).click();
+          await menuPage.getByRole("dialog", { name: "Workspace menu" }).waitFor();
+        });
         await page.close();
       }
       await context.close();
@@ -151,8 +188,16 @@ async function run() {
   return report;
 }
 
-function compare(before, after) {
+async function compare(before, after) {
   let failed = false;
+  if (args.synthetic) {
+    const pages = [...PUBLIC_PAGES, ...OWNER_PAGES, ...SYNTHETIC_PAGES];
+    const required = VIEWPORTS.flatMap(([width]) => [...pages.map(([name]) => `${name}@${width}`), ...(width < 500 ? [`menu@${width}`] : [])]);
+    for (const missing of missingScreens(required, before.pages, after.pages)) {
+      console.log(`missing screen: ${missing}`);
+      failed = true;
+    }
+  }
   console.log("page".padEnd(20), "axe before→after".padEnd(18), "LCP ms before→after".padEnd(22), "CLS before→after");
   for (const [key, b] of Object.entries(before.pages)) {
     const a = after.pages[key];
@@ -163,16 +208,28 @@ function compare(before, after) {
     if (a.cls > b.cls + 0.05) worse.push("CLS");
     if (a.under44 > (b.under44 ?? 0)) worse.push("tap targets");
     if (a.overflowPx > (b.overflowPx ?? 0)) worse.push("overflow");
+    if (a.pageErrors > (b.pageErrors ?? 0)) worse.push("page errors");
+    if (a.hydrationErrors > (b.hydrationErrors ?? 0)) worse.push("hydration");
+    if (args.visual && Number(key.split("@")[1]) < 500) {
+      const [name, width] = key.split("@");
+      const result = await compareScreenshots(join(args.compare, `${name}-${width}.png`), join(args.out, `${name}-${width}.png`));
+      if (isVisualRegression(result)) {
+        const detail = result.dimensionsChanged ? "dimensions changed" : `${(100 * result.changedPixels / result.totalPixels).toFixed(2)}% pixels changed`;
+        if (args["allow-visual-changes"]) console.log(`${key}: reviewed visual difference (${detail})`);
+        else worse.push(`visual (${detail})`);
+      }
+    }
     if (worse.length) failed = true;
     console.log(key.padEnd(20), `${b.axe}→${a.axe}`.padEnd(18), `${b.lcpMs}→${a.lcpMs}`.padEnd(22), `${b.cls}→${a.cls}`, worse.length ? `WORSE: ${worse.join(", ")}` : "");
   }
   return failed;
 }
 
-const report = args["compare-only"] && existsSync(join(args.out, "report.json")) ? JSON.parse(await readFile(join(args.out, "report.json"), "utf8")) : await run();
+if (args["compare-only"]) assert.ok(existsSync(join(args.out, "report.json")), "The comparison report is missing.");
+const report = args["compare-only"] ? JSON.parse(await readFile(join(args.out, "report.json"), "utf8")) : await run();
 if (args.compare) {
   const before = JSON.parse(await readFile(join(args.compare, "report.json"), "utf8"));
-  if (compare(before, report)) { console.log("UI gate: WORSE than baseline"); process.exitCode = 1; } else console.log("UI gate: not worse than baseline");
+  if (await compare(before, report)) { console.log("UI gate: WORSE than baseline"); process.exitCode = 1; } else console.log("UI gate: not worse than baseline");
 } else {
   for (const [key, page] of Object.entries(report.pages)) console.log(key.padEnd(20), `axe=${page.axe}`.padEnd(8), `LCP=${page.lcpMs}ms`.padEnd(12), `CLS=${page.cls}`.padEnd(11), page.under44 ? `under44=${page.under44}: ${page.smallTargets.slice(0, 3).join(" | ")}` : "");
 }
