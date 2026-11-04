@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/whatsapp-number.json";
 import adSetCheck from "./fixtures/meta/whatsapp-adset-validate.json";
 import refused from "./fixtures/meta/whatsapp-business-refused.json";
+import rateLimited from "./fixtures/meta/whatsapp-number-rate-limited.json";
 
 // #157: Solaride's Page has no published WhatsApp number, but its Meta business owns two
 // WhatsApp Business Accounts whose numbers Meta accepts for the Page's WhatsApp ad sets
@@ -164,9 +165,8 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     await expect(new MetaClient(creds).whatsappNumbers()).rejects.toMatchObject({ code: 190 });
   });
 
-  it("#2841: a Meta rate limit (80008, HTTP 400, as seen Nov 3) is 'unavailable' through the route, never a zero-number answer", async () => {
-    const throttled = { error: { message: "(#80008) There have been too many calls to this WhatsApp Business account.", type: "OAuthException", code: 80008 } };
-    const tape = recorded.tape.map((entry) => entry.path.includes(WABA) ? { ...entry, status: 400, body: throttled } : entry);
+  it("#2841: a Meta rate limit (80008, HTTP 400, as seen Nov 3) is 'busy' (429) through the route, never a zero-number answer", async () => {
+    const tape = recorded.tape.map((entry) => entry.path.includes(WABA) ? { ...entry, status: rateLimited.status, body: rateLimited.body } : entry);
     access.requireOwnedBusiness.mockResolvedValue({ userId: "u1" });
     access.getConnectionStatus.mockResolvedValue({ selected: {}, capabilities: { canCreatePaused: { state: "available" } } });
     access.withMetaConnection.mockImplementation((_context, _options, run: (meta: MetaClient) => unknown) => run(new MetaClient(creds)));
@@ -174,7 +174,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     const ask = () => GET(new Request("http://localhost/api/meta/whatsapp?businessId=11111111-1111-4111-8111-111111111111"));
     replay(tape);
     const answer = await ask();
-    expect({ status: answer.status, body: await answer.json() }).toEqual({ status: 200, body: { state: "unavailable" } });
+    expect({ status: answer.status, body: await answer.json() }).toEqual({ status: 429, body: { state: "busy" } });
     vi.restoreAllMocks();
     // A real "no number linked" answer stays a distinct, successful not_linked.
     replay(recorded.tape.map((entry) => entry.path.includes(WABA) ? { ...entry, body: { data: [] } } : entry));

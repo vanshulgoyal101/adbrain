@@ -321,6 +321,19 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(draft()?.whatsappNumber || "").toBe("");
   });
 
+  it("'ready' with an empty number list also proceeds with no number (#2841)", async () => {
+    const { deps, calls, draft } = await api({ whatsapp: { status: 200, body: { state: "ready", numbers: [] } } });
+    await goLive(deps, input);
+    expect(calls).toContain("POST /api/campaign-drafts");
+    expect(draft()?.whatsappNumber || "").toBe("");
+  });
+
+  it("a 429 'busy' answer from the route (Meta 80008) stops with the busy message and saves nothing (#2841)", async () => {
+    const { deps, calls } = await api({ whatsapp: { status: 429, body: { state: "busy" } } });
+    expect(await goLive(deps, input)).toMatchObject({ kind: "failed", message: GO_LIVE_META_BUSY });
+    expect(calls).not.toContain("POST /api/campaign-drafts");
+  });
+
   it("not connected: asks to connect and calls nothing else", async () => {
     const { deps, calls } = await api();
     deps.client = { ...deps.client, status: async () => ({ ...connection, authorization: "reauth_required" }) };
