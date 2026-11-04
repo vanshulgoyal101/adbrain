@@ -57,6 +57,7 @@ export type BusinessTables = {
       name: string;
       vertical: Vertical;
       website: string | null;
+      meta_pixel_id?: string | null;
       description: string | null;
       brand_voice: string | null;
       primary_color: string | null;
@@ -83,6 +84,7 @@ export type BusinessTables = {
       name: string;
       vertical?: Vertical;
       website?: string | null;
+      meta_pixel_id?: string | null;
       description?: string | null;
       brand_voice?: string | null;
       primary_color?: string | null;

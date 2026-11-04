@@ -72,7 +72,6 @@ async function bestAdPicture(businessId: string, leadCampaigns: (string | null)[
   const chats = new Map<string, number>();
   if (adResultsEnabled()) {
     const links = adCreativeLinks({ ...campaign, meta_ad_ids: campaign.meta_ad_ids ?? [] }, creativeIds);
-    // ad_results isn't in the generated types yet (as in /api/campaigns/[id]/ads).
     const { data: rows } = await (db as unknown as SupabaseClient).from("ad_results").select("meta_ad_id, conversations")
       .eq("campaign_id", campaignId).is("period_start", null).is("period_end", null).limit(100);
     for (const row of (rows ?? []) as { meta_ad_id: string; conversations: number | null }[]) {

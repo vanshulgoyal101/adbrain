@@ -10,6 +10,7 @@ import { applyMigration, managementMigrationSql } from "./database-migrations.mj
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
 import { createDefaultPrivilegeFixtures, verifyDefaultPrivilegeLedger, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
 import { preservedSecurityDefinerPrivileges, securityDefinerState, verifySecurityDefiners } from "./check-security-definers.mjs";
+import { verifyTrackingConversions } from "./check-tracking-conversions.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultPrivilegesMigration = await readFile(join(root, "db/migrations/20261102_default_public_privileges.sql"), "utf8");
@@ -4630,6 +4631,8 @@ try {
   await admin.end();
   if (process.argv.includes("--rollback-only")) {
     await verifyRollback();
+  } else if (process.argv.includes("--tracking-only")) {
+    await verifyTrackingConversions({ client, bootstrap, check, root });
   } else {
   const schema = buildSchema(root);
   const preDefinerSchema = schema.replace(definerHardeningMigration.trim(), "");
@@ -4676,6 +4679,9 @@ try {
     const position = schema.indexOf((await readFile(join(root, "db/migrations", name), "utf8")).trim(), previousPosition);
     assert.ok(position >= previousPosition, `Generated schema must append ${name} after the base in filename order`);
     previousPosition = position;
+  }
+  if (!process.argv.some((arg) => arg.endsWith("-only"))) {
+    await verifyTrackingConversions({ client, bootstrap, check, root });
   }
   if (process.argv.includes("--analytics-only")) {
     await verify("analytics_fresh",schema);

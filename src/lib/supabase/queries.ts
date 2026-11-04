@@ -155,7 +155,6 @@ export const getCampaigns = cache(async function getCampaigns(businessId: string
 /** #1469: Meta's stored effective status of each ad in a campaign (lifetime rows from the last refresh, RLS read). */
 export async function getAdStatuses(campaignId: string): Promise<(string | null)[]> {
   const supabase = await createClient();
-  // `ad_results` isn't in the generated types yet (same cast as GET /api/campaigns/[id]/ads).
   const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results").select("effective_status")
     .eq("campaign_id", campaignId).is("period_start", null).is("period_end", null).limit(100)
     .returns<{ effective_status: string | null }[]>();

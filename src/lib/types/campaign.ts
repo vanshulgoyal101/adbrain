@@ -21,6 +21,7 @@ export type CampaignTables = {
       meta_ad_ids: string[];
       meta_ad_account_id: string | null;
       meta_page_id: string | null;
+      meta_pixel_id?: string | null;
       meta_connection_generation: number | null;
       creative_ids: string[];
       raw: Json | null;
@@ -40,6 +41,7 @@ export type CampaignTables = {
       meta_ad_ids?: string[];
       meta_ad_account_id?: string | null;
       meta_page_id?: string | null;
+      meta_pixel_id?: string | null;
       meta_connection_generation?: number | null;
       creative_ids?: string[];
       raw?: Json | null;
@@ -138,6 +140,9 @@ export type CampaignTables = {
       landing_page_views?: number;
       /** Website link clicks; null/absent means not read, not zero. */
       link_clicks?: number | null;
+      conversions?: number;
+      /** Null means Meta did not report a conversion value. */
+      conversion_value?: number | null;
       fetched_at: string;
     };
     Insert: {
@@ -156,6 +161,8 @@ export type CampaignTables = {
       whatsapp_opens?: number | null;
       landing_page_views?: number;
       link_clicks?: number | null;
+      conversions?: number;
+      conversion_value?: number | null;
       fetched_at?: string;
     };
     Update: Partial<
@@ -167,6 +174,62 @@ export type CampaignTables = {
       isOneToOne: false;
       referencedRelation: "campaigns";
       referencedColumns: ["id"];
+    }];
+  };
+  ad_results: {
+    Row: {
+      id: string;
+      business_id: string;
+      campaign_id: string;
+      meta_ad_id: string;
+      ad_name: string | null;
+      effective_status: string | null;
+      period_start: string | null;
+      period_end: string | null;
+      delivered: boolean;
+      impressions: number;
+      link_clicks: number;
+      conversations: number;
+      leads: number;
+      spend_paise: number;
+      synced_at: string;
+      landing_page_views?: number;
+      conversions?: number;
+      conversion_value?: number | null;
+    };
+    Insert: {
+      id?: string;
+      business_id: string;
+      campaign_id: string;
+      meta_ad_id: string;
+      ad_name?: string | null;
+      effective_status?: string | null;
+      period_start?: string | null;
+      period_end?: string | null;
+      delivered?: boolean;
+      impressions?: number;
+      link_clicks?: number;
+      conversations?: number;
+      leads?: number;
+      spend_paise?: number;
+      synced_at?: string;
+      landing_page_views?: number;
+      conversions?: number;
+      conversion_value?: number | null;
+    };
+    Update: Partial<Database["public"]["Tables"]["ad_results"]["Insert"]>;
+    Relationships: [{
+      foreignKeyName: "ad_results_business_id_fkey";
+      columns: ["business_id"];
+      isOneToOne: false;
+      referencedRelation: "businesses";
+      referencedColumns: ["id"];
+    }, {
+      foreignKeyName: "ad_results_business_id_campaign_id_fkey";
+      columns: ["business_id", "campaign_id"];
+      isOneToOne: false;
+      referencedRelation: "campaigns";
+      referencedColumns: ["business_id", "id"];
     }];
   };
   spend_limits: {

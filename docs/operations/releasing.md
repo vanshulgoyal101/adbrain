@@ -107,7 +107,8 @@ exclude entire test directories or suppress uninvestigated findings.
 - Review migrations against existing data, test fresh and upgrade paths, and
   define backup/restore, compatibility, and sequencing before applying remotely.
 - **Add a migration (#227):** add only `db/migrations/<yyyymmdd>_<name>.sql` plus
-  its own checks. Do not edit `db/schema.sql` (frozen base) or
+  its own checks. Apart from the owner-requested #2711 additive column declarations,
+  do not edit `db/schema.sql` (frozen base) or
   `db/schema.base-migrations.txt`. `node scripts/build-schema.mjs` prints the full
   fresh-install schema: the base plus every migration not in that list, in
   filename order, with its exact text. `npm run db:push`, `npm run test:meta-db`
