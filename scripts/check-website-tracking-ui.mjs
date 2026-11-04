@@ -7,7 +7,7 @@ import tailwind from "@tailwindcss/postcss";
 import { chromium, webkit } from "@playwright/test";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const output = process.env.TRACKING_UI_OUTPUT;
+const output = process.argv[2];
 if (output) await mkdir(output, { recursive: true });
 
 const cssPath = `${root}src/app/globals.css`;
