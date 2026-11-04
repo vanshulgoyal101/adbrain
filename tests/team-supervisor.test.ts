@@ -49,6 +49,29 @@ describe("team-supervisor (#573 A1)", () => {
     expect([...liveRoles(dir, 20)].sort()).toEqual(["designer", "qa"]);
   });
 
+  it("finds concurrently active sessions by role", async () => {
+    const roleDir = join(dir, "duplicate-role-chats");
+    mkdirSync(roleDir);
+    for (const [id, content] of [
+      ["dev2-one", "You are AdBrain's Dev 2."],
+      ["dev2-two", "You are AdBrain's Dev 2. A replayed chat."],
+      ["other", "A different chat."],
+    ]) {
+      mkdirSync(join(roleDir, id));
+      writeFileSync(join(roleDir, id, "events.jsonl"), [
+        { type: "session.start", data: {} },
+        { type: "user.message", data: { content } },
+        { type: "assistant.turn_start", data: {} },
+        { type: "tool.execution_start", data: {} },
+      ].map((event) => JSON.stringify(event)).join("\n") + "\n");
+    }
+
+    const { liveRoleChats } = await import("../scripts/team-supervisor.mjs");
+    const chats = liveRoleChats?.(roleDir) ?? new Map();
+    expect(chats.get("dev2")).toEqual(["dev2-one", "dev2-two"]);
+    expect(chats.has("other")).toBe(false);
+  });
+
   it("wakes the first role in order with work and no live chat", () => {
     const statuses = {
       devops: { state: "waiting", items: [] },
@@ -57,6 +80,17 @@ describe("team-supervisor (#573 A1)", () => {
     };
     expect(pickRole(statuses, new Set(["qa"]))).toEqual({ role: "reviewer", items: ["#673 audit"], overdue: true });
     expect(pickRole(statuses, new Set(["qa", "reviewer"]))).toBeNull();
+  });
+
+  it("does not wake a role that already has duplicate role chats", () => {
+    const statuses = {
+      qa: { state: "has-work", items: ["#643 review"] },
+      reviewer: { state: "has-work", items: ["#673 audit"] },
+    };
+    expect(pickRole(statuses, new Set(), ["qa", "reviewer"], { blocked: new Set(["qa"]) })).toMatchObject({
+      role: "reviewer",
+      items: ["#673 audit"],
+    });
   });
 
   it("wakes an hour-overdue role first (longest wait, then bottleneck order), even past the daily cap (#573)", () => {
@@ -101,7 +135,10 @@ describe("team-supervisor (#573 A1)", () => {
 
   it("gives each role a restart prompt that maps back to the same role", () => {
     const text = restartPrompt("dev2");
+    const spawnId = (value: string) => value.match(/spawn-id: ([\da-f-]+)/i)?.[1];
     expect(roleFromPrompt(text)).toBe("dev2");
+    expect(spawnId(text) ?? "").toMatch(/^[\da-f-]{36}$/i);
+    expect(spawnId(restartPrompt("dev2"))).not.toBe(spawnId(text));
     expect(text).toContain("-l owner:dev2");
     expect(text).toContain("wait-for-work.mjs --me dev2");
     expect(text).toMatch(/never completes: do not call task_complete/);
@@ -146,6 +183,8 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain("wait-for-work.mjs --me ceo");
     for (const r of ["dev", "dev4", "qa2", "reviewer", "devops", "cto", "docs"]) expect(text).toContain(`(${r})`);
     expect(text).toContain("ask the owner to close that session first");
+    expect(text).toMatch(/re-list before every create_session/i);
+    expect(text).toMatch(/re-list after each create/i);
     expect(text).toContain("a running chat reads no chat messages");
     expect(text).not.toContain("steer one line");
     expect(text).not.toMatch(/\(ceo\)/);

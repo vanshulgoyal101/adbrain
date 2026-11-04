@@ -179,7 +179,11 @@ live worker chats (`list_sessions`, `get_session_context`) and starts each missi
 Always pass the model: `create_session` otherwise copies the caller's model, and the automations run on Opus.
 The hourly supervisor and every CEO start team chats on Copilot Fusion and replace a non-Fusion chat at its next idle point.
 Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
-session. The outgoing CEO writes no handover: every decision and promise is already on its issue, and
+session. Before each `create_session`, re-list and verify the role is still missing; after each create, re-list
+and confirm exactly one chat exists. Preserve the restart prompt's `spawn-id` for the create request; if duplicates
+appear, stop creating for that role and report it to the CTO.
+`team-supervisor` detects multiple active chats for a role and will not wake that role's headless worker.
+The outgoing CEO writes no handover: every decision and promise is already on its issue, and
 scheduled reads are `Next read <time>` comments. If workers still sit inside an earlier CEO's session, the
 owner closes it first and the new CEO then starts their independent replacements (worktrees survive). A
 running chat reads no chat messages (steers stay "processing"; queued ones wait for the turn to end), so
