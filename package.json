@@ -40,6 +40,7 @@
     "test:workspace-ux": "node --env-file-if-exists=.env.local scripts/check-workspace-ux.mjs",
     "test:scroll-layout": "node scripts/check-scroll-layout.mjs",
     "test:settings-cls": "node scripts/check-settings-cls.mjs",
+    "test:review-controls": "node scripts/check-review-controls.mjs",
     "eval:creative": "node scripts/eval-creative.mjs",
     "eval:create": "tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/eval-create.ts",
     "smoke:core": "node scripts/smoke-core.mjs",
