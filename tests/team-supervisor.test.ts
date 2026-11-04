@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad, plist, awakePlist } from "../scripts/team-supervisor.mjs";
+import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad, plist, awakePlist, WORKER_ROLES } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -112,8 +112,28 @@ describe("team-supervisor (#573 A1)", () => {
     // Fusion chats ran the waiter async, stopped it and ended their turns (Nov 4); spell out the tool-level loop.
     expect(text).toMatch(/mode "sync" with initial_wait 600/);
     expect(text).toMatch(/Never stop_bash the waiter/);
-    expect(text).toMatch(/Never use ask_user/);
+    expect(text).not.toContain("Never use ask_user:");
     expect(() => restartPrompt("nobody")).toThrow();
+  });
+
+  it("routes routine role questions through the CEO without interrupting other work", () => {
+    expect(WORKER_ROLES.length).toBeGreaterThan(0);
+    for (const role of WORKER_ROLES) {
+      const text = restartPrompt(role);
+      expect(text).toMatch(/do not use ask_user for routine questions/i);
+      expect(text).toContain('post "→ CEO:"');
+      expect(text).toContain("continue other actionable work");
+      expect(text).toContain("mandatory confirmations and prompts still apply");
+      expect(text).not.toContain("Never use ask_user:");
+    }
+  });
+
+  it("replaces an unreachable ended-turn chat only after checking for an active writer", () => {
+    const text = restartPrompt("ceo");
+    expect(text).toContain("Unknown chat owner");
+    expect(text).toContain("replace the unreachable chat");
+    expect(text).toContain("after confirming no active writer");
+    expect(text).not.toContain("a queued one lands only when the turn ends");
   });
 
   it("gives a rotated-in CEO a succession prompt that respawns workers outside its own session (#2476)", () => {
