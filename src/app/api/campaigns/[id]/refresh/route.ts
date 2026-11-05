@@ -2,7 +2,8 @@ import { observeRoute } from "@/lib/observability/logger";
 import { ownerError } from "@/i18n/request-locale";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
+import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
+import { refreshAdAssetResults } from "@/lib/campaign/asset-results-store";
 import { CampaignGoneError, friendlyMetaError, type AdResult, type AdReview } from "@/lib/meta/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/audit";
@@ -132,7 +133,7 @@ async function handlePOST(
     return NextResponse.json({ error: await ownerError("resultsNotSaved"), protectionConfirmed: false }, { status: 503 });
   }
 
-  if (ads) await saveAdResults(createAdminClient() as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: id, ads }).catch(() => false);
+  if (ads) await refreshAdAssetResults(createAdminClient() as unknown as SupabaseClient, { businessId: campaign.business_id, campaign, ads });
   // #1903: paused or budget changed in Meta Ads Manager; the card shows it from the updated row.
   const { metaState, ...readInsights } = insights;
   const outside = await saveOutsideChanges({ businessId: campaign.business_id, userId: user.id }, campaign, metaState)

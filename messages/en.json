@@ -226,6 +226,12 @@
         "ask_meta_review": "Ask Meta to review again"
       }
     },
+    "assets": {
+      "unread": "No results yet",
+      "unknown": "Results not linked yet",
+      "unavailable": "Results couldn't be loaded. Try reloading this page.",
+      "unmatched": "Some ad results couldn't be linked to a photo or saved ad."
+    },
     "ads": {
       "title": "Which ad worked",
       "ad": "Ad",

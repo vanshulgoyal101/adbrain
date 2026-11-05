@@ -15,6 +15,8 @@ import { isProspectSession } from "@/lib/prospect-session";
 import { hasCurrentMediaConsent } from "@/lib/media/consent";
 import { listMedia, mediaUploadsEnabled, mediaVideoEnabled } from "@/lib/media/store";
 import { createClient } from "@/lib/supabase/server";
+import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
+import { readAssetResults } from "@/lib/campaign/asset-results-store";
 import { mediaTranslator } from "@/i18n/words";
 import { requestWords } from "@/i18n/request-locale";
 
@@ -50,6 +52,11 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
     getBrandAssets(business.id),
     isProspectSession(),
   ]);
+  const showResults = adResultsEnabled() && !sample;
+  const [results, resultWords] = showResults ? await Promise.all([
+    createClient().then(client => readAssetResults(client, business.id)),
+    requestWords("verdict"),
+  ]) : [undefined, undefined];
 
   // #778 slice 3a: with uploads on, the page is the owner's photo library; a failed read shows the empty state.
   if (mediaUploadsEnabled()) {
@@ -68,7 +75,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
         {params.confirm === "rights" && !consented && <MediaRightsConfirm words={words} businessId={business.id} vertical={business.vertical ?? null} />}
         <div className="mt-6">
           <MediaLibrary words={words} business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
-            brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} videoEnabled={videoEnabled} />
+            brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} videoEnabled={videoEnabled} results={results} resultWords={resultWords} />
         </div>
       </div>
     );
@@ -88,7 +95,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
       />
       {confirmRights && <MediaRightsConfirm words={confirmWords} businessId={business.id} vertical={business.vertical ?? null} />}
       <div className="mt-6">
-        <AssetsLibrary creatives={creatives} brandAssets={brandAssets} sample={sample} />
+        <AssetsLibrary creatives={creatives} brandAssets={brandAssets} sample={sample} results={results} words={resultWords} />
       </div>
     </div>
   );

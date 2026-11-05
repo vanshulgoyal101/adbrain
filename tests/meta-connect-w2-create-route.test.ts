@@ -191,7 +191,7 @@ vi.mock("@/lib/supabase/server", () => ({
         };
       }
       if (table === "creatives") {
-        const creativeData = { data: [{ id: creativeId, business_id: businessId, status: "approved", image_url: "https://example.com/ad.png", headline: "Headline", primary_text: "Message", cta: "Learn More", generation: { concept: { description: mocks.description } }, media_asset_id: mocks.mediaAssetId }], error: null };
+        const creativeData = { data: [{ id: creativeId, business_id: businessId, status: "approved", image_url: "https://example.com/ad.png", headline: "Headline", primary_text: "Message", cta: "Learn More", generation: { concept: { description: mocks.description } }, media_asset_id: mocks.mediaAssetId, updated_at: "2026-11-03T10:00:00.123456+00:00" }], error: null };
         mocks.creativeReads++;
         if (mocks.changeCreativeBeforeExecution && mocks.creativeReads > 1) creativeData.data[0].primary_text = "Unreviewed copy";
         type CreativeResult = { data: typeof creativeData.data; error: null };

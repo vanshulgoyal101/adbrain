@@ -129,6 +129,16 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   Meta's name. A capped run lists its running copies; an earlier copy shows only if it delivered, marked
   "(earlier run)". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
   more than 3 sit behind "All ads". Refreshes store the numbers (`ad_results`).
+  #789: Assets/Photos tiles also show lifetime results and cost per chat, enquiry or website visit,
+  separately by outcome, with the oldest contributing refresh time. No results yet, zero results,
+  no delivery and unavailable reads are distinct; these badges never declare a winner. New launches
+  bind ads to the reviewed creative and its immutable launch-snapshot photo using checkpoint indices.
+  Refresh backfills only an exact stored launch layout; v3 snapshots supply media identity, never
+  a creative's current photo. Missing snapshots stay unattributed (also avoiding a pending-launch race);
+  legacy snapshots can link the creative, but not a guessed photo. Existing bindings are never replaced.
+  Owner-RLS, business-scoped lifetime reads pool shared photos across ads/campaigns without double-counting;
+  unmatched rows are disclosed. The same results flag gates both libraries, independently of uploads;
+  prospect sample libraries keep results hidden. The media migration must be applied before enabling.
   #1045: with at least 5 enquiries across the campaign, a running ad that costs ≥ 2× the best ad per enquiry
   (or spent ≥ 2× the campaign's cost per enquiry with none) gets one line: "“B” costs ₹X per enquiry vs ₹Y
   for “A”. Pause it?" [Pause this ad] [Keep]. Pause turns off only that ad (read back from Meta) and can be
