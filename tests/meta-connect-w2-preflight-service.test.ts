@@ -100,19 +100,30 @@ describe("campaign preflight orchestration", () => {
     const result = await prepareCampaignReview(loaders({
       findDraft: async () => ({ ...draft, input: { ...draft.input, destination: "whatsapp" } }),
       findForm: async () => { throw new Error("WhatsApp must not load forms"); },
-      findWhatsAppNumber: async () => "+919876543210",
+      findWhatsAppNumber: async () => ({ number: "+919876543210", source: "page" }),
     }), { actor, draftId: draft.id, requestedDraftVersion: 2, now: "2026-09-07T10:00:00.000Z" });
     expect(result).toMatchObject({ kind: "review", review: { canCreatePaused: true, planHash: "a".repeat(64), destination: "whatsapp", whatsappNumber: "+919876543210" } });
   });
 
   it("verifies the draft's own WhatsApp button number when one is chosen (#157)", async () => {
-    const find = vi.fn(async (_actor: unknown, requested?: string) => requested ?? null);
+    const find = vi.fn(async (_actor: unknown, requested?: string) => requested ? { number: requested, source: "business" as const } : null);
     const result = await prepareCampaignReview(loaders({
       findDraft: async () => ({ ...draft, input: { ...draft.input, destination: "whatsapp", whatsappNumber: "+919999994842" } }),
       findWhatsAppNumber: find,
     }), { actor, draftId: draft.id, requestedDraftVersion: 2, now: "2026-09-07T10:00:00.000Z" });
-    expect(find).toHaveBeenCalledWith(actor, "+919999994842");
-    expect(result).toMatchObject({ kind: "review", review: { canCreatePaused: true, whatsappNumber: "+919999994842" } });
+    expect(find).toHaveBeenCalledWith(actor, "+919999994842", undefined, undefined);
+    expect(result).toMatchObject({ kind: "review", review: { canCreatePaused: true, whatsappNumber: "+919999994842", whatsappNumberSource: "business" } });
+  });
+
+  it("passes the explicitly selected WhatsApp source to the real review loader", async () => {
+    const find = vi.fn(async () => ({ number: "+919876543210", source: "page" as const }));
+    await prepareCampaignReview(loaders({
+      findDraft: async () => ({ ...draft, input: {
+        ...draft.input, destination: "whatsapp", whatsappNumber: "+91 ••••• 3210", whatsappNumberSource: "page", whatsappNumberChoiceId: "a".repeat(64),
+      } }),
+      findWhatsAppNumber: find,
+    }), { actor, draftId: draft.id, requestedDraftVersion: 2, now: "2026-09-07T10:00:00.000Z" });
+    expect(find).toHaveBeenCalledWith(actor, "+91 ••••• 3210", "page", "a".repeat(64));
   });
 
   it("loads exact owned inputs and returns a reviewed plan", async () => {

@@ -22,6 +22,7 @@ const FIXES: Record<ReviewBlockerReason, Fix<ReviewFix>> = {
   REVIEW_CREATIVES: { kind: "field", targets: ["campaign-ad-picker"] },
   // #847: linking lives in Settings' WhatsApp card (steps + Check again), not on Your business.
   REVIEW_WHATSAPP_NOT_LINKED: { kind: "page", href: "/settings#whatsapp-status-title" },
+  REVIEW_WHATSAPP_CHOOSE: { kind: "field", targets: ["whatsapp-number"] },
   REVIEW_NO_LEAD_FORM: { kind: "field", targets: ["leadform"] },
   REVIEW_NO_WEBSITE: { kind: "page", href: "/brand" },
   REVIEW_WEBSITE_UNREACHABLE: { kind: "page", href: "/brand" },

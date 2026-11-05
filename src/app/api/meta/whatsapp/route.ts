@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { observeRoute } from "@/lib/observability/logger";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
-import { isThrottleCode, MetaError } from "@/lib/meta/client";
-import { readWhatsAppStatus } from "@/lib/meta/whatsapp-status";
+import { isWhatsAppThrottleError, readWhatsAppStatus } from "@/lib/meta/whatsapp-status";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
@@ -21,8 +20,7 @@ export const GET = observeRoute("/api/meta/whatsapp", "GET", async (request: Req
     if (error instanceof ConnectionAccessError && (error.code === "UNAUTHENTICATED" || error.code === "NOT_FOUND" || error.code === "FORBIDDEN")) {
       return NextResponse.json({ error: error.message }, { status: error.code === "UNAUTHENTICATED" ? 401 : 404 });
     }
-    // #2841: Meta throttling (e.g. 80008 on the WhatsApp Business account) is "busy, retry", not a broken link; Go live shows the busy message.
-    if (error instanceof MetaError && isThrottleCode(error.code)) return NextResponse.json({ state: "busy" }, { status: 429, headers: { "Cache-Control": "no-store" } });
-    return NextResponse.json({ state: "unavailable" }, { headers: { "Cache-Control": "no-store" } });
+    if (isWhatsAppThrottleError(error)) return NextResponse.json({ state: "busy" }, { status: 429, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ state: "unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 });

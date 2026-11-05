@@ -4,8 +4,9 @@ import { activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@
 import { createCampaignRequestSchema, type CreateCampaignRequest, type DraftInput, type OperationDTO } from "@/lib/campaign/connect-contracts";
 import { campaignNameDate, defaultCampaignName } from "@/lib/campaign/draft-name";
 import { defaultTargeting, targetingFromEditor } from "@/lib/campaign/editor-targeting";
-import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
+import { buildManualDraftInput } from "@/lib/campaign/manual-draft-input";
 import { parseWhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
+import type { WhatsAppNumberSource } from "@/lib/meta/whatsapp-status-shared";
 import type { MetaConnectClient } from "@/lib/meta-connect-ui/client";
 import { buildActivationPatch, buildCreateCampaignRequest, isTerminalOperation } from "@/lib/meta-connect-ui/campaign-flow";
 import type { Campaign } from "@/lib/types";
@@ -14,10 +15,11 @@ import type { Campaign } from "@/lib/types";
  * #1529: Go live's draft: the composer's defaults (WhatsApp, default targeting, no A/B, the saved or AdBrain's
  * message). Step 3 previews its welcome from this same draft, so what it shows is what launches.
  */
-export function setupDraftInput(input: { businessId: string; name: string; adIds: string[]; dailyBudgetRupees: number; whatsappNumber: string }): DraftInput {
+export function setupDraftInput(input: { businessId: string; name: string; adIds: string[]; dailyBudgetRupees: number; whatsappNumber: string; whatsappNumberSource?: WhatsAppNumberSource; whatsappNumberChoiceId?: string }): DraftInput {
   return buildManualDraftInput({
     businessId: input.businessId, name: input.name, goal: input.name, mode: "manual", creativeIds: input.adIds,
     dailyBudgetRupees: input.dailyBudgetRupees, destination: "whatsapp", leadFormId: "", whatsappNumber: input.whatsappNumber,
+    whatsappNumberSource: input.whatsappNumberSource, whatsappNumberChoiceId: input.whatsappNumberChoiceId,
     whatsappLanguage: "ad", whatsappMessage: null, targeting: targetingFromEditor(defaultTargeting, [], []), abTest: false,
   });
 }
@@ -78,6 +80,7 @@ const errorText = (reason: unknown, fallback: string) => reason instanceof Error
 export const GO_LIVE_STALE = "This campaign changed after it was checked. Nothing was spent. Tap Go live again.";
 export const GO_LIVE_META_BUSY = "Meta is busy. Nothing was spent. Try again in a minute.";
 export const GO_LIVE_WHATSAPP_UNREADABLE = "Couldn't check your WhatsApp number with Meta. Nothing was spent. Try again.";
+export const GO_LIVE_WHATSAPP_CHOOSE = "Choose your WhatsApp number in Campaigns. Nothing was spent.";
 const isConflict = (reason: unknown) => typeof reason === "object" && reason !== null && (reason as { code?: unknown }).code === "CONFLICT";
 
 async function sha256Hex(payload: string): Promise<string> {
@@ -127,13 +130,18 @@ export async function goLive(deps: GoLiveDeps, input: GoLiveInput, onStep: (step
         .catch(() => parseWhatsAppStatus(null));
       if (whatsapp.state === "busy") return { kind: "failed", message: GO_LIVE_META_BUSY };
       if (whatsapp.state === "unavailable") return { kind: "failed", message: GO_LIVE_WHATSAPP_UNREADABLE };
+      if (whatsapp.state === "ready" && whatsapp.businessUnavailable) return { kind: "failed", message: GO_LIVE_WHATSAPP_UNREADABLE };
+      const choice = whatsapp.state === "ready" ? whatsapp.numbers[0] : undefined;
+      if (choice && whatsapp.state === "ready" && whatsapp.numbers.filter((number) => number.masked === choice.masked).length > 1) {
+        return { kind: "failed", message: GO_LIVE_WHATSAPP_CHOOSE };
+      }
       const name = defaultCampaignName({
         headline: input.ads[0]?.headline, businessName: input.businessName, destination: "whatsapp",
         date: campaignNameDate(deps.now?.() ?? new Date()),
       });
       let draftInput = setupDraftInput({
         businessId: input.businessId, name, adIds: input.ads.map((ad) => ad.id), dailyBudgetRupees: input.dailyBudgetRupees,
-        whatsappNumber: pickWhatsAppNumber(whatsapp.state === "ready" ? whatsapp.numbers : [], ""),
+        whatsappNumber: choice?.masked ?? "", whatsappNumberSource: choice?.source, whatsappNumberChoiceId: choice?.choiceId,
       });
       // #2257: Review blocks the default AI age and missing audience, so plan them first, as the composer's Prepare does.
       if (needsAudiencePlan(draftInput)) {

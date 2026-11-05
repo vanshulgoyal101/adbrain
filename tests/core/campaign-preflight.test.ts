@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { runPreflight } from "@/lib/campaign/preflight";
 import { REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
 
@@ -19,7 +20,7 @@ const draft = {
 };
 
 function review(website: string | null | undefined, destination: "instant_form" | "whatsapp" = "instant_form",
-  extra: { storyReady?: boolean; costPerResultRupees?: number | null; dailyBudgetRupees?: number } = {}) {
+  extra: { storyReady?: boolean; costPerResultRupees?: number | null; dailyBudgetRupees?: number; whatsappNumberSource?: "page" | "business"; realHash?: boolean } = {}) {
   return runPreflight({
     draft: { ...draft, destination, ...(extra.dailyBudgetRupees ? { dailyBudgetRupees: extra.dailyBudgetRupees } : {}) },
     draftId: "90d1d2bb-466c-4889-9af2-edb533e82531",
@@ -32,9 +33,10 @@ function review(website: string | null | undefined, destination: "instant_form" 
     costPerResultRupees: extra.costPerResultRupees,
     form: { id: "1732372914636573", businessId, active: true },
     whatsappNumber: "+919876543210",
+    whatsappNumberSource: extra.whatsappNumberSource,
     website,
     geo: { resolvedAreaLabel: "Austin, Texas", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "6840321905207", name: "Wellness" }] },
-    hash: () => "a".repeat(64),
+    hash: extra.realHash ? (payload) => createHash("sha256").update(payload).digest("hex") : () => "a".repeat(64),
   });
 }
 
@@ -66,6 +68,15 @@ describe("core: launch preflight", () => {
 
   it("does not require a website for WhatsApp campaigns", () => {
     expect(review(null, "whatsapp").canCreatePaused).toBe(true);
+  });
+
+  it("hashes the resolved WhatsApp source so a Page-to-business change invalidates Review", () => {
+    const page = review(null, "whatsapp", { whatsappNumberSource: "page", realHash: true });
+    const business = review(null, "whatsapp", { whatsappNumberSource: "business", realHash: true });
+    expect(page.whatsappNumber).toBe(business.whatsappNumber);
+    expect(page.whatsappNumberSource).toBe("page");
+    expect(business.whatsappNumberSource).toBe("business");
+    expect(page.planHash).not.toBe(business.planHash);
   });
 
   // #419 item 2(b), CTO Oct 25: warnings on Review, never a blocker or a change to the reviewed plan.

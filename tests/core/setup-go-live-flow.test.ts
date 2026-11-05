@@ -50,6 +50,7 @@ const recordedNumber = (() => {
   return accounts.data[0].phone_numbers.data[0].display_phone_number.replace(/\s/g, "");
 })();
 const MASKED = maskWhatsAppNumber(recordedNumber);
+const CHOICE_ID = "a".repeat(64);
 const recordedPlan: Record<string, unknown> = { ...groqAudience.plan };
 delete recordedPlan.radius_km;
 
@@ -131,7 +132,7 @@ async function api(options: Options = {}) {
       case "GET /api/meta/whatsapp":
         if (options.whatsapp === "throw") throw new TypeError("network");
         if (options.whatsapp) return Response.json(options.whatsapp.body, { status: options.whatsapp.status });
-        return Response.json({ state: "ready", numbers: [{ masked: MASKED, source: "business" }] });
+        return Response.json({ state: "ready", numbers: [{ masked: MASKED, source: "business", choiceId: CHOICE_ID }] });
       case "POST /api/campaign-drafts":
         draftInput = body;
         return ok({ draftId: DRAFT, version: 1, expiresAt: "2099-01-01T00:00:00.000Z", input: body });
@@ -207,7 +208,7 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(draft()).toEqual({
       businessId: BUSINESS, name: "Diwali Renewal, Starting With Your Spine · WhatsApp · Oct 28", goal: "Diwali Renewal, Starting With Your Spine · WhatsApp · Oct 28",
       mode: "manual", creativeIds: ADS.map((ad) => ad.id), dailyBudgetRupees: DAILY, leadFormId: null, destination: "whatsapp",
-      whatsappNumber: MASKED, targeting: expect.any(Object), abTest: false,
+      whatsappNumber: MASKED, whatsappNumberSource: "business", whatsappNumberChoiceId: CHOICE_ID, targeting: expect.any(Object), abTest: false,
     });
     // #2257: Review passes only with the planned age range and audience, never the default AI age and no audience.
     expect(plans()).toBe(1);
@@ -321,11 +322,18 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(draft()?.whatsappNumber || "").toBe("");
   });
 
-  it("'ready' with an empty number list also proceeds with no number (#2841)", async () => {
+  it("a malformed 'ready' answer with no numbers stops before saving (#2841)", async () => {
     const { deps, calls, draft } = await api({ whatsapp: { status: 200, body: { state: "ready", numbers: [] } } });
-    await goLive(deps, input);
-    expect(calls).toContain("POST /api/campaign-drafts");
-    expect(draft()?.whatsappNumber || "").toBe("");
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: GO_LIVE_WHATSAPP_UNREADABLE });
+    expect(calls).not.toContain("POST /api/campaign-drafts");
+    expect(draft()).toBeNull();
+  });
+
+  it("a 'ready' answer with indistinguishable business choices stops before saving", async () => {
+    const choice = { masked: MASKED, source: "business", choiceId: CHOICE_ID };
+    const { deps, calls } = await api({ whatsapp: { status: 200, body: { state: "ready", numbers: [choice, choice] } } });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: GO_LIVE_WHATSAPP_UNREADABLE });
+    expect(calls).not.toContain("POST /api/campaign-drafts");
   });
 
   it("a 429 'busy' answer from the route (Meta 80008) stops with the busy message and saves nothing (#2841)", async () => {

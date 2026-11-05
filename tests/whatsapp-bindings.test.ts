@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
+import { boundWhatsAppNumbers, whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
 import type { MetaClient } from "@/lib/meta/client";
 
 const db = vi.hoisted(() => ({ bound: [] as string[], sources: {} as Record<string, string>, managed: false, upserts: [] as unknown[] }));
@@ -17,27 +17,34 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 const page = "+919999991111", own = "+919999990874", other = "+919999994842";
-// The client's own rule: the Page's number, or a requested number that is in `bound` and on the ad account business's WABAs.
+// The client's candidate is still subject to the bindings enforced by whatsappNumberForBusiness.
 const meta = {
-  getWhatsAppNumber: async (requested: string | null, bound: readonly string[] = []) => {
-    if (!requested || requested === page) return page;
-    return [own, other].includes(requested) && bound.includes(requested) ? requested : null;
+  resolveWhatsAppNumberCandidate: async (requested: string | null) => {
+    if (!requested || requested === page) return { number: page, source: "page" };
+    return [own, other].includes(requested) ? { number: requested, source: "business" } : null;
   },
-  whatsappNumbers: async () => ({ page, business: [own, other] }),
 } as unknown as MetaClient;
 
-beforeEach(() => { db.bound = []; db.sources = {}; db.managed = false; db.upserts = []; });
+beforeEach(() => { vi.restoreAllMocks(); db.bound = []; db.sources = {}; db.managed = false; db.upserts = []; });
 
 describe("WhatsApp number bindings (#253)", () => {
   it("passes the Page's own number and already-bound numbers without writing", async () => {
-    expect(await whatsappNumberForBusiness("b", meta, page)).toBe(page);
+    expect(await whatsappNumberForBusiness("b", meta, page)).toEqual({ number: page, source: "page" });
     db.bound = [own];
-    expect(await whatsappNumberForBusiness("b", meta, own)).toBe(own);
+    expect(await whatsappNumberForBusiness("b", meta, own)).toEqual({ number: own, source: "business" });
+    expect(db.upserts).toEqual([]);
+  });
+
+  it("resolves the selected source once without binding the Page's number", async () => {
+    const resolve = vi.spyOn(meta, "resolveWhatsAppNumberCandidate");
+    expect(await whatsappNumberForBusiness("b", meta, page, "page")).toEqual({ number: page, source: "page" });
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(resolve).toHaveBeenCalledWith(page, "page");
     expect(db.upserts).toEqual([]);
   });
 
   it("binds the owner's chosen number from their own Meta business on first use", async () => {
-    expect(await whatsappNumberForBusiness("b", meta, own)).toBe(own);
+    expect(await whatsappNumberForBusiness("b", meta, own)).toEqual({ number: own, source: "business" });
     expect(db.upserts).toEqual([{ business_id: "b", phone_e164: own, source: "owner_pick" }]);
   });
 
@@ -47,12 +54,20 @@ describe("WhatsApp number bindings (#253)", () => {
     expect(db.upserts).toEqual([]);
   });
 
-  it("makes a managed business ignore a number it once picked on its own connection; a Page-linked one still counts (#524)", async () => {
+  it("only lets an embedded-signup binding authorize a managed business number, not an old owner pick or Page link", async () => {
     db.managed = true;
-    db.bound = [own, other];
-    db.sources = { [other]: "page_link" };
+    db.bound = [own, other, page];
+    db.sources = { [other]: "page_link", [page]: "embedded_signup" };
     expect(await whatsappNumberForBusiness("b", meta, own)).toBeNull();
-    expect(await whatsappNumberForBusiness("b", meta, other)).toBe(other);
+    expect(await whatsappNumberForBusiness("b", meta, other)).toBeNull();
+    expect(await boundWhatsAppNumbers("b")).toEqual([page]);
+    expect(db.upserts).toEqual([]);
+  });
+
+  it("requires a fresh selection for a legacy masked number before making Meta or binding calls", async () => {
+    const resolve = vi.spyOn(meta, "resolveWhatsAppNumberCandidate");
+    expect(await whatsappNumberForBusiness("b", meta, "+91 ••••• 0874", "business")).toBeNull();
+    expect(resolve).not.toHaveBeenCalled();
     expect(db.upserts).toEqual([]);
   });
 

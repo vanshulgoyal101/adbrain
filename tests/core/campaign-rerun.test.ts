@@ -34,6 +34,13 @@ describe("core: Run this again (#1050)", () => {
     expect(rerunPrefill({ campaign, draft: { ...draft, name: "x".repeat(120) }, approvedIds: [A], bestCreativeId: null })).toMatchObject({ name: expect.stringMatching(/^x{112} \(again\)$/) });
   });
 
+  it("preserves the selected WhatsApp identity when copying a draft", () => {
+    const chosen: DraftInput = { ...draft, whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "business", whatsappNumberChoiceId: "a".repeat(64) };
+    expect(rerunPrefill({ campaign, draft: chosen, approvedIds: [A], bestCreativeId: null })).toMatchObject({
+      whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "business", whatsappNumberChoiceId: "a".repeat(64),
+    });
+  });
+
   it("starts the next run with the Call now button off, keeping the rest of the message (#1174)", () => {
     // CEO on #1174: runs with Call on got 3.8% chats, with it off 8.2%; a copy is the next run, never the live one.
     const withCall: DraftInput = { ...draft, whatsappMessage: { greeting: "Namaste!", opening: { kind: "prefill", prefill: "Free site survey", callButton: true }, language: "hinglish" } };

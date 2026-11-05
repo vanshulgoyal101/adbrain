@@ -433,11 +433,24 @@ describe("guided planner route", () => {
     expect(mocks.inserted).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842" }) }));
   });
 
-  it("ignores a WhatsApp number on an instant-form plan and rejects a full number", async () => {
+  it("preserves the reviewed WhatsApp identity and a restored full number in a guided draft", async () => {
+    const proposed = await mocks.runPlanner();
+    mocks.runPlanner.mockResolvedValueOnce({ ...proposed, plan: { ...proposed.plan, destination: "whatsapp", lead_form_id: null } });
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const choice = { whatsappNumber: "+919876544842", whatsappNumberSource: "business", whatsappNumberChoiceId: "a".repeat(64) };
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", {
+      method: "POST", body: JSON.stringify({ goal: "Get chats", destination: "whatsapp", ...choice }),
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.inserted).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining(choice) }));
+  });
+
+  it("ignores a WhatsApp number on an instant-form plan and accepts a restored full number", async () => {
     const { POST } = await import("@/app/api/campaigns/plan/route");
     await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Get leads", destination: "instant_form", whatsappNumber: "+91 ••••• 4842" }) }));
     expect(mocks.inserted).toHaveBeenCalledWith(expect.objectContaining({ input: expect.not.objectContaining({ whatsappNumber: expect.anything() }) }));
     const full = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Get chats", destination: "whatsapp", whatsappNumber: "+919876544842" }) }));
-    expect(full.status).toBe(400);
+    expect(full.status).toBe(200);
+    expect(mocks.inserted).toHaveBeenLastCalledWith(expect.objectContaining({ input: expect.objectContaining({ whatsappNumber: "+919876544842" }) }));
   });
 });
