@@ -2565,7 +2565,9 @@ function BusinessCampaigns({
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? tc("card.updating") : tc("card.updated", { age: ageText(verdictTranslator(verdictWords), r.fetched_at) })}</p>
                     )}
                     {r && mounted && c.meta_campaign_id && throttleActive(metaWaitUntil) && <p className="text-xs text-slate-600">{resultsWaitLine(Date.now() - new Date(r.fetched_at).getTime())}</p>}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} destination={outcome} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} destination={outcome}
+                      websiteGoal={outcome === "website" && (c.objective === "leads" || c.objective === "sales") ? c.objective : undefined}
+                      words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && ((r.booked ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       // #798: what a real customer cost, beside the per-enquiry figures. #1994: bookings, the step before, come first.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label={tc("card.customersLabel")}>
@@ -2641,7 +2643,7 @@ function BusinessCampaigns({
   );
 }
 
-/** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */
+/** A launched campaign's results and cost, with supporting figures under Details. */
 function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd, perAd, onWeakAd, metaMessage = null, words }: {
   campaign: Campaign; result: CampaignResult; outcome: ReturnType<typeof campaignDestination>; comparison: Comparison | null;
   /** #1841: Meta's own words for a rejected ad, in the card's one Details. */
@@ -2651,17 +2653,22 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void; words?: Words<"verdict">;
 }) {
   const [now] = useState(() => Date.now());
-  const enough = cardResultCount(outcome, r) >= BEST_AD_MIN_RESULTS;
-  const shown = cardFigures(outcome, r);
+  const enough = cardResultCount(outcome, r, campaign.objective) >= BEST_AD_MIN_RESULTS;
+  const shown = cardFigures(outcome, r, campaign.objective);
   const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
   const t = verdictTranslator(words);
+  const figureColumns = outcome !== "website" ? "sm:grid-cols-4"
+    : shown.returnOnSpend !== undefined ? "sm:grid-cols-7"
+      : shown.conversionValue !== undefined ? "sm:grid-cols-6" : "sm:grid-cols-5";
   const figures = <>
-    <div className={`grid grid-cols-2 gap-3 ${outcome === "website" ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+    <div className={`grid grid-cols-2 gap-3 ${figureColumns}`}>
       <Stat label={t("figures.impressions")} value={formatNumber(r.impressions)} />
       <Stat label={t(outcome === "website" ? "figures.linkClicks" : "figures.clicks")} value={shown.linkClicks ?? formatNumber(r.clicks)} />
       {shown.cpc !== undefined && <Stat label={t("figures.cpc")} value={shown.cpc} />}
       <Stat label={t(shown.label)} value={shown.value} />
       <Stat label={t(shown.costLabel)} value={shown.cost} />
+      {shown.conversionValue !== undefined && <Stat label={t("figures.conversionValue")} value={shown.conversionValue} />}
+      {shown.returnOnSpend !== undefined && <Stat label={t("figures.returnOnSpend")} value={`${shown.returnOnSpend.toFixed(2)}x`} />}
     </div>
     {outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
       // #493: people reach WhatsApp and leave; show the drop-off plainly.
@@ -2677,7 +2684,7 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   useEffect(() => { onWeakAd(campaign.id, weakShown); }, [campaign.id, weakShown, onWeakAd]);
   // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
   if (!input || !judged || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
-  return <CampaignVerdict verdict={judged} words={words} destination={input.destination} results={input.results} spend={input.spend}
+  return <CampaignVerdict verdict={judged} words={words} destination={input.destination} websiteGoal={input.websiteGoal} results={input.results} spend={input.spend}
     details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
-    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} destination={input.destination} onKeep={clearWeakAd} words={words} />} />;
+    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} destination={input.destination} websiteGoal={input.websiteGoal} onKeep={clearWeakAd} words={words} />} />;
 }

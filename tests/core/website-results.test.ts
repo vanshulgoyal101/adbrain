@@ -84,6 +84,12 @@ describe("core: website verdict says visits (#2601)", () => {
     expect(v({ destination: "whatsapp", results: 0, spend: 400, opens: 12 })).toMatchObject({ label: "No chats yet", sentence: "₹400 spent, no chats yet. 12 taps on the WhatsApp button.", action: "edit_message" });
     expect(v({ destination: "instant_form", results: 0, spend: 400 })).toMatchObject({ label: "No enquiries yet", sentence: "₹400 spent, no enquiries yet.", action: null });
   });
+
+  it("uses the website sales result noun rather than calling purchases visits", () => {
+    expect(verdict({ ...base, websiteGoal: "sales", results: 3, spend: 30 })).toMatchObject({
+      sentence: "3 website purchases so far. AdBrain will tell you if it's working after 5.",
+    });
+  });
 });
 
 describe("core: website card, ledger, evidence and rerun (#2601)", () => {
@@ -95,11 +101,34 @@ describe("core: website card, ledger, evidence and rerun (#2601)", () => {
       .toMatchObject({ destination: "website", results: 55, spend: 412.5, opens: null });
   });
 
+  it("the card's sales verdict uses conversions instead of visits", () => {
+    const sales = { ...campaign, objective: "sales" };
+    const salesResult = { ...result, spend: 1200, landing_page_views: 84, conversions: 3, conversion_value: 4497 };
+    expect(cardVerdictInput(sales as never, salesResult as never, { now: NOW, waiting: 0, weakAd: null, comparison: null }))
+      .toMatchObject({ destination: "website", websiteGoal: "sales", results: 3, spend: 1200 });
+  });
+
+  it("does not turn unavailable website conversions into a zero-result verdict", () => {
+    const sales = { ...campaign, objective: "sales" };
+    const salesResult = { ...result, spend: 1200, landing_page_views: 84, conversions: null };
+    expect(cardVerdictInput(sales as never, salesResult as never, { now: NOW, waiting: 0, weakAd: null, comparison: null })).toBeNull();
+  });
+
   it("compares with the owner's last website campaign only", () => {
     const older = { ...campaign, id: "c1", created_at: "2026-10-01T00:00:00Z" };
     const chats = { ...campaign, id: "c0", created_at: "2026-10-20T00:00:00Z", destination: "whatsapp" };
     const results = { c2: result, c1: { ...result, spend: 100, landing_page_views: 20 }, c0: { ...result, destination: "whatsapp", conversations: 5, spend: 500 } };
     expect(lastCampaignComparison(campaign as never, [campaign, older, chats] as never, results as never)).toEqual({ kind: "own", results: 20, typical: 5 });
+  });
+
+  it("never compares sales with a previous website leads campaign", () => {
+    const sales = { ...campaign, objective: "sales" };
+    const previousLeads = { ...campaign, id: "c1", created_at: "2026-10-01T00:00:00Z", objective: "leads" };
+    const salesResults = {
+      c2: { ...result, conversions: 3, spend: 1200 },
+      c1: { ...result, conversions: 20, spend: 200 },
+    };
+    expect(lastCampaignComparison(sales as never, [sales, previousLeads] as never, salesResults as never)).toBeNull();
   });
 
   it("the ledger pools website runs by visits, apart from chats and leads", () => {
@@ -173,5 +202,12 @@ describe("core: website card, ledger, evidence and rerun (#2601)", () => {
     expect(text).toContain("55 website visits");
     expect(text).toContain("₹7.50 per visit");
     expect(text).not.toMatch(/enquir/);
+  });
+
+  it("does not summarize unavailable website conversions as a real zero", () => {
+    const text = campaignWhatsAppSummary({ name: "Site", status: "active", daily_budget: 300, objective: "sales", destination: "website", raw: {} },
+      { spend: 412.5, leads: 0, conversations: null, landing_page_views: 55, conversions: null, destination: "website", cpl: null } as unknown as CampaignResult);
+    expect(text).toContain("Conversion results unavailable");
+    expect(text).not.toContain("No website purchases yet");
   });
 });

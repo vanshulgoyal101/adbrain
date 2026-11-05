@@ -322,6 +322,7 @@ describe("core: the client asks for action_values only for a conversion goal (#2
   });
 
   it.each([
+    ["no historical ad sets", { data: [] }],
     ["a missing event", { data: [{ id: "120000000000209", destination_type: "WEBSITE", promoted_object: { page_id: creds.pageId } }] }],
     ["another Page", { data: [{ id: "120000000000209", destination_type: "WEBSITE", promoted_object: { page_id: "other-page", custom_event_type: "PURCHASE" } }] }],
     ["an incomplete page", { data: [], paging: { next: "more" } }],
@@ -332,6 +333,13 @@ describe("core: the client asks for action_values only for a conversion goal (#2
     expect(campaign).toMatchObject({ conversionsUnavailable: true, spend: 1200, landingPageViews: 84 });
     expect(campaign).not.toHaveProperty("conversions");
     expect(campaign).not.toHaveProperty("conversionGoal");
+    const ads = await new MetaClient(creds).getAdResults(CAMPAIGN);
+    expect(ads).toHaveLength(2);
+    expect(ads[0]).toMatchObject({ conversionsUnavailable: true, spend: 800, landingPageViews: 60 });
+    for (const ad of ads) {
+      expect(ad).not.toHaveProperty("conversions");
+      expect(ad).not.toHaveProperty("conversionValue");
+    }
   });
 
   it("a visits campaign sends the same requests as before and reads no conversions", async () => {

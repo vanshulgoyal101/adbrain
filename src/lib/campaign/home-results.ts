@@ -7,12 +7,13 @@ import type { Campaign, CampaignResult } from "@/lib/types";
  * `customers` (#2026): the cards' Customers summed; null when the marked customers couldn't be read.
  */
 export type HomeResults = { enquiries: number; spend: number; perEnquiry: number | null; oldestFetchedAt: string; chatsOnly: boolean; customers: number | null };
+type CampaignResultWithConversions = CampaignResult & { conversions?: number | null };
 
 /**
  * #764: Home's "is it working?" row, from each campaign's latest result, counted the way its card
  * counts it (WhatsApp chats for chat campaigns, form leads otherwise). Null until any result exists.
  */
-export function homeResults(campaigns: Campaign[], results: Record<string, CampaignResult>): HomeResults | null {
+export function homeResults(campaigns: Campaign[], results: Record<string, CampaignResultWithConversions>): HomeResults | null {
   // #2601: website campaigns bring visits, not enquiries, so their spend would inflate "₹ per enquiry".
   const rows = campaigns.flatMap((campaign) => (results[campaign.id] && outcomeDefinition(campaignDestination(campaign, results[campaign.id]), campaign.objective).countsAsEnquiry
     ? [{ campaign, result: results[campaign.id] }] : []));

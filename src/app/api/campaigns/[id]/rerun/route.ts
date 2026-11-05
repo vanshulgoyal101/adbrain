@@ -26,7 +26,7 @@ export const GET = observeRoute("/api/campaigns/[id]/rerun", "GET", async (
 
   // RLS scopes every read to the owner's own business.
   const { data: campaign } = await supabase.from("campaigns")
-    .select("id, business_id, name, creative_ids, daily_budget, destination, raw").eq("id", id).maybeSingle();
+    .select("id, business_id, name, creative_ids, daily_budget, destination, objective, raw").eq("id", id).maybeSingle();
   if (!campaign) return apiError(await ownerError("campaignNotFound"), 404);
 
   const { data: operation } = await supabase.from("campaign_operations")
@@ -54,7 +54,7 @@ export const GET = observeRoute("/api/campaigns/[id]/rerun", "GET", async (
     ]);
     // Best only orders the ads; without it the copy still works.
     if (!results.error && !links.error) {
-      best = bestCreativeId((results.data ?? []) as StoredAdResult[], (links.data ?? []) as { meta_ad_id: string; creative_id: string | null }[], campaign.destination);
+      best = bestCreativeId((results.data ?? []) as StoredAdResult[], (links.data ?? []) as { meta_ad_id: string; creative_id: string | null }[], campaign.destination, campaign.objective);
     }
   }
 
