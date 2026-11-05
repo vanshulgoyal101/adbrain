@@ -127,6 +127,12 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
   // Reuse one logical upload path so old tokens do not create untracked names. This does not bound concurrent backend
   // versions created by replaying a token; the held video rollout needs a separate provider-backed admission bound.
   let row = existing;
+  let intent: string | null = null;
+  if (row?.kind === "video") {
+    const { data, error } = await admin.rpc("media_video_sign_begin", { p_asset_id: row.id, p_upload_path: row.path });
+    if (error || typeof data !== "string") throw videoLifecycleError(error);
+    intent = data;
+  }
   if (row) {
     if (row.kind === "video") {
       const { error } = await admin.storage.from(mediaBucket(row.kind)).remove([row.path]);
@@ -157,8 +163,7 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     } else row = data as MediaRow;
   }
   if (!row) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
-  let intent: string | null = null;
-  if (row.kind === "video") {
+  if (row.kind === "video" && intent === null) {
     const { data, error } = await admin.rpc("media_video_sign_begin", { p_asset_id: row.id, p_upload_path: row.path });
     if (error || typeof data !== "string") throw videoLifecycleError(error);
     intent = data;
