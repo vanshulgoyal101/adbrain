@@ -5,19 +5,18 @@ import Link from "next/link";
 import { Download, ImagePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Status } from "@/components/ui/status";
-import { AssetTile, downloadImage, slugify } from "@/components/assets-library";
+import { AssetTile, downloadImage, downloadVideo, slugify } from "@/components/assets-library";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { fitText, MediaUploadSheet, useMediaUploads, type MediaT } from "@/components/media-upload";
 import { mediaTranslator, type Words } from "@/i18n/words";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import type { Codec, UploadDeps } from "@/lib/media/client-upload";
+import type { Codec, UploadDeps, VideoReader } from "@/lib/media/client-upload";
 import { MAX_AD_PHOTOS } from "@/lib/media/rules";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 import { AssetResultBadge, AssetResultsNotice, type AssetResultProps } from "@/components/asset-result-badge";
 
-// CPO #1868 lists Videos too; it appears when video uploads ship (#744 phase 2).
-const TABS = ["all", "photos", "made"] as const;
+const TABS = ["all", "photos", "videos", "made"] as const;
 type Tab = (typeof TABS)[number];
 
 const UNDO_MS = 6_000;
@@ -32,7 +31,7 @@ function OwnPhotoControls({ t, asset, request, onRenamed, onDelete, pick }: {
   onRenamed: (asset: MediaView) => void;
   onDelete: (asset: MediaView) => void;
 }) {
-  const label = asset.name || t("library.photo");
+  const label = asset.name || t(asset.kind === "video" ? "library.video" : "library.photo");
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(asset.name ?? "");
   const [saving, setSaving] = useState(false);
@@ -85,7 +84,10 @@ function OwnPhotoControls({ t, asset, request, onRenamed, onDelete, pick }: {
             <DropdownMenuItem onSelect={async () => {
               setError(null);
               setDownloading(true);
-              try { await downloadImage(url, `adbrain-${slugify(asset.name ?? "photo", asset.id.slice(0, 6))}.jpg`); }
+              try {
+                const filename = `adbrain-${slugify(asset.name ?? (asset.kind === "video" ? "video" : "photo"), asset.id.slice(0, 6))}.${asset.kind === "video" ? "mp4" : "jpg"}`;
+                await (asset.kind === "video" ? downloadVideo(url, filename) : downloadImage(url, filename));
+              }
               catch { setError(t("tile.downloadFailed")); }
               finally { setDownloading(false); }
             }}><Download className="h-4 w-4" aria-hidden="true" /> {t("tile.download")}</DropdownMenuItem>
@@ -110,7 +112,7 @@ function Grid({ children }: { children: React.ReactNode }) {
  * #778 slice 3a (#744 phase 1): "Photos & videos", the owner's own uploads beside the ads AdBrain made. Shown when
  * MEDIA_UPLOADS_ENABLED is on; the older Assets page stays otherwise. Words are the CPO's (#1868 on #744).
  */
-export function MediaLibrary({ words, business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, deps, codec, results, resultWords }: {
+export function MediaLibrary({ words, business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, videoEnabled = false, deps, codec, videoReader, results, resultWords }: {
   /** The owner's language (`media`, #778 walk 1); English when none are passed. */
   words?: Words<"media">;
   business: { id: string; vertical: string | null };
@@ -123,8 +125,10 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   consented?: boolean;
   /** `/assets?add=1` (the empty state's action from elsewhere) opens the sheet. */
   startOpen?: boolean;
+  videoEnabled?: boolean;
   deps?: UploadDeps;
   codec?: Codec;
+  videoReader?: VideoReader;
 } & { results?: AssetResultProps["results"]; resultWords?: AssetResultProps["words"] }) {
   const t = useMemo(() => mediaTranslator(words), [words]);
   const [tab, setTab] = useState<Tab>("all");
@@ -132,7 +136,7 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   const [sheetOpen, setSheetOpen] = useState(startOpen);
   const [rightsDone, setRightsDone] = useState(consented);
   const onAdded = useCallback((asset: MediaView) => setMedia((current) => [asset, ...current.filter((item) => item.id !== asset.id)]), []);
-  const uploads = useMediaUploads({ t, businessId: business.id, onAdded, deps, codec });
+  const uploads = useMediaUploads({ t, businessId: business.id, onAdded, deps, codec, videoReader });
   const { request } = uploads;
   const onRenamed = useCallback((asset: MediaView) => setMedia((current) => current.map((item) => item.id === asset.id ? asset : item)), []);
 
@@ -150,13 +154,14 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   const commit = useCallback(async (asset: MediaView, index: number) => {
     if (pending.current?.asset.id === asset.id) pending.current = null;
     setDeleted((current) => current?.asset.id === asset.id ? null : current);
+    const failed = t(asset.kind === "video" ? "tile.deleteVideoFailed" : "tile.deleteFailed");
     try {
       const response = await request(`/api/media/${asset.id}`, { method: "DELETE", signal: AbortSignal.timeout(30_000) });
       if (response.ok) return;
       const body = await response.json().catch(() => ({})) as { error?: string };
-      setDeleteError(response.status < 500 && body.error ? body.error : t("tile.deleteFailed"));
+      setDeleteError(response.status < 500 && body.error ? body.error : failed);
     } catch {
-      setDeleteError(t("tile.deleteFailed"));
+      setDeleteError(failed);
     }
     restore(asset, index);
   }, [request, restore, t]);
@@ -196,12 +201,15 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   const addButton = (
     <button type="button" onClick={() => setSheetOpen(true)}
       className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
-      <ImagePlus className="h-4 w-4" aria-hidden="true" /> {t("library.add")}
+      <ImagePlus className="h-4 w-4" aria-hidden="true" /> {t(videoEnabled ? "library.addMedia" : "library.add")}
     </button>
   );
   const [shown, setShown] = useState(PAGE);
   const made = creatives.filter((c) => c.image_url);
-  const ownCount = media.length + brandAssets.length;
+  const visibleMedia = videoEnabled ? media : media.filter((item) => item.kind === "image");
+  const shownMedia = visibleMedia.filter((item) => tab === "all" || (tab === "photos" && item.kind === "image") || (tab === "videos" && item.kind === "video"));
+  const shownBrandAssets = tab === "videos" ? [] : brandAssets;
+  const ownCount = visibleMedia.length + brandAssets.length;
   // #780 slice 2a: up to MAX_AD_PHOTOS own photos go to Create, one per ad; a deleted photo drops out.
   const [picked, setPicked] = useState<string[]>([]);
   const chosen = picked.filter((id) => media.some((m) => m.id === id && m.kind === "image"));
@@ -216,23 +224,28 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
     );
   };
 
-  const own = ownCount === 0 ? (
+  const own = shownMedia.length + shownBrandAssets.length === 0 ? (
     <Card>
       <CardContent className="flex flex-col items-start gap-4 p-6 text-sm text-slate-600">
-        <p>{t("library.empty")}</p>
+        <p>{t(tab === "videos" ? "library.noVideos" : videoEnabled && tab === "all" ? "library.emptyMedia" : "library.empty")}</p>
         {addButton}
       </CardContent>
     </Card>
   ) : (
     <Grid>
-      {media.map((m) => (
-        <AssetTile key={m.id} url={m.url} title={m.name || t("library.photo")} meta={m.width && m.height ? fitText(t, m.width, m.height, m.kind) : undefined} actions={false}
-          filename={`adbrain-${slugify(m.name ?? "photo", m.id.slice(0, 6))}.jpg`}>
+      {shownMedia.map((m) => (
+        <AssetTile key={m.id} url={m.url} kind={m.kind} title={m.name || t(m.kind === "video" ? "library.video" : "library.photo")}
+          meta={(m.width && m.height) || (m.kind === "video" && m.durationMs) ? <>
+            {m.width && m.height && <span className="block">{fitText(t, m.width, m.height, m.kind)}</span>}
+            {m.kind === "video" && m.fit?.ratio && <span className="block">{m.fit.ratio}</span>}
+            {m.kind === "video" && m.durationMs && <span className="block">{Math.floor(m.durationMs / 60_000)}:{String(Math.floor(m.durationMs / 1000) % 60).padStart(2, "0")}</span>}
+          </> : undefined} actions={false}
+          filename={`adbrain-${slugify(m.name ?? (m.kind === "video" ? "video" : "photo"), m.id.slice(0, 6))}.${m.kind === "video" ? "mp4" : "jpg"}`}>
           <AssetResultBadge results={results} words={resultWords} assetId={m.id} kind="media" />
           <OwnPhotoControls key={m.name ?? ""} t={t} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} pick={pickBox(m)} />
         </AssetTile>
       ))}
-      {brandAssets.map((a) => (
+      {shownBrandAssets.map((a) => (
         <AssetTile key={a.id} url={a.url} title={a.notes || assetType(t, a.type) || t("library.assetType.other")}
           meta={a.notes ? assetType(t, a.type) ?? a.type : undefined}
           filename={`adbrain-${slugify(a.type, a.id.slice(0, 6))}.png`} />
@@ -279,7 +292,7 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
           )}
           {deleted && (
             <p role="status" className="flex items-center justify-between gap-2 rounded-lg bg-slate-900 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
-              <span className="min-w-0 truncate">{t("tile.deleted", { name: deleted.asset.name || t("library.photo") })}</span>
+              <span className="min-w-0 truncate">{t("tile.deleted", { name: deleted.asset.name || t(deleted.asset.kind === "video" ? "library.video" : "library.photo") })}</span>
               <button type="button" onClick={undo} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium text-blue-200 hover:bg-white/10">{t("tile.undo")}</button>
             </p>
           )}
@@ -289,9 +302,9 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
         <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">{t("upload.keepOpen")}</span></p>
       )}
       <MediaUploadSheet t={t} open={sheetOpen} onOpenChange={setSheetOpen} uploads={uploads} businessId={business.id} vertical={business.vertical}
-        consented={rightsDone} onConsented={() => setRightsDone(true)} />
+        consented={rightsDone} onConsented={() => setRightsDone(true)} videoEnabled={videoEnabled} />
       <div role="tablist" aria-label={t("library.tabs.label")} className="flex gap-1 overflow-x-auto border-b border-slate-200">
-        {TABS.map((id) => (
+        {TABS.filter((id) => videoEnabled || id !== "videos").map((id) => (
           <button key={id} type="button" role="tab" id={`media-tab-${id}`} aria-selected={tab === id} aria-controls="media-panel"
             onClick={() => setTab(id)}
             className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium ${tab === id ? "border-primary text-primary" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
@@ -302,9 +315,9 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
       <div role="tabpanel" id="media-panel" aria-labelledby={`media-tab-${tab}`} className="flex flex-col gap-8">
         {tab !== "made" && (
           <section>
-            {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">{t("library.yours")} <span className="text-sm font-normal text-slate-400">({ownCount})</span></h2>}
+            {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">{t(videoEnabled ? "library.yoursMedia" : "library.yours")} <span className="text-sm font-normal text-slate-400">({ownCount})</span></h2>}
             {own}
-            {chosen.length > 0 && (
+            {tab !== "videos" && chosen.length > 0 && (
               <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white p-2 shadow-md">
                 <Link href={`/create?all=1&photos=${chosen.join(",")}`}
                   className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
@@ -315,7 +328,7 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
             )}
           </section>
         )}
-        {tab !== "photos" && (
+        {tab !== "photos" && tab !== "videos" && (
           <section>
             {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">{t("library.made")} <span className="text-sm font-normal text-slate-400">({made.length})</span></h2>}
             {ads}

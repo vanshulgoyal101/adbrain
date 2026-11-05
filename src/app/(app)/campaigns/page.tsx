@@ -43,6 +43,15 @@ import {
 
 export const metadata = { title: "Campaigns" };
 
+function logReadError(name: string, error: unknown) {
+  console.error(`[campaigns.${name}]`, error instanceof Error ? error.message : typeof error);
+}
+
+function observeRead<T>(name: string, read: Promise<T>): Promise<T> {
+  void read.catch((error: unknown) => logReadError(name, error));
+  return read;
+}
+
 /** #847: the owner's saved drafts in the first render, read as /api/campaign-drafts does; on any error the client loads them as before. */
 async function savedDrafts(businessId: string): Promise<DraftDTO[] | undefined> {
   try {
@@ -82,10 +91,23 @@ export default async function CampaignsPage({
     );
   }
 
-  const campaignData = getCampaignPage(business.id).then(async (page) => ({
+  const campaignPage = getCampaignPage(business.id);
+  const campaignData = campaignPage.then(async (page) => ({
     ...page,
     results: await getLatestResultsWithEnquiries(page.campaigns.map((campaign) => campaign.id)),
   }));
+  const metaWait = observeRead("metaWait", campaignPage.then((page) =>
+    page.campaigns.some((campaign) => campaign.meta_campaign_id) ? metaWaitFor(business.id) : null));
+  const campaignWordsRead = observeRead("campaignWords", requestWords("campaigns"));
+  const setupWordsRead = observeRead("setupWords", setupWords());
+  const verdictWordsRead = observeRead("verdictWords", requestWords("verdict"));
+  const whatsappWordsRead = observeRead("whatsappWords", requestWords("whatsappMessage"));
+  const currentUser = createClient().then((supabase) => supabase.auth.getUser())
+    .then(({ data, error }) => {
+      if (error) { logReadError("user", error); return null; }
+      return data.user;
+    })
+    .catch((error: unknown) => { logReadError("user", error); return null; });
   // #1342: the Settings cap and the live budgets, for the cap line; on error the line is left out and Activate still refuses.
   const spendCap = Promise.resolve()
     .then(() => Promise.all([getSpendLimits(business.id), getActiveCampaignBudgets(business.id)]))
@@ -110,8 +132,9 @@ export default async function CampaignsPage({
 
   // #1271 (#1251 WS1 step 3): a first-timer with ready ads and no campaign yet gets Go live; `?all=1` opens this page.
   // Before App Review an owner who can't connect still gets ReadyAdsNextStep below (#336).
-  const canConnect = async () => metaReady || await createClient().then((supabase) => supabase.auth.getUser())
-    .then(({ data }) => Boolean(data.user && canUseMetaConnect(data.user.id))).catch(() => false);
+  const canConnect = async () => metaReady || await currentUser
+    .then((user) => Boolean(user && canUseMetaConnect(user.id)))
+    .catch((error: unknown) => { logReadError("connect", error); return false; });
   // #1934 (CPO #1924): a returning owner's "New campaign" ends here too, with Page and payment already done.
   const again = params.again === "1";
   // #2646: SetupGoLive only launches WhatsApp, so a website business goes live from the composer below.
@@ -133,10 +156,10 @@ export default async function CampaignsPage({
     const initialDaily = lastDaily === null ? undefined
       : BUDGET_PRESETS.reduce((best, amount) => Math.abs(amount - lastDaily) < Math.abs(best - lastDaily) ? amount : best);
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding} returning={again} initialDaily={initialDaily}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWords()} appReviewPending={metaAppReviewPending()} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWordsRead} appReviewPending={metaAppReviewPending()} />;
   }
 
-  const campaignWords = await requestWords("campaigns");
+  const campaignWords = await campaignWordsRead;
   const t = campaignsTranslator(campaignWords), lang = campaignWords.locale === "en" ? undefined : campaignWords.locale;
   return (
     <div>
@@ -151,7 +174,7 @@ export default async function CampaignsPage({
         {/* Before Meta's App Review a new owner can't connect, so the setup form would be a dead end (#336). */}
         {!metaReady && !campaigns.length && approved.length ? (
           <ReadyAdsNextStep approved={approved} businessId={business.id} sample={await isProspectSession()}
-            appReviewPending={metaAppReviewPending()} words={await setupWords()} />
+            appReviewPending={metaAppReviewPending()} words={await setupWordsRead} />
         ) : <Campaigns
           business={business}
           approved={approved}
@@ -167,12 +190,12 @@ export default async function CampaignsPage({
           whatsappLedger={ledger?.whatsapp ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
-          verdictWords={await requestWords("verdict")}
+          verdictWords={await verdictWordsRead}
           campaignWords={campaignWords}
-          whatsappWords={await requestWords("whatsappMessage")}
-          metaWaitUntil={campaigns.some((campaign) => campaign.meta_campaign_id) ? await metaWaitFor(business.id) : null}
+          whatsappWords={await whatsappWordsRead}
+          metaWaitUntil={await metaWait}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
-          internal={await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => isInternalUser(data.user)).catch(() => false)}
+          internal={await currentUser.then(isInternalUser).catch((error: unknown) => { logReadError("internal", error); return false; })}
         />}
       </div>
     </div>

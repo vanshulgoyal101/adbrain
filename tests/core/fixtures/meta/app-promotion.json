@@ -1,0 +1,110 @@
+{
+  "note": "#2824: read-only reads and validate_only checks from the test ad account; nothing was created. `apps` is the real advertisable_applications answer; the ad set checks run against an existing paused campaign, so Meta may also object to its objective.",
+  "recordedAt": "2026-11-03T09:28:51.110Z",
+  "creds": {
+    "adAccountId": "act_9000000000000001",
+    "pageId": "900000000000002"
+  },
+  "foreignStoreUrl": "https://play.google.com/store/apps/details?id=com.example.notregistered",
+  "tape": [
+    {
+      "name": "apps",
+      "method": "GET",
+      "path": "act_9000000000000001/advertisable_applications?fields=id,name,object_store_urls&limit=25",
+      "form": null,
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "9000000000000003",
+            "name": "adBrain",
+            "object_store_urls": {
+              "fb_canvas": "https://adbrain.vanshul.com/",
+              "instant_game": "http://www.facebook.com/gaming/play/9000000000000003/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "campaign",
+      "method": "POST",
+      "path": "act_9000000000000001/campaigns",
+      "form": {
+        "name": "AdBrain app install check (validate only)",
+        "objective": "OUTCOME_APP_PROMOTION",
+        "status": "PAUSED",
+        "special_ad_categories": "[]",
+        "is_adset_budget_sharing_enabled": "false",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "adset-foreign-store",
+      "method": "POST",
+      "path": "act_9000000000000001/adsets",
+      "form": {
+        "name": "AdBrain app install check (validate only)",
+        "campaign_id": "900000000000000004",
+        "status": "PAUSED",
+        "daily_budget": "10000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "APP_INSTALLS",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "APP",
+        "promoted_object": "{\"application_id\":\"9000000000000003\",\"object_store_url\":\"https://play.google.com/store/apps/details?id=com.example.notregistered\"}",
+        "targeting": "{\"geo_locations\":{\"countries\":[\"IN\"]},\"age_min\":18,\"age_max\":65}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Invalid parameter",
+          "type": "OAuthException",
+          "code": 100,
+          "error_data": "{\"blame_field_specs\":[[\"optimization_goal\"]]}",
+          "error_subcode": 2490408,
+          "is_transient": false,
+          "error_user_title": "परफ़ॉर्मेंस का लक्ष्य उपलब्ध नहीं है",
+          "error_user_msg": "आप अपने कैंपेन के उद्देश्य के साथ, परफ़ॉर्मेंस के इस लक्ष्य को उपयोग नहीं कर सकते जो आपने अभी चुना है. कृपया कोई और लक्ष्य चुनें या अपना कैंपेन एडिट करें.",
+          "fbtrace_id": "AAwPNKjc7SmuIOEYS6ylzQU"
+        }
+      }
+    },
+    {
+      "name": "adset-own-store",
+      "method": "POST",
+      "path": "act_9000000000000001/adsets",
+      "form": {
+        "name": "AdBrain app install check (validate only)",
+        "campaign_id": "900000000000000004",
+        "status": "PAUSED",
+        "daily_budget": "10000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "APP_INSTALLS",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "APP",
+        "promoted_object": "{\"application_id\":\"9000000000000003\",\"object_store_url\":\"https://adbrain.vanshul.com/\"}",
+        "targeting": "{\"geo_locations\":{\"countries\":[\"IN\"]},\"age_min\":18,\"age_max\":65}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Invalid parameter",
+          "type": "OAuthException",
+          "code": 100,
+          "error_subcode": 1885185,
+          "is_transient": false,
+          "error_user_title": "ऐप को गलत तरीके से कॉन्फ़िगर किया गया है",
+          "error_user_msg": "ऑब्जेक्ट स्टोर URL किसी मान्य एप्लिकेशन पर नहीं ले जा रहा है या किसी ऐसे एप्लिकेशन पर ले जा रहा है, जिसे डेस्कटॉप या मोबाइल पर उपयोग करने के लिए ठीक से कॉन्फ़िगर नहीं किया गया है. कृपया ऐप को चेक करें और पक्का कर लें कि वह सही ढंग से सेट हो गया है और उसका ऑब्जेक्ट स्टोर URL सही फ़ॉर्मेट में है.",
+          "fbtrace_id": "AkraYS2mbgqgwATE6st1j4U"
+        }
+      }
+    }
+  ]
+}

@@ -22,7 +22,20 @@ import { readWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-sta
 export const metadata = { title: OWNER_WORDS.business };
 
 export default async function BrandPage({ searchParams }: { searchParams: Promise<{ all?: string | string[]; again?: string | string[] }> }) {
+  const whatsappWordsPromise = requestWords("whatsappMessage");
+  void whatsappWordsPromise.catch((error: unknown) =>
+    console.error("[brand.whatsappWords]", error instanceof Error ? error.message : typeof error));
   const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams]);
+  const brandData = business && params.again !== "1"
+    ? Promise.all([
+        getBrandAssets(business.id),
+        getAdInstructions(business.id),
+        getMetaConnection(business.id),
+      ])
+    : null;
+  // Setup can return before speculative reads finish; report failures even on that path.
+  void brandData?.catch((error: unknown) =>
+    console.error("[brand.data]", error instanceof Error ? error.message : typeof error));
   // #1269 (#1251 WS1 step 1): until a first campaign has gone live, Your business is the five-field setup step;
   // `?all=1` opens the full page. If the check fails, the full page shows as before.
   const setup = params.all !== "1" && (!business || !(await hasLaunchedCampaign(business.id).catch(() => true)));
@@ -33,13 +46,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
     // #1934 (CPO #1924): "New campaign" after one went live re-enters the 3 steps; step 1 asks only for the new offer.
     return <SetupBusinessStep business={business} returning offerWebsite={offerWebsite} words={words} />;
   }
-  const [assets, instructions, connection] = business
-    ? await Promise.all([
-        getBrandAssets(business.id),
-        getAdInstructions(business.id),
-        getMetaConnection(business.id),
-      ])
-    : [[], [], null];
+  const [assets, instructions, connection] = brandData ? await brandData : [[], [], null];
   // The Call now note reads WhatsApp status; it never blocks the page.
   const whatsappStatus: Promise<WhatsAppStatus> | null = business && connection?.ready
     ? readWhatsAppStatus(business.id).catch((): WhatsAppStatus => ({ state: "unavailable" }))
@@ -47,7 +54,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
 
   // #847: Meta and WhatsApp connection status live in Settings only; the message itself is business content.
   const showMessage = Boolean(business && connection?.ready);
-  const whatsappWords = showMessage ? await requestWords("whatsappMessage") : undefined;
+  const whatsappWords = showMessage ? await whatsappWordsPromise : undefined;
 
   return (
     <div>

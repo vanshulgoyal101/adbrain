@@ -11,8 +11,8 @@ import type { Creative } from "@/lib/types";
 
 /**
  * What a new owner sees on Campaigns before Facebook is connected (#336, CEO decision on #339):
- * share or download the approved ads today. While Meta's App Review is pending (#2697) it says so plainly and
- * records an access request; it promises no date. After the review it offers Connect.
+ * share or download the approved ads today. When the App Review gate is on (#2697), it explains that Meta
+ * approval is needed and records an access request without promising a date. Once the gate is off it offers Connect.
  */
 export function ReadyAdsNextStep({ approved, businessId, sample = false, appReviewPending = true, words }: {
   approved: Creative[]; businessId: string;
