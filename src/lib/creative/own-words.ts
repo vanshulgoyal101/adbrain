@@ -3,16 +3,17 @@ import { z } from "zod";
 import { brandFacts } from "@/lib/creative/brand-facts";
 import { copyClaimWarnings, editableCopySchema } from "@/lib/creative/concept";
 import { buildAdDesign } from "@/lib/creative/design";
-import { OWNER_PHOTO } from "@/lib/creative/picture-source";
-import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
+import { ownWordsCopyError } from "@/lib/creative/own-words-validation";
+import { OWNER_PHOTO, OWNER_VIDEO } from "@/lib/creative/picture-source";
+import { persistCreativeImageBytes, renderAndPersistDesign } from "@/lib/creative/persist";
 import { saveCreative } from "@/lib/creative/save";
 import { getEnv } from "@/lib/env";
 import { MAX_AD_PHOTOS } from "@/lib/media/rules";
 import type { Business, Creative, Database, Json } from "@/lib/types";
 
 /**
- * #780 slice 2b, "I'll write them": the owner's own words on his library photos. No AI call, so nothing is spent; the
- * words get the same warnings as an edit in Studio (the owner's wording is his call).
+ * #780 slice 2b, "I'll write them": the owner's own words on library media. No AI call, so nothing is spent; the
+ * words pass the same claim and policy checks before the batch is saved.
  */
 export const OWN_WORDS_VERSION = "own-words-1";
 
@@ -25,45 +26,73 @@ export type OwnWordsItem = z.infer<typeof ownWordsItemSchema>;
 
 export const ownWordsRequestSchema = z.object({
   businessId: z.string().uuid(),
+  idempotencyKey: z.string().uuid().optional(),
   items: z.array(ownWordsItemSchema).min(1).max(MAX_AD_PHOTOS)
     .refine((items) => new Set(items.map((item) => item.mediaId)).size === items.length, "Each photo can be used once."),
 });
 
 export type OwnWordsAd = { creative: Creative; warnings: string[] };
+export type OwnWordsPhoto = { bytes: Uint8Array; contentType: string; kind: "image" | "video" };
+
+export class OwnWordsOverlayUnavailableError extends Error {
+  readonly code = "OWN_WORDS_OVERLAY_UNAVAILABLE";
+  constructor() {
+    super("Putting the headline on the photo isn't available right now. Turn it off and try again.");
+  }
+}
+
+export class OwnWordsVideoOverlayError extends Error {
+  readonly code = "OWN_WORDS_VIDEO_OVERLAY";
+  constructor() {
+    super("A headline can't be put on a video. Turn it off and try again.");
+  }
+}
 
 /**
- * Saves one draft ad per item, in order, under one variant group. `photoUrls` are the photos' signed URLs by media id
- * (already checked as the owner's ready photos). Each ad is saved before the next starts, so a failure keeps the
- * earlier ones; the error is returned with them.
+ * Saves one draft ad per item, in order, under one variant group. The route has already verified the owner's ready
+ * media bytes. Videos stay linked to their private media asset; images may be copied and overlaid.
  */
 export async function saveOwnWordsAds(
   supabase: SupabaseClient<Database>,
-  input: { business: Business; items: OwnWordsItem[]; photoUrls: Map<string, string>; instructions?: string; requestId?: string },
+  input: {
+    business: Business; items: OwnWordsItem[]; photos: Map<string, OwnWordsPhoto>; instructions?: string;
+    requestId?: string; variantGroup?: string; itemIndexes?: number[];
+  },
 ): Promise<{ variantGroup: string; ads: OwnWordsAd[]; error?: unknown }> {
-  const { business, items, photoUrls } = input;
-  const variantGroup = crypto.randomUUID();
+  const { business, items, photos } = input;
+  const variantGroup = input.variantGroup ?? crypto.randomUUID();
+  if (items.some((item) => item.offer && photos.get(item.mediaId)?.kind === "video")) {
+    return { variantGroup, ads: [], error: new OwnWordsVideoOverlayError() };
+  }
   const overlay = getEnv().AD_DESIGN_OVERLAY;
+  if (!overlay && items.some((item) => item.offer)) {
+    return { variantGroup, ads: [], error: new OwnWordsOverlayUnavailableError() };
+  }
   const facts = brandFacts(business, input.instructions);
+  const copyError = ownWordsCopyError(items, facts, business.vertical);
+  if (copyError) return { variantGroup, ads: [], error: copyError };
   const ads: OwnWordsAd[] = [];
   for (const [index, item] of items.entries()) {
-    const sourceUrl = photoUrls.get(item.mediaId);
-    if (!sourceUrl) return { variantGroup, ads, error: new Error("Photo not read") };
-    const name = `own-${index + 1}`;
+    const media = photos.get(item.mediaId);
+    if (!media) return { variantGroup, ads, error: new Error("Media not read") };
+    const name = `own-${input.itemIndexes?.[index] ?? index + 1}`;
     try {
-      const photoUrl = await persistCreativeImage(supabase, business.id, variantGroup, name, sourceUrl);
-      const design = item.offer
+      const photoUrl = media.kind === "image"
+        ? await persistCreativeImageBytes(supabase, business.id, variantGroup, name, media.bytes, media.contentType)
+        : undefined;
+      const design = item.offer && media.kind === "image"
         ? { ...buildAdDesign({ brand: business, copy: item, ownerPhoto: true }), benefits: [] }
         : null;
-      const imageUrl = design && overlay
+      const imageUrl = photoUrl && design && overlay
         ? await renderAndPersistDesign(supabase, business.id, variantGroup, name, design, photoUrl)
         : photoUrl;
       const { mediaId, headline, primary_text, description, cta } = item;
       const copy = { headline, primary_text, description, cta };
       const creative = await saveCreative(supabase, {
-        business_id: business.id, brief: "", angle: null, image_url: imageUrl,
+        business_id: business.id, brief: "", angle: null, image_url: imageUrl ?? null,
         headline: copy.headline, primary_text: copy.primary_text, cta: copy.cta,
         variant_group: variantGroup, status: "draft", media_asset_id: mediaId,
-        generation: ownWordsReceipt({ copy, design: design && overlay ? design : null, photoUrl, mediaId, requestId: input.requestId }),
+        generation: ownWordsReceipt({ copy, kind: media.kind, design: design && overlay ? design : null, photoUrl, mediaId, requestId: input.requestId }),
       });
       ads.push({ creative, warnings: copyClaimWarnings(copy, facts, business.vertical, { ownPicture: true }) });
     } catch (error) {
@@ -74,12 +103,12 @@ export async function saveOwnWordsAds(
 }
 
 /**
- * The receipt Review, Studio and launch read: the owner's photo (`pictureSource` "yours"), the words as the concept
+ * The receipt Review, Studio and launch read: the owner's photo or video, the words as the concept
  * (launch reads its description), no AI models. `composition` isn't "image-only", so Studio can still add words later.
  */
 function ownWordsReceipt(input: {
   copy: Omit<OwnWordsItem, "mediaId" | "offer">; design: ReturnType<typeof buildAdDesign> | null;
-  photoUrl: string; mediaId: string; requestId?: string;
+  kind: "image" | "video"; photoUrl?: string; mediaId: string; requestId?: string;
 }): Json {
   const { copy, design } = input;
   return JSON.parse(JSON.stringify({
@@ -89,14 +118,14 @@ function ownWordsReceipt(input: {
     concept: { ...copy, description: copy.description || undefined },
     format: design?.format ?? "portrait",
     ...(design ? { design: { ...design, backgroundUrl: undefined } } : {}),
-    photoUrl: input.photoUrl,
+    ...(input.photoUrl ? { photoUrl: input.photoUrl } : {}),
     language: null,
     referenceImages: [],
     sourceFacts: [],
-    composition: design ? "overlay" : "photo",
+    composition: input.kind === "video" ? "video" : design ? "overlay" : "photo",
     textModels: [],
-    image: { provider: OWNER_PHOTO, model: OWNER_PHOTO, estimatedCostUsd: 0 },
+    image: { provider: input.kind === "video" ? OWNER_VIDEO : OWNER_PHOTO, model: input.kind === "video" ? OWNER_VIDEO : OWNER_PHOTO, estimatedCostUsd: 0 },
     imageAttempts: [],
-    ownerPhoto: `media:${input.mediaId}`,
+    ...(input.kind === "video" ? { ownerVideo: `media:${input.mediaId}` } : { ownerPhoto: `media:${input.mediaId}` }),
   })) as Json;
 }

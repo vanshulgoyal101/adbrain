@@ -19,7 +19,7 @@ export function clientReceipt(generation: unknown): Json | null {
   const image = isRecord(generation.image) ? generation.image : null;
   return JSON.parse(JSON.stringify({
     // photoUrl lets the editor preview new words on the same background (#387).
-    ...pick(generation, ["version", "format", "composition", "textModels", "design", "photoUrl"]),
+    ...pick(generation, ["version", "format", "composition", "textModels", "design", "photoUrl", "ownerVideo"]),
     ...(image ? { image: pick(image, ["provider", "model", "fallbackFrom", "estimatedCostUsd"]) } : {}),
     ...(concept ? {
       concept: {

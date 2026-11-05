@@ -735,6 +735,7 @@
   },
   "creative": {
     "yourPhoto": "Your photo",
+    "yourVideo": "Your video",
     "aiPicture": "AI picture"
   },
   "shell": {
@@ -1272,6 +1273,14 @@
     "enquiriesNotReloaded": "Couldn't reload your saved enquiries. Your existing enquiries are still here.",
     "enquiryCountUnavailable": "Enquiry count unavailable.",
     "requestNotSent": "We couldn't send your request. Try again.",
+    "ownWordsInputInvalid": "Each ad needs a photo or video, a headline up to 40 characters, main text and a button.",
+    "ownWordsMediaUnavailable": "Couldn't read the photo or video. Try again.",
+    "ownWordsIdempotencyConflict": "This save key was already used for different words. Try saving again.",
+    "ownWordsBatchFailed": "This save could not be completed. Try saving again.",
+    "ownWordsSaveFailed": "Couldn't save your ads. Try again.",
+    "ownWordsInstructionsUnavailable": "Couldn't load your Brand instructions. Try again.",
+    "ownWordsOverlayUnavailable": "Putting the headline on the photo isn't available right now. Turn it off and try again.",
+    "ownWordsVideoOverlay": "A headline can't be put on a video. Turn it off and try again.",
     "pickAccountAndPage": "Pick both an ad account and a page.",
     "facebookStillConnected": "Facebook is still connected. Try again in a minute.",
     "spendLimitsInvalid": "Enter the weekly cap in whole rupees (or leave it blank for no cap), and a Warn at number from 1 to 100.",
@@ -1797,12 +1806,16 @@
     "nextCampaign": "Next: set up campaign",
     "moreIdeas": "Ideas for more ads",
     "yourPhotos": "Your photos ({n})",
+    "yourMedia": "Your photos and videos ({n})",
     "photosNote": "Each photo becomes one ad’s picture. The words come from your business details and what the photo shows.",
+    "mediaNote": "Each photo or video becomes one ad’s picture. You write the words yourself; no AI is used.",
     "removePhoto": "Remove photo {n}",
+    "removeVideo": "Remove video {n}",
     "wordsChoice": "Who writes the words",
     "wordsForMe": "Write the words for me",
     "wordsMine": "I'll write them",
     "ownNote": "Type the words for each photo’s ad. No AI is used.",
+    "ownMediaNote": "Type the words for each photo or video’s ad. No AI is used.",
     "ownFormLabel": "Your words for each ad",
     "ownAd": "Ad {n}",
     "ownHeadline": "Headline",
@@ -1814,6 +1827,7 @@
     "ownSaving": "Saving…",
     "ownSaved": "{n, plural, one {# ad saved} other {# ads saved}}",
     "ownSavedSome": "{saved} of {total} ads saved. Make the rest again from the library.",
-    "ownSaveFailed": "Couldn't save your ads. Try again."
+    "ownSaveFailed": "Couldn't save your ads. Try again.",
+    "ownSavePending": "Your ads are still being saved. Wait a moment, then try again."
   }
 }

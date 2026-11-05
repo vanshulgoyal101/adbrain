@@ -51,6 +51,7 @@ const ROUTES: Record<string, Entry> = {
   "creatives/assistant": { kind: "session", methods: ["POST"], why: "session: RLS client" },
   "creatives/export": { kind: "session", methods: ["POST"], why: "session: RLS client" },
   "creatives/generate": { kind: "session", methods: ["GET", "POST"], why: "session: POST loads the business through RLS before creative_generation_admit; GET's RPC checks owner_id (#1723)" },
+  "creatives/own": { kind: "session", methods: ["POST"], why: "session: mediaSession and RLS business read precede picked-media reads and creative writes" },
   "cron/access-requests": { kind: "cron", methods: ["GET"] },
   "cron/campaign-reconciliation": { kind: "cron", methods: ["GET"] },
   "cron/core-scoreboard": { kind: "cron", methods: ["GET"] },
