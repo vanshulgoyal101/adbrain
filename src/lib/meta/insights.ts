@@ -61,7 +61,7 @@ const conversionHistorySchema = z.object({
     id: z.string(),
     destination_type: z.literal("WEBSITE"),
     promoted_object: z.object({ page_id: z.string(), custom_event_type: z.string() }),
-  })).max(100),
+  })).min(1).max(100),
   paging: z.object({ next: z.string().optional() }).optional(),
 });
 

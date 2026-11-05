@@ -20,6 +20,7 @@ export type PauseSuggestion = {
 const running = (ad: AdResultView) => ad.status === "ACTIVE";
 
 export function pauseSuggestion(ads: AdResultView[]): PauseSuggestion | null {
+  if (ads.some((ad) => ad.conversionsUnavailable)) return null;
   const totalResults = ads.reduce((sum, ad) => sum + ad.results, 0);
   if (totalResults < BEST_AD_MIN_RESULTS) return null;
   const totalSpend = ads.reduce((sum, ad) => sum + ad.spend, 0);

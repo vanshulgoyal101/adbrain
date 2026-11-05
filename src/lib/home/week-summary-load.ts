@@ -16,13 +16,13 @@ async function snapshotBefore(database: Store, campaignId: string, at: string): 
 }
 
 /** #783's "best so far" ad name across the campaigns' stored per-ad results; null when there is none. */
-async function bestAdName(database: Store, campaigns: Pick<Campaign, "id" | "destination">[]): Promise<string | null> {
+async function bestAdName(database: Store, campaigns: Pick<Campaign, "id" | "destination" | "objective">[]): Promise<string | null> {
   if (!adResultsEnabled()) return null;
   for (const campaign of campaigns) {
     const { data } = await database.from("ad_results")
       .select(AD_RESULT_COLUMNS)
       .eq("campaign_id", campaign.id).is("period_start", null).is("period_end", null).limit(100);
-    const best = adResultViews((data ?? []) as StoredAdResult[], campaign.destination).ads.find((ad) => ad.best);
+    const best = adResultViews((data ?? []) as StoredAdResult[], campaign.destination, undefined, campaign.objective).ads.find((ad) => ad.best);
     if (best?.name) return best.name;
   }
   return null;

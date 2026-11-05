@@ -33,6 +33,19 @@ describe("per-ad results view (#783)", () => {
     expect(adResultViews([], "whatsapp")).toEqual({ ads: [], syncedAt: null });
   });
 
+  it("uses website conversions for the selected goal and preserves unavailable versus zero", () => {
+    const sales = adResultViews([
+      row("purchase", { delivered: true, spend_paise: 120_000, conversions: 3, conversion_value: 4497 }),
+      row("zero", { delivered: true, spend_paise: 120_000, conversions: 0, conversion_value: null }),
+      row("unavailable", { delivered: true, spend_paise: 120_000, conversions: null, conversion_value: 4497 }),
+    ], "website", undefined, "sales");
+
+    expect(sales.ads.find(ad => ad.adId === "purchase")).toMatchObject({ results: 3, costPerResult: 400, conversionValue: 4497 });
+    expect(sales.ads.find(ad => ad.adId === "zero")).toMatchObject({ results: 0, costPerResult: null });
+    expect(sales.ads.find(ad => ad.adId === "unavailable")).toMatchObject({ results: 0, costPerResult: null, conversionsUnavailable: true });
+    expect(sales.ads.find(ad => ad.adId === "unavailable")).not.toHaveProperty("conversionValue");
+  });
+
   // Reviewer on #960: an ad gone from Meta's listing (deleted) is stored as DELETED, so it is replaced, never Best.
   it("stores an ad gone from the listing as DELETED and keeps it out of Best", async () => {
     let stored: StoredAdResult[] = [];

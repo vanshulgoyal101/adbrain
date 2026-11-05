@@ -9,9 +9,12 @@ import hi from "../messages/hi.json";
 const ad = (adId: string, over: Record<string, unknown> = {}) => ({
   adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, creative: null, earlier: false, impressions: 100, results: 0, spend: 0, costPerResult: null, ...over,
 });
-const open = async (body: unknown, status = 200, onRunAgain?: () => void, runAgainError?: string) => {
+const open = async (
+  body: unknown, status = 200, onRunAgain?: () => void, runAgainError?: string,
+  destination?: string, websiteGoal?: "leads" | "sales",
+) => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json(body, { status })));
-  const view = render(<AdResults campaignId="c1" onRunAgain={onRunAgain} runAgainError={runAgainError} />);
+  const view = render(<AdResults campaignId="c1" destination={destination} websiteGoal={websiteGoal} onRunAgain={onRunAgain} runAgainError={runAgainError} />);
   const details = view.container.querySelector("details")!;
   details.open = true;
   fireEvent(details, new Event("toggle"));
@@ -45,6 +48,24 @@ describe("<AdResults> (#783)", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: "All ads (5)" }));
     expect(screen.getAllByRole("listitem")).toHaveLength(5);
+  });
+
+  it("uses the website sales goal for each ad's result and cost", async () => {
+    await open({ ok: true, syncedAt: null, ads: [ad("1", { results: 3, spend: 1200, costPerResult: 400, conversionValue: 4497, returnOnSpend: 3.75 })] },
+      200, undefined, undefined, "website", "sales");
+    const row = await screen.findByRole("listitem");
+    expect(row).toHaveTextContent("3 website purchases");
+    expect(row).toHaveTextContent("₹400 per website purchase");
+    expect(row).toHaveTextContent("Value ₹4,497");
+    expect(row).toHaveTextContent("Return 3.75x");
+  });
+
+  it("shows unavailable website conversions instead of treating them as zero", async () => {
+    await open({ ok: true, syncedAt: null, ads: [ad("1", { conversionsUnavailable: true })] },
+      200, undefined, undefined, "website", "sales");
+    expect(await screen.findByText("Conversion results are not available yet.")).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toHaveTextContent("Conversion data unavailable");
+    expect(screen.getByRole("listitem")).not.toHaveTextContent("0 website purchases");
   });
 
   it("marks a replaced ad and hides itself while the feature is off", async () => {

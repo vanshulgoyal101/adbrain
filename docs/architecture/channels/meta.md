@@ -67,7 +67,9 @@ the text follows the token owner's locale (#185).
 Website conversion reads (#2716) keep pixel leads or purchases separate from page views
 and enquiries. Malformed, contradictory or unverifiable conversion data is unavailable,
 not zero; spend and page views remain separate. The conversion insights fixture is
-provisional until an authorized conversion run is recorded. The deleted/ad-set status
+provisional until an authorized conversion run is recorded. An empty historical ad-set
+list cannot verify attribution, so campaign and per-ad conversions remain unavailable.
+The deleted/ad-set status
 filter has a recorded example, but its completeness across mixed-goal histories remains
 unverified. Storage and Manage presentation are later slices of #2716.
 

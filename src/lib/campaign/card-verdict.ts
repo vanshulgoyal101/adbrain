@@ -7,15 +7,17 @@ import { restatesStatus, verdict, type Comparison, type Verdict, type VerdictInp
 import type { Campaign, CampaignResult } from "@/lib/types";
 
 type CardCampaign = Pick<Campaign, "id" | "status" | "created_at" | "raw" | "destination" | "objective">;
-type CardResult = Pick<CampaignResult, "impressions" | "spend" | "leads" | "conversations" | "whatsapp_opens" | "landing_page_views" | "destination">;
+type CardResult = Pick<CampaignResult, "impressions" | "spend" | "leads" | "conversations" | "whatsapp_opens" | "landing_page_views" | "destination"> & {
+  conversions?: number | null;
+};
 type Judged = VerdictInput["destination"];
 
 const judged = (destination: string): destination is Judged =>
   outcomeDefinition(destination).comparable;
 
 /** #2601: the stored headline result: chats, landing-page views (website) or form leads. */
-const resultsOf = (destination: Judged, result: CardResult) =>
-  result[outcomeDefinition(destination).campaignField] ?? 0;
+const resultsOf = (destination: Judged, result: CardResult, objective?: string | null) =>
+  result[outcomeDefinition(destination, objective).campaignField] ?? 0;
 
 /**
  * #1274 (#1255 slice 2): a campaign card's stored numbers as `verdict()` input. Only WhatsApp, form and website
@@ -26,10 +28,14 @@ export function cardVerdictInput(campaign: CardCampaign, result: CardResult, ext
 }): VerdictInput | null {
   const destination = campaignDestination(campaign, result);
   if (!judged(destination)) return null;
+  const websiteGoal = destination === "website" && (campaign.objective === "leads" || campaign.objective === "sales")
+    ? campaign.objective
+    : undefined;
   return {
     // #2281: a capped run past its end time has ended, whatever its row says (results-summary agrees).
-    destination, status: campaign.status !== "draft" && cappedRunEnded(campaign.raw, extra.now) ? "completed" : campaign.status, liveSince: readCampaignHealth(campaign.raw)?.activeSince ?? null,
-    impressions: result.impressions ?? 0, results: resultsOf(destination, result), spend: Number(result.spend ?? 0),
+    destination, ...(websiteGoal ? { websiteGoal } : {}),
+    status: campaign.status !== "draft" && cappedRunEnded(campaign.raw, extra.now) ? "completed" : campaign.status, liveSince: readCampaignHealth(campaign.raw)?.activeSince ?? null,
+    impressions: result.impressions ?? 0, results: resultsOf(destination, result, campaign.objective), spend: Number(result.spend ?? 0),
     opens: destination === "whatsapp" ? result.whatsapp_opens ?? null : null,
     waiting: extra.waiting, weakAd: extra.weakAd, comparison: extra.comparison, now: extra.now,
   };
@@ -39,13 +45,15 @@ export function cardVerdictInput(campaign: CardCampaign, result: CardResult, ext
 export function lastCampaignComparison(campaign: CardCampaign, campaigns: CardCampaign[], results: Record<string, CardResult | undefined>): Comparison | null {
   const destination = campaignDestination(campaign, results[campaign.id]);
   if (!judged(destination)) return null;
+  const definition = outcomeDefinition(destination, campaign.objective);
   const before = Date.parse(campaign.created_at ?? "");
   const previous = campaigns
     .filter((other) => other.id !== campaign.id && results[other.id] && Date.parse(other.created_at ?? "") < before
-      && campaignDestination(other, results[other.id]) === destination)
+      && campaignDestination(other, results[other.id]) === destination
+      && outcomeDefinition(destination, other.objective).metaActions.join(",") === definition.metaActions.join(","))
     .sort((a, b) => Date.parse(b.created_at ?? "") - Date.parse(a.created_at ?? ""))[0];
   const result = previous ? results[previous.id]! : null;
-  const count = result ? resultsOf(destination, result) : 0;
+  const count = result ? resultsOf(destination, result, previous?.objective) : 0;
   return result && count ? { kind: "own", results: count, typical: Number(result.spend ?? 0) / count } : null;
 }
 

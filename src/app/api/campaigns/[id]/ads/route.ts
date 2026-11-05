@@ -21,7 +21,7 @@ export const GET = observeRoute("/api/campaigns/[id]/ads", "GET", async (
 
   // RLS scopes every read to the owner's own campaigns and creatives.
   const { data: campaign } = await supabase.from("campaigns")
-    .select("id, destination, creative_ids, meta_campaign_id, meta_adset_id, meta_ad_ids, raw").eq("id", id).maybeSingle();
+    .select("id, destination, objective, creative_ids, meta_campaign_id, meta_adset_id, meta_ad_ids, raw").eq("id", id).maybeSingle();
   if (!campaign) return apiError(await ownerError("campaignNotFound"), 404);
   const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results")
     .select(AD_RESULT_COLUMNS)
@@ -34,5 +34,5 @@ export const GET = observeRoute("/api/campaigns/[id]/ads", "GET", async (
     const { data: rows } = await supabase.from("creatives").select("id, headline, image_url").in("id", [...new Set([...links.values()].map(link => link.creativeId))]);
     for (const row of rows ?? []) creatives.set(row.id, { headline: row.headline, imageUrl: row.image_url });
   }
-  return NextResponse.json({ ok: true, ...adResultViews((data ?? []) as StoredAdResult[], campaign.destination, { links, creatives }) });
+  return NextResponse.json({ ok: true, ...adResultViews((data ?? []) as StoredAdResult[], campaign.destination, { links, creatives }, campaign.objective) });
 });

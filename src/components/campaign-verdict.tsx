@@ -16,9 +16,10 @@ const outline = cn(link, "border border-slate-300 bg-white text-slate-900 hover:
  * #1274 (#1255 slice 2): a campaign card answers "Is it working? What should I do?" with one sentence, one number and
  * at most one action. The figures it replaces stay one tap away under Details.
  */
-export function CampaignVerdict({ verdict, destination, results, spend, details, onRunAgain, runAgainBusy = false, adsManagerUrl, onEditAd, pauseOffer, words }: {
+export function CampaignVerdict({ verdict, destination, websiteGoal, results, spend, details, onRunAgain, runAgainBusy = false, adsManagerUrl, onEditAd, pauseOffer, words }: {
   verdict: Verdict;
   destination: VerdictInput["destination"];
+  websiteGoal?: VerdictInput["websiteGoal"];
   results: number;
   spend: number;
   details: ReactNode;
@@ -33,7 +34,7 @@ export function CampaignVerdict({ verdict, destination, results, spend, details,
   words?: Words<"verdict">;
 }) {
   const t = verdictTranslator(words);
-  const noun = (n: number) => t(resultNounKey(destination), { n });
+  const noun = (n: number) => t(resultNounKey(destination, websiteGoal), { n });
   const action = (() => {
     switch (verdict.action) {
       case "reply":
