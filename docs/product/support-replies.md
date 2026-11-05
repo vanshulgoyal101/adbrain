@@ -48,11 +48,11 @@ Tell the CTO on the issue if many owners report this in the same hour.
 - **Owner says:** "Facebook says the app isn't available", "connect not working",
   "it keeps asking again".
 - **Screen shows:** on the Go live step, under "Facebook Page": "Not connected" and
-  "Facebook is still reviewing AdBrain. You can make, approve and download ads now.
-  Connecting a new Facebook account must wait for Meta to approve access." After a
-  failed try, with "Try again": "Request received. Sending a request does not switch
-  on Facebook access; Meta approval is still pending." That try recorded the access
-  request, so the scheduled job opens a `waiting-owner` "Facebook access request"
+  "Connecting a new Facebook account requires Meta approval for AdBrain. You can make,
+  approve and download ads now." After a failed try, with "Try again": "Your request
+  is recorded. You can connect Facebook once Meta approves AdBrain. Until then, your
+  approved ads stay here for you to download and share." That confirmation means the
+  access request was recorded, so the scheduled job opens a `waiting-owner` "Facebook access request"
   issue on its next run (#2538). If it didn't record: "Your request did not send.
   Check your connection and try again." If the Meta window was closed
   early: "Meta has not finished yet. Complete the Meta window, then check again.
@@ -62,15 +62,15 @@ Tell the CTO on the issue if many owners report this in the same hour.
   can't connect; or the Meta window was closed before the last step.
 - **Reply:**
 
-  > Facebook is still reviewing our app, so connecting a new Facebook account has to
-  > wait for Meta's approval. We can't give a date yet. Meanwhile you can make,
-  > approve and download your ads and share them with customers yourself. We have
-  > your request. If you think you're already approved, tap "Connect Facebook Page",
+  > Connecting a new Facebook account requires Meta approval for AdBrain. Meanwhile
+  > you can make, approve and download your ads and share them with customers yourself.
+  > If the screen confirms your request, it has been recorded. If you think you're
+  > already approved, tap "Connect Facebook Page",
   > pick your Page and ad account in the Meta window and go to the end; if it fails,
   > send me a screenshot.
 
-Don't promise an invite or a date (#2697). The request issue is for the CEO to track
-who is waiting while App Review is pending.
+Don't promise an invite, a date or a notification (#2697, #2847). The request issue
+is for the CEO to track who is waiting for access.
 
 If the screen says "This ad account is not active. Check Account quality in Meta.",
 reply: "Meta has limited this ad account. Open Account quality in Meta and follow

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad, plist, awakePlist } from "../scripts/team-supervisor.mjs";
+import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad, plist, awakePlist, WORKER_ROLES } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -49,6 +49,29 @@ describe("team-supervisor (#573 A1)", () => {
     expect([...liveRoles(dir, 20)].sort()).toEqual(["designer", "qa"]);
   });
 
+  it("finds concurrently active sessions by role", async () => {
+    const roleDir = join(dir, "duplicate-role-chats");
+    mkdirSync(roleDir);
+    for (const [id, content] of [
+      ["dev2-one", "You are AdBrain's Dev 2."],
+      ["dev2-two", "You are AdBrain's Dev 2. A replayed chat."],
+      ["other", "A different chat."],
+    ]) {
+      mkdirSync(join(roleDir, id));
+      writeFileSync(join(roleDir, id, "events.jsonl"), [
+        { type: "session.start", data: {} },
+        { type: "user.message", data: { content } },
+        { type: "assistant.turn_start", data: {} },
+        { type: "tool.execution_start", data: {} },
+      ].map((event) => JSON.stringify(event)).join("\n") + "\n");
+    }
+
+    const { liveRoleChats } = await import("../scripts/team-supervisor.mjs");
+    const chats = liveRoleChats?.(roleDir) ?? new Map();
+    expect(chats.get("dev2")).toEqual(["dev2-one", "dev2-two"]);
+    expect(chats.has("other")).toBe(false);
+  });
+
   it("wakes the first role in order with work and no live chat", () => {
     const statuses = {
       devops: { state: "waiting", items: [] },
@@ -57,6 +80,17 @@ describe("team-supervisor (#573 A1)", () => {
     };
     expect(pickRole(statuses, new Set(["qa"]))).toEqual({ role: "reviewer", items: ["#673 audit"], overdue: true });
     expect(pickRole(statuses, new Set(["qa", "reviewer"]))).toBeNull();
+  });
+
+  it("does not wake a role that already has duplicate role chats", () => {
+    const statuses = {
+      qa: { state: "has-work", items: ["#643 review"] },
+      reviewer: { state: "has-work", items: ["#673 audit"] },
+    };
+    expect(pickRole(statuses, new Set(), ["qa", "reviewer"], { blocked: new Set(["qa"]) })).toMatchObject({
+      role: "reviewer",
+      items: ["#673 audit"],
+    });
   });
 
   it("wakes an hour-overdue role first (longest wait, then bottleneck order), even past the daily cap (#573)", () => {
@@ -101,7 +135,10 @@ describe("team-supervisor (#573 A1)", () => {
 
   it("gives each role a restart prompt that maps back to the same role", () => {
     const text = restartPrompt("dev2");
+    const spawnId = (value: string) => value.match(/spawn-id: ([\da-f-]+)/i)?.[1];
     expect(roleFromPrompt(text)).toBe("dev2");
+    expect(spawnId(text) ?? "").toMatch(/^[\da-f-]{36}$/i);
+    expect(spawnId(restartPrompt("dev2"))).not.toBe(spawnId(text));
     expect(text).toContain("-l owner:dev2");
     expect(text).toContain("wait-for-work.mjs --me dev2");
     expect(text).toMatch(/never completes: do not call task_complete/);
@@ -109,18 +146,45 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain("timed out), run it again");
     expect(text).not.toMatch(/Stop only when the waiter times out/);
     expect(text).toContain('"Dev 2:"');
+    // Fusion chats ran the waiter async, stopped it and ended their turns (Nov 4); spell out the tool-level loop.
+    expect(text).toMatch(/mode "sync" with initial_wait 600/);
+    expect(text).toMatch(/Never stop_bash the waiter/);
+    expect(text).not.toContain("Never use ask_user:");
     expect(() => restartPrompt("nobody")).toThrow();
+  });
+
+  it("routes routine role questions through the CEO without interrupting other work", () => {
+    expect(WORKER_ROLES.length).toBeGreaterThan(0);
+    for (const role of WORKER_ROLES) {
+      const text = restartPrompt(role);
+      expect(text).toMatch(/do not use ask_user for routine questions/i);
+      expect(text).toContain('post "→ CEO:"');
+      expect(text).toContain("continue other actionable work");
+      expect(text).toContain("mandatory confirmations and prompts still apply");
+      expect(text).not.toContain("Never use ask_user:");
+    }
+  });
+
+  it("replaces an unreachable ended-turn chat only after checking for an active writer", () => {
+    const text = restartPrompt("ceo");
+    expect(text).toContain("Unknown chat owner");
+    expect(text).toContain("replace the unreachable chat");
+    expect(text).toContain("after confirming no active writer");
+    expect(text).not.toContain("a queued one lands only when the turn ends");
   });
 
   it("gives a rotated-in CEO a succession prompt that respawns workers outside its own session (#2476)", () => {
     const text = restartPrompt("ceo");
     expect(roleFromPrompt(text)).toBe("ceo");
     expect(text).toContain('relationship "independent"');
+    expect(text).toContain('model "Copilot Fusion"');
     expect(text).toContain("never delete another session");
     expect(text).toContain("--restart-prompt <role>");
     expect(text).toContain("wait-for-work.mjs --me ceo");
     for (const r of ["dev", "dev4", "qa2", "reviewer", "devops", "cto", "docs"]) expect(text).toContain(`(${r})`);
     expect(text).toContain("ask the owner to close that session first");
+    expect(text).toMatch(/re-list before every create_session/i);
+    expect(text).toMatch(/re-list after each create/i);
     expect(text).toContain("a running chat reads no chat messages");
     expect(text).not.toContain("steer one line");
     expect(text).not.toMatch(/\(ceo\)/);

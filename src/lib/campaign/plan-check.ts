@@ -143,8 +143,6 @@ export const REVIEW_WARNINGS = {
   budget: "Budget is below what Meta needs to learn (about 50 results a week); results may be slow",
   /** #2599: website ads learn from landing-page views, not chats. */
   websiteBudget: "Budget is below what Meta needs to learn (about 50 landing-page views a week); visits may be slow",
-  /** #2714: a sales goal learns from purchases, which come slower than signups; the budget is never raised for it. */
-  sales: "Meta learns a sales goal from about 50 sales a week. With fewer, results may be slow; your budget stays as you set it",
 } as const;
 
 /** #418 rule 7: an ad's last line asks customers to send other words than WhatsApp pre-types. */
@@ -171,7 +169,7 @@ export function reviewWarnings(input: {
   storyReady: boolean;
   perAdSetDailyBudgetRupees: number;
   costPerResultRupees?: number | null;
-  /** #2714: a website ad's signup or sales goal; absent for visits. */
+  /** #2714: a website ad's leads or sales goal; absent for visits. */
   websiteGoal?: "leads" | "sales";
 }): string[] {
   const warnings: string[] = [];
@@ -180,7 +178,6 @@ export function reviewWarnings(input: {
   if (cost && cost > 0 && (input.perAdSetDailyBudgetRupees * 7) / cost < LEARNING_EVENTS_PER_WEEK) {
     warnings.push(input.destination === "website" && !input.websiteGoal ? REVIEW_WARNINGS.websiteBudget : REVIEW_WARNINGS.budget);
   }
-  if (input.destination === "website" && input.websiteGoal === "sales") warnings.push(REVIEW_WARNINGS.sales);
   return warnings;
 }
 

@@ -90,7 +90,11 @@ function suspenseBoundaries(node: any): any[] {
   if (!node || typeof node !== "object") return [];
   if (Array.isArray(node)) return node.flatMap(suspenseBoundaries);
   if (node.type === Suspense) return [node];
-  return suspenseBoundaries(node.props?.children);
+  return [
+    ...suspenseBoundaries(node.props?.children),
+    ...suspenseBoundaries(node.props?.primary),
+    ...suspenseBoundaries(node.props?.secondary),
+  ];
 }
 
 describe("Home workspace", () => {
@@ -238,6 +242,43 @@ describe("Home workspace", () => {
     resolveSpend({ limits: {}, evaluation: {} });
     render(await spend);
     expect(screen.getByText("Guardrails loaded")).toBeInTheDocument();
+  });
+
+  it("marks pending Meta subsections so later settings can wait for them", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    const { default: SettingsPage } = await import("@/app/(app)/settings/page");
+    const page = await SettingsPage({ searchParams: Promise.resolve({}) });
+    const boundaries = suspenseBoundaries(page);
+    const connection = boundaries.find((child: { props: { children: { type: { name: string } } } }) =>
+      child.props.children.type.name === "ConnectionSettings");
+    const whatsapp = connection.props.children.props.whatsapp;
+
+    const outer = render(connection.props.fallback);
+    expect(screen.getByRole("status")).toHaveAttribute("data-settings-primary-loading");
+    outer.unmount();
+
+    const nested = render(whatsapp.props.fallback);
+    expect(screen.getByRole("status")).toHaveAttribute("data-settings-primary-loading");
+    nested.unmount();
+
+    vi.stubEnv("META_SETUP_CHECKLIST", "true");
+    try {
+      queries.getMetaConnection.mockResolvedValue({ ready: true, source: "oauth" });
+      const section = connection.props.children;
+      const content = await section.type({ ...section.props, whatsapp: null });
+      const checklist = suspenseBoundaries(content).find((child: { props: { children: { type: { name: string } } } }) =>
+        child.props.children.type.name === "SetupChecklistSection");
+      const checklistFallback = render(checklist.props.fallback);
+      expect(screen.getByRole("status")).toHaveAttribute("data-settings-primary-loading");
+      checklistFallback.unmount();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    const spend = boundaries.find((child: { props: { children: { type: { name: string } } } }) =>
+      child.props.children.type.name === "SpendSettings");
+    render(spend.props.fallback);
+    expect(screen.getByRole("status")).not.toHaveAttribute("data-settings-primary-loading");
   });
 
   it("keeps privacy requests available before a business is set up", async () => {

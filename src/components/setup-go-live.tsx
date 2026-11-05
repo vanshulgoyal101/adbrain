@@ -67,8 +67,8 @@ type AccessRequest = "idle" | "sent" | "failed";
 
 /**
  * #1989/#2697: before App Review only accounts Meta already allows can connect; anyone else gets Meta's "app not
- * available" page inside the Facebook window, which AdBrain can't detect. Say plainly that Meta's review is still
- * pending (no Tester invite or date promise). After a try that didn't connect, say whether the access request
+ * available" page inside the Facebook window, which AdBrain can't detect. Explain the approval needed without
+ * asserting review status or promising a date. After a try that didn't connect, say whether the access request
  * (#2538) was recorded and offer Connect again; a recorded request is not a connection.
  */
 function ReviewPendingStatus({ tried, request, t, onRetry }: { tried: boolean; request: AccessRequest; t: ReturnType<typeof setupTranslator>; onRetry: () => void }) {
