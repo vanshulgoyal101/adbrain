@@ -17,7 +17,7 @@ const pick = async (names: string[]) => {
   fireEvent.change(input, { target: { files: names.map((name) => new File(["x"], name, { type: name.endsWith(".gif") ? "image/gif" : "image/jpeg" })) } });
   await waitFor(() => expect(screen.queryByText("Checking…")).not.toBeInTheDocument());
 };
-const asset = (id: string, name: string) => ({ id, name, tags: [], width: 1080, height: 1350, bytes: 1, fit: { level: "ready", ratio: "4:5", message: "Ready for Feed, Stories and Reels" }, url: `https://example.com/${id}.jpg`, createdAt: "2026-10-29T10:00:00Z" });
+const asset = (id: string, name: string) => ({ id, kind: "image", name, tags: [], width: 1080, height: 1350, bytes: 1, durationMs: null, fit: { level: "ready", ratio: "4:5", message: "Ready for Feed, Stories and Reels" }, url: `https://example.com/${id}.jpg`, createdAt: "2026-10-29T10:00:00Z" });
 
 function setup({ consented = true, vertical = "Interior design", fetch = vi.fn() } = {}) {
   const uploadToSignedUrl = vi.fn(async () => ({ error: null }));
@@ -43,7 +43,7 @@ describe("upload sheet (#778 slice 3b)", () => {
     const revoke = vi.fn();
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: (file: File) => { created.push(file.name); return `blob:${file.name}`; }, revokeObjectURL: revoke }));
     const { sheet } = setup({ fetch: vi.fn(async (url: string) => url === "/api/media/sign"
-      ? json(200, { ok: true, duplicate: false, id: "m1", path: "p", token: "t" }) : json(200, { ok: true, asset: asset("m1", "tall") })) });
+      ? json(200, { ok: true, duplicate: false, id: "m1", bucket: "media", path: "p", token: "t" }) : json(200, { ok: true, asset: asset("m1", "tall") })) });
     await pick(["tall.jpg"]);
     const list = within(sheet).getByRole("list", { name: "Your picks" });
     expect(list.querySelector("img")).toHaveAttribute("src", "blob:tall.jpg");
@@ -94,7 +94,7 @@ describe("upload sheet (#778 slice 3b)", () => {
     window.dispatchEvent(leaving);
     expect(leaving.defaultPrevented).toBe(true);
 
-    finish(json(200, { ok: true, duplicate: false, id: "m1", path: "p", token: "t" }));
+    finish(json(200, { ok: true, duplicate: false, id: "m1", bucket: "media", path: "p", token: "t" }));
     await waitFor(() => expect(within(sheet).getByText("Added")).toBeInTheDocument());
     const after = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(after);
@@ -111,7 +111,7 @@ describe("upload sheet (#778 slice 3b)", () => {
   it("uploads the usable picks on 'Add {n} photos' and adds them to the library; a duplicate says it reuses the saved copy", async () => {
     const fetch = vi.fn(async (url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body));
-      if (url === "/api/media/sign") return body.name === "wide" ? json(200, { ok: true, duplicate: true, asset: asset("m0", "wide") }) : json(200, { ok: true, duplicate: false, id: "m1", path: "b1/m1.jpg", token: "t" });
+      if (url === "/api/media/sign") return body.name === "wide" ? json(200, { ok: true, duplicate: true, asset: asset("m0", "wide") }) : json(200, { ok: true, duplicate: false, id: "m1", bucket: "media", path: "b1/m1.jpg", token: "t" });
       return json(200, { ok: true, asset: asset("m1", "tall") });
     });
     const { uploadToSignedUrl, sheet } = setup({ fetch: fetch as never });
@@ -127,7 +127,7 @@ describe("upload sheet (#778 slice 3b)", () => {
 
   it("asks for the rights tick (and the people clause for a salon) first, saves it once, then uploads", async () => {
     const fetch = vi.fn(async (url: string) => url === "/api/media/consent" ? json(200, { ok: true })
-      : url === "/api/media/sign" ? json(200, { ok: true, duplicate: false, id: "m1", path: "p", token: "t" }) : json(200, { ok: true, asset: asset("m1", "tall") }));
+      : url === "/api/media/sign" ? json(200, { ok: true, duplicate: false, id: "m1", bucket: "media", path: "p", token: "t" }) : json(200, { ok: true, asset: asset("m1", "tall") }));
     const { sheet } = setup({ consented: false, vertical: "Bridal salon", fetch: fetch as never });
     // Designer (#1973 review 1): the tick is there before any pick and sits above the picks.
     const tick = within(sheet).getByRole("checkbox", { name: /I own these photos/ });
@@ -149,7 +149,7 @@ describe("upload sheet (#778 slice 3b)", () => {
   it("a failed upload says so and Try again sends it again", async () => {
     const fetch = vi.fn()
       .mockRejectedValueOnce(new TypeError("offline"))
-      .mockResolvedValueOnce(json(200, { ok: true, duplicate: false, id: "m1", path: "p", token: "t" }))
+      .mockResolvedValueOnce(json(200, { ok: true, duplicate: false, id: "m1", bucket: "media", path: "p", token: "t" }))
       .mockResolvedValueOnce(json(200, { ok: true, asset: asset("m1", "tall") }));
     const { sheet } = setup({ fetch });
     await pick(["tall.jpg"]);

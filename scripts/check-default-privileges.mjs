@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { applyMigration, managementMigrationSql } from "./database-migrations.mjs";
 
 async function privileges(db, table, sequence, routine) {
@@ -29,7 +30,7 @@ async function defaults(db, role) {
   `, [role])).rows;
 }
 
-export async function verifyDefaultPrivilegeLedger(db, check, migration) {
+export async function verifyDefaultPrivilegeLedger(db, check, migration, createClient) {
   const name = "20261102_default_public_privileges.sql";
   await check("default privilege migration and its ledger commit or roll back together", async () => {
     await db.query(`
@@ -56,6 +57,160 @@ export async function verifyDefaultPrivilegeLedger(db, check, migration) {
     assert.equal(await applyMigration(db, name, migration), "already_applied");
     await assert.rejects(applyMigration(db, name, `${migration}\n-- changed bytes`), /checksum changed/);
     assert.equal((await db.query("select count(*)::int as count from private.schema_migrations where name=$1", [name])).rows[0].count, 1);
+  });
+
+  const wrappedName = "20261103_wrapped_runner_test.sql";
+  const wrapped = "-- Original migration bytes\nbegin;\ncreate table public.migration_runner_fixture (id integer);\ncommit;\n";
+  const state = async () => (await db.query(`
+    select to_regclass('public.migration_runner_fixture')::text as relation,
+      (select count(*)::int from private.schema_migrations where name = $1) as ledger_count
+  `, [wrappedName])).rows[0];
+  const cleanup = async () => {
+    await db.query("drop table if exists public.migration_runner_fixture");
+    await db.query("delete from private.schema_migrations where name = $1", [wrappedName]);
+  };
+
+  await check("wrapped migration and ledger both roll back when the ledger insert fails", async () => {
+    await db.query(`create trigger reject_wrapped_ledger before insert on private.schema_migrations
+      for each row execute function private.reject_default_privilege_ledger()`);
+    try {
+      try {
+        await assert.rejects(db.query(managementMigrationSql(wrappedName, wrapped, { commit: true })), /intentional ledger failure/);
+      } finally {
+        await db.query("rollback");
+      }
+      assert.deepEqual(await state(), { relation: null, ledger_count: 0 }, "Management API SQL rolls back both changes");
+      await assert.rejects(applyMigration(db, wrappedName, wrapped), /intentional ledger failure/);
+      assert.deepEqual(await state(), { relation: null, ledger_count: 0 }, "CLI rolls back both changes");
+    } finally {
+      await db.query("drop trigger reject_wrapped_ledger on private.schema_migrations");
+      await cleanup();
+    }
+  });
+
+  await check("wrapped CLI migration stores original checksum, skips repeats and rejects drift", async () => {
+    try {
+      assert.equal(await applyMigration(db, wrappedName, wrapped), "applied");
+      assert.deepEqual(await state(), { relation: "migration_runner_fixture", ledger_count: 1 });
+      const { rows } = await db.query("select checksum from private.schema_migrations where name = $1", [wrappedName]);
+      assert.equal(rows[0].checksum, createHash("sha256").update(wrapped).digest("hex"));
+      assert.equal(await applyMigration(db, wrappedName, wrapped), "already_applied");
+      await assert.rejects(applyMigration(db, wrappedName, `${wrapped}-- changed bytes\n`), /checksum changed/);
+      assert.deepEqual(await state(), { relation: "migration_runner_fixture", ledger_count: 1 });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  await check("wrapped migration retains its advisory lock until the ledger insert", async () => {
+    const observer = createClient();
+    await observer.connect();
+    let checkedInsert = false;
+    const checkedClient = {
+      async query(statement, parameters) {
+        if (statement.startsWith("insert into private.schema_migrations")) {
+          const { rows } = await observer.query("select pg_try_advisory_xact_lock(hashtextextended('adbrain:migrations', 0)) as acquired");
+          assert.equal(rows[0].acquired, false, "another session cannot take the migration lock before the ledger insert");
+          checkedInsert = true;
+        }
+        return db.query(statement, parameters);
+      },
+    };
+    try {
+      assert.equal(await applyMigration(checkedClient, wrappedName, wrapped), "applied");
+      assert.equal(checkedInsert, true, "the lock was checked at the ledger boundary");
+      const { rows } = await observer.query("select pg_try_advisory_xact_lock(hashtextextended('adbrain:migrations', 0)) as acquired");
+      assert.equal(rows[0].acquired, true, "the migration lock is released after commit");
+    } finally {
+      await observer.end();
+      await cleanup();
+    }
+  });
+
+  await check("Management API SQL preserves wrapped dry-run, commit and repeat behavior", async () => {
+    try {
+      await db.query(managementMigrationSql(wrappedName, wrapped, { commit: false }));
+      assert.deepEqual(await state(), { relation: null, ledger_count: 0 });
+      await db.query(managementMigrationSql(wrappedName, wrapped, { commit: true }));
+      assert.deepEqual(await state(), { relation: "migration_runner_fixture", ledger_count: 1 });
+      const { rows } = await db.query("select checksum from private.schema_migrations where name = $1", [wrappedName]);
+      assert.equal(rows[0].checksum, createHash("sha256").update(wrapped).digest("hex"));
+      try {
+        await assert.rejects(db.query(managementMigrationSql(wrappedName, wrapped, { commit: true })), /already applied/);
+      } finally {
+        await db.query("rollback");
+      }
+      assert.deepEqual(await state(), { relation: "migration_runner_fixture", ledger_count: 1 });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  await check("wrapped migration with intermediate transaction control is rejected without side effects", async () => {
+    const unsafe = "begin;\ncreate table public.migration_runner_fixture (id integer);\ncommit;\nselect 1;\ncommit;\n";
+    try {
+      await assert.rejects(applyMigration(db, wrappedName, unsafe), /controls its own transaction/);
+      assert.deepEqual(await state(), { relation: null, ledger_count: 0 });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  await check("transaction-control variants are refused before changing the isolated database", async () => {
+    const variants = [
+      "begin;\ncreate table public.migration_runner_fixture (id integer);\ncommit",
+      "begin;\ncreate table public.migration_runner_fixture (id integer);\ncommit and chain;\n",
+      "begin;\ncreate table public.migration_runner_fixture (id integer); commit;\n",
+      "begin;\ncreate table public.migration_runner_fixture (id integer);\ncommit;\nselect 1;\n",
+    ];
+    try {
+      for (const sql of variants) {
+        await assert.rejects(applyMigration(db, wrappedName, sql), /controls its own transaction/);
+        assert.throws(() => managementMigrationSql(wrappedName, sql, { commit: false }), /controls its own transaction/);
+        assert.deepEqual(await state(), { relation: null, ledger_count: 0 });
+      }
+    } finally {
+      await cleanup();
+    }
+  });
+
+  await check("ordinary begin/atomic identifiers cannot hide a transaction commit", async () => {
+    const select = "select begin atomic from (select 1 as begin) fixture";
+    assert.equal((await db.query(select)).rows[0].atomic, 1);
+    try {
+      await assert.rejects(applyMigration(db, wrappedName, `${select}; commit;`), /controls its own transaction/);
+      assert.deepEqual(await state(), { relation: null, ledger_count: 0 });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  await check("quoted procedures and SQL-standard function bodies retain their original semantics", async () => {
+    const procedureName = "20261103_runner_procedure.sql";
+    const functionName = "20261103_runner_function.sql";
+    const procedure = `create procedure public.migration_runner_procedure() language plpgsql as $body$
+      begin
+        commit;
+      end;
+      $body$;`;
+    const fn = `create function public.migration_runner_answer() returns integer language sql
+      begin atomic
+        select case when true then 42 else 0 end;
+      end;`;
+    try {
+      assert.equal(await applyMigration(db, procedureName, procedure), "applied");
+      const { rows } = await db.query("select prosrc from pg_proc where oid = 'public.migration_runner_procedure()'::regprocedure");
+      assert.match(rows[0].prosrc, /\bcommit\s*;/i);
+      assert.equal(await applyMigration(db, functionName, fn), "applied");
+      assert.equal((await db.query("select public.migration_runner_answer() as answer")).rows[0].answer, 42);
+      const dryFunction = fn.replace("public.migration_runner_answer()", "public.migration_runner_dry_answer()");
+      await db.query(managementMigrationSql("20261103_management_function.sql", dryFunction, { commit: false }));
+      assert.equal((await db.query("select to_regprocedure('public.migration_runner_dry_answer()') as routine")).rows[0].routine, null);
+    } finally {
+      await db.query("drop procedure if exists public.migration_runner_procedure()");
+      await db.query("drop function if exists public.migration_runner_answer()");
+      await db.query("delete from private.schema_migrations where name = any($1)", [[procedureName, functionName]]);
+    }
   });
 }
 
