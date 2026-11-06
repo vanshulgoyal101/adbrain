@@ -209,16 +209,23 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   const shownMedia = visibleMedia.filter((item) => tab === "all" || (tab === "photos" && item.kind === "image") || (tab === "videos" && item.kind === "video"));
   const shownBrandAssets = tab === "videos" ? [] : brandAssets;
   const ownCount = visibleMedia.length + brandAssets.length;
-  // #780 slice 2a: up to MAX_AD_PHOTOS own photos go to Create, one per ad; a deleted photo drops out.
+  // #780 slice 2a: up to MAX_AD_PHOTOS own media items go to Create, in the order picked.
   const [picked, setPicked] = useState<string[]>([]);
-  const chosen = picked.filter((id) => media.some((m) => m.id === id && m.kind === "image"));
+  const canPick = (m: MediaView) => m.kind === "image" || (videoEnabled && m.kind === "video");
+  const chosen = picked.filter((id) => media.some((m) => m.id === id && m.url && canPick(m)));
+  const hasVideo = chosen.some((id) => media.some((item) => item.id === id && item.kind === "video"));
   const pickBox = (m: MediaView) => {
-    if (sample || m.kind !== "image" || !m.url) return undefined;
+    if (sample || !m.url || !canPick(m)) return undefined;
     const on = chosen.includes(m.id);
     return (
       <label className="inline-flex size-11 shrink-0 items-center justify-center">
-        <input type="checkbox" checked={on} disabled={!on && chosen.length >= MAX_AD_PHOTOS} aria-label={t("library.select", { name: m.name || t("library.photo") })}
-          onChange={() => setPicked(on ? chosen.filter((id) => id !== m.id) : [...chosen, m.id])} className="size-5 accent-primary disabled:opacity-40" />
+        <input type="checkbox" checked={on} disabled={!on && chosen.length >= MAX_AD_PHOTOS}
+          aria-label={t("library.select", { name: m.name || t(m.kind === "video" ? "library.video" : "library.photo") })}
+          onChange={() => setPicked((current) => {
+            const available = current.filter((id) => media.some((item) => item.id === id && item.url && canPick(item)));
+            if (available.includes(m.id)) return available.filter((id) => id !== m.id);
+            return available.length >= MAX_AD_PHOTOS ? available : [...available, m.id];
+          })} className="size-5 accent-primary disabled:opacity-40" />
       </label>
     );
   };
@@ -312,13 +319,13 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
           <section>
             {tab === "all" && <h2 className="mb-3 text-lg font-semibold text-slate-900">{t(videoEnabled ? "library.yoursMedia" : "library.yours")} <span className="text-sm font-normal text-slate-400">({ownCount})</span></h2>}
             {own}
-            {tab !== "videos" && chosen.length > 0 && (
+            {chosen.length > 0 && (
               <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white p-2 shadow-md">
-                <Link href={`/create?all=1&photos=${chosen.join(",")}`}
+                <Link href={`/create?all=1&${hasVideo ? "media" : "photos"}=${chosen.join(",")}`}
                   className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
                   {t("library.makeAds", { n: chosen.length })}
                 </Link>
-                {chosen.length >= MAX_AD_PHOTOS && <p className="text-sm text-slate-600">{t("library.maxPhotos", { n: MAX_AD_PHOTOS })}</p>}
+                {chosen.length >= MAX_AD_PHOTOS && !hasVideo && <p className="text-sm text-slate-600">{t("library.maxPhotos", { n: MAX_AD_PHOTOS })}</p>}
               </div>
             )}
           </section>

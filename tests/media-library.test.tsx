@@ -10,6 +10,11 @@ const photo = (over: Partial<MediaView> = {}): MediaView => ({
   fit: { level: "ready", ratio: "4:5", message: "Ready for Feed, Stories and Reels" },
   url: "https://example.com/m1.jpg", createdAt: "2026-10-29T10:00:00Z", ...over,
 });
+const video = (over: Partial<MediaView> = {}): MediaView => ({
+  id: "v1", kind: "video", durationMs: 30_000, name: "Bridal reel", tags: [], width: 1080, height: 1920, bytes: 4_000_000,
+  fit: { level: "ready", ratio: "9:16", message: "Ready for Feed, Stories and Reels" },
+  url: "https://example.com/v1.mp4", createdAt: "2026-10-29T10:00:00Z", ...over,
+});
 const ad = { id: "c1", image_url: "https://example.com/a.jpg", headline: "Slash your power bill", angle: "savings", status: "approved" } as unknown as CreativePreview;
 const biz = { id: "b1", vertical: "Interior design" };
 const logo = { id: "a1", business_id: "b1", url: "https://example.com/logo.png", type: "logo", notes: null } as unknown as BrandAsset;
@@ -32,7 +37,7 @@ describe("<MediaLibrary> (#778 slice 3a)", () => {
     expect(screen.queryByText(/No photos yet/)).not.toBeInTheDocument();
   });
 
-  it("filters by tab: Photos is the owner's own, Made by AdBrain is the ads; no Videos tab until videos ship", () => {
+  it("filters by tab: Photos is the owner's own and Made by AdBrain is the ads", () => {
     render(<MediaLibrary business={biz} media={[photo()]} creatives={[ad]} brandAssets={[logo]} />);
     expect(screen.queryByRole("tab", { name: "Videos" })).not.toBeInTheDocument();
 
@@ -84,8 +89,36 @@ describe("<MediaLibrary> Make ads from these (#780 slice 2a)", () => {
     const { unmount } = render(<MediaLibrary business={biz} media={photos} creatives={[]} brandAssets={[]} sample />);
     expect(screen.queryByRole("checkbox")).toBeNull();
     unmount();
-    render(<MediaLibrary business={biz} media={[photo({ kind: "video" }), photo({ id: "m2", url: null })]} creatives={[]} brandAssets={[]} />);
+    render(<MediaLibrary business={biz} media={[video(), photo({ id: "m2", url: null })]} creatives={[]} brandAssets={[]} />);
     expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("does not offer to pick a video without its signed link", () => {
+    render(<MediaLibrary business={biz} media={[video({ url: null })]} creatives={[]} brandAssets={[]} videoEnabled />);
+    fireEvent.click(screen.getByRole("tab", { name: "Videos" }));
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("shows ready videos in their tab and lets the owner select a mixed photo/video batch", () => {
+    const clip = video({ id: "55555555-5555-4555-8555-555555555555" });
+    const secondClip = video({ id: "77777777-7777-4777-8777-777777777777", name: "Tour reel" });
+    const still = photo({ id: "66666666-6666-4666-8666-666666666666" });
+    const extraStill = photo({ id: "88888888-8888-4888-8888-888888888888", name: "Bedroom" });
+    render(<MediaLibrary business={biz} media={[still, clip, secondClip, extraStill]} creatives={[]} brandAssets={[]} videoEnabled />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Videos" }));
+    expect(screen.getByLabelText("Bridal reel")).toHaveAttribute("src", clip.url);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Bridal reel" }));
+    expect(screen.getByRole("link", { name: "Make ads from these (1)" }))
+      .toHaveAttribute("href", `/create?all=1&media=${clip.id}`);
+    fireEvent.click(screen.getByRole("tab", { name: "All" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Finished kitchen" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Tour reel" }));
+
+    expect(screen.getByRole("checkbox", { name: "Pick Bedroom" })).toBeDisabled();
+    expect(screen.queryByText("Pick up to 3 photos at a time.")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Make ads from these (3)" }))
+      .toHaveAttribute("href", `/create?all=1&media=${clip.id},${still.id},${secondClip.id}`);
   });
 
   it("drops a deleted photo from the pick", () => {
