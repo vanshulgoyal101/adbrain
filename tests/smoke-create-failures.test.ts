@@ -45,6 +45,43 @@ describe("createFailureLines (#2504)", () => {
     ]);
   });
 
+  it("pairs each missing ad with only its own failed attempts", () => {
+    const lines = createFailureLines({
+      expected: 3,
+      saved: 1,
+      failures: [
+        { angle: "Value", angleId: "value", error: "generic failure" },
+        { angle: "Problem", angleId: "problem", error: "generic failure" },
+      ],
+      usage: [
+        { usage_kind: "text", provider: "google", model: "gemini", status: "error", error_code: "LLM_HTTP_503", metadata: { angle: "value" } },
+        { usage_kind: "text", provider: "groq", model: "qwen", status: "error", error_code: "LLM_HTTP_429", metadata: { angle: "problem" } },
+      ],
+    });
+
+    expect(lines).toEqual([
+      'NOTE missing ad "Value": 1× LLM_HTTP_503 (google/gemini)',
+      'NOTE missing ad "Problem": 1× LLM_HTTP_429 (groq/qwen)',
+      "NOTE failed attempts: 1× LLM_HTTP_503 (google/gemini); 1× LLM_HTTP_429 (groq/qwen)",
+    ]);
+  });
+
+  it("uses a known failure code when no provider attempt rows exist", () => {
+    expect(createFailureLines({
+      expected: 2,
+      saved: 0,
+      failures: [
+        { angle: "Value", angleId: "value", code: "NO_LLM_KEYS" },
+        { angle: "Problem", angleId: "problem", code: "NO_LLM_KEYS" },
+      ],
+      usage: [],
+    })).toEqual([
+      'NOTE missing ad "Value": NO_LLM_KEYS',
+      'NOTE missing ad "Problem": NO_LLM_KEYS',
+      "NOTE failed attempts: none recorded for this run",
+    ]);
+  });
+
   it("says when the result or the attempts were not read", () => {
     expect(createFailureLines({ expected: 3, saved: 1, failures: null, usage: null })).toEqual([
       "NOTE 2 missing ads not named by Create (the run's result was not read)",

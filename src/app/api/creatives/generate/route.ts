@@ -227,7 +227,7 @@ async function generate(req: Request, live?: LiveCreate) {
   const failed = new Map<string, { angle: AdAngle; error: unknown; message: string; savedUpTo?: string }>();
   // #2444: the step a finished ad (words and picture passed) reached when its save failed; it used to vanish unlogged.
   const saving = new Map<string, string>();
-  let failures: { angle: string; error: string; stage: CreativeFailureStage }[] = [];
+  let failures: { angle: string; angleId: string; error: string; stage: CreativeFailureStage; code?: string }[] = [];
   let topUp = 0;
   let pictureRetry = 0;
   const cost = { text: 0, image: 0 };
@@ -333,7 +333,7 @@ async function generate(req: Request, live?: LiveCreate) {
         const savedUpTo = saving.get(angle.id);
         saving.delete(angle.id);
         if (savedUpTo) console.error(JSON.stringify({ source: "adbrain.creative", code: "AD_NOT_SAVED", angle: angle.id, savedUpTo, message: (error instanceof Error ? error.message : String(error)).slice(0, 300) }));
-        const events = failedVariantUsage(error, usageContext);
+        const events = failedVariantUsage(error, usageContext, angle.id);
         addCost(events);
         const recorded = await persistLLMUsage(events);
         if (recorded && error instanceof NoLLMKeysError) noProviderFailures++;
@@ -383,10 +383,16 @@ async function generate(req: Request, live?: LiveCreate) {
       live?.onTopUp(pictureRetry, "picture");
       await generateVariants({ ...run, angleIds: Object.keys(concepts), count: pictureRetry, concepts, ownerPhotos: undefined, recentCopy, signal: AbortSignal.timeout(retryBudget) });
     }
-    failures = [...failed.values()].map(({ angle, message, error }) => ({ angle: angle.name, error: message, stage: creativeFailureStage(error) }));
+    failures = [...failed.values()].map(({ angle, message, error }) => ({
+      angle: angle.name,
+      angleId: angle.id,
+      error: message,
+      stage: creativeFailureStage(error),
+      ...(error instanceof NoLLMKeysError ? { code: "NO_LLM_KEYS" } : {}),
+    }));
     const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
     await progress(0, true, usageUnknown || inserted.length + failures.length < count, !inserted.length);
-    if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS" }, { status: 400 });
+    if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS", failures }, { status: 400 });
   } catch (err) {
     const noProvider = err instanceof NoLLMKeysError;
     if (admitted) await progress(0, noProvider, !noProvider, noProvider).catch(() => {});
