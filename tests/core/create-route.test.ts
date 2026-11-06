@@ -268,10 +268,28 @@ describe("core: Create route on recorded run 4", () => {
     stubProviders({ down: { openrouter: 503, google: 429, groq: 429 } });
     const response = await (await postCreate())();
     expect(response.status).not.toBe(200);
+    const body = await response.json();
+    expect(body.failures.map((failure: { angleId: string }) => failure.angleId).sort())
+      .toEqual(run4.angles.map(({ angleId }) => angleId).sort());
     expect(mocks.inserts).toHaveLength(0);
     const text = mocks.usage.filter((row) => row.route === "creatives.generate" && row.usageKind !== "image");
     expect(text.length).toBeGreaterThanOrEqual(3);
     expect(new Set(text.map((row) => row.errorCode))).toEqual(new Set(["LLM_HTTP_503", "LLM_HTTP_429"]));
+  });
+
+  it("returns per-ad failures when no LLM provider keys are configured", async () => {
+    vi.stubEnv("OPENROUTER_API_KEYS", "");
+    vi.stubEnv("GOOGLE_AI_API_KEYS", "");
+    vi.stubEnv("GROQ_API_KEYS", "");
+    const response = await (await postCreate())();
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe("NO_LLM_KEYS");
+    expect(body.failures).toHaveLength(3);
+    expect(body.failures).toEqual(expect.arrayContaining(
+      run4.angles.map(({ angleId }) => expect.objectContaining({ angleId, code: "NO_LLM_KEYS" })),
+    ));
   });
 
   it("leaves run 4's passed copy uncoded when only the image fails, and codes the image (#687)", async () => {
@@ -346,6 +364,10 @@ describe("core: Create route on recorded run 4", () => {
     expect(response.status, JSON.stringify(body)).toBe(200);
     expect(body.creatives).toHaveLength(2);
     expect(body.failures).toHaveLength(1);
+    expect(body.failures[0]).toMatchObject({ angle: "Save money / value", angleId: "value" });
+    const refused = mocks.usage.find((row) =>
+      (row.metadata as { validationRules?: string[] } | undefined)?.validationRules?.includes("unsupported-commercial-claim"));
+    expect(refused).toMatchObject({ metadata: { angle: "value" } });
     expect(mocks.progress.some((call) => call.p_uncertain)).toBe(false);
     expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false, p_failed: false });
   });
@@ -392,7 +414,7 @@ describe("core: Create route on recorded run 4", () => {
     const body = await response.json();
     expect(response.status, JSON.stringify(body)).toBe(200);
     expect(body.creatives).toHaveLength(2);
-    expect(body.failures).toEqual([{ angle: "Save money / value", error: expect.any(String), stage: "text" }]);
+    expect(body.failures).toEqual([{ angle: "Save money / value", angleId: "value", error: expect.any(String), stage: "text" }]);
     // One concept and one repair per round, and only one top-up round.
     expect(valueCalls()).toHaveLength(4);
     expect(mocks.inserts).toHaveLength(2);

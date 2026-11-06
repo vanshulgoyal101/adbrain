@@ -32,33 +32,41 @@ function reasonCode(row) {
 }
 
 /**
- * NOTE lines for a short run: one per missing ad (from the result's `failures`), then the failed attempts by
- * reason, provider and model. The create-smoke alert copies every NOTE line.
- * @param {{ expected: number, saved: number | null, failures?: { angle?: string, error?: string }[] | null,
- *   usage?: { usage_kind?: string, provider?: string, model?: string, status?: string, error_code?: string | null, metadata?: any }[] | null }} run
+ * NOTE lines for a short run: one per missing ad, its own failed attempts, then the run's attempts by reason.
+ * The create-smoke alert copies every NOTE line.
+ * @param {{ expected: number, saved: number | null, failures?: { angle?: string, angleId?: string, code?: string, error?: string }[] | null,
+ *   usage?: { usage_kind?: string, provider?: string, model?: string, status?: string, error_code?: string | null,
+ *     metadata?: { angle?: string, failure?: string, validationRules?: string[], validationStage?: string } | null }[] | null }} run
  * @returns {string[]}
  */
 export function createFailureLines({ expected, saved, failures, usage }) {
   const lines = [];
   const missing = saved == null ? null : Math.max(0, expected - saved);
   if (missing === 0) return lines;
+  const rows = (usage ?? []).filter((row) => row && (row.status ?? "error") === "error");
+  const formatAttempts = (attempts) => {
+    const counts = new Map();
+    for (const row of attempts) {
+      const key = `${reasonCode(row)} (${row.provider ?? "?"}/${row.model ?? "?"})`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts].sort((a, b) => b[1] - a[1]).map(([key, n]) => `${n}× ${key}`).join("; ");
+  };
   const listed = Array.isArray(failures) ? failures : [];
   for (const failure of listed) {
-    lines.push(`NOTE missing ad "${String(failure.angle ?? "unnamed").slice(0, 60)}": ${String(failure.error ?? "no reason given").split("\n")[0].slice(0, 160)}`);
+    const angle = String(failure.angle ?? "unnamed").slice(0, 60);
+    const attempts = failure.angleId ? rows.filter((row) => row.metadata?.angle === failure.angleId) : [];
+    const error = String(failure.error ?? "").split("\n")[0].slice(0, 160);
+    const reason = failure.angleId
+      ? formatAttempts(attempts) || failure.code || error || "no per-ad cause recorded"
+      : error || "no reason given";
+    lines.push(`NOTE missing ad "${angle}": ${reason}`);
   }
   if (missing && listed.length < missing) {
     lines.push(`NOTE ${missing - listed.length} missing ad${missing - listed.length === 1 ? "" : "s"} not named by Create (the run's result was not read)`);
   }
-  const rows = (usage ?? []).filter((row) => row && (row.status ?? "error") === "error");
   if (usage == null) lines.push("NOTE failed attempts: not read");
   else if (!rows.length) lines.push("NOTE failed attempts: none recorded for this run");
-  else {
-    const counts = new Map();
-    for (const row of rows) {
-      const key = `${reasonCode(row)} (${row.provider ?? "?"}/${row.model ?? "?"})`;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    lines.push(`NOTE failed attempts: ${[...counts].sort((a, b) => b[1] - a[1]).map(([key, n]) => `${n}× ${key}`).join("; ")}`);
-  }
+  else lines.push(`NOTE failed attempts: ${formatAttempts(rows)}`);
   return lines;
 }

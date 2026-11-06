@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { creativeFailureMessage, creativeFailureStage } from "@/lib/creative/failure-message";
+import { creativeFailureDetails, creativeFailureMessage, creativeFailureStage } from "@/lib/creative/failure-message";
 import { AllLLMProvidersFailedError, NoLLMKeysError } from "@/lib/llm/types";
 import { CreativeImageError, CreativeValidationError } from "@/lib/creative/generate";
 import { CreativeSaveError } from "@/lib/creative/save";
@@ -47,5 +47,17 @@ describe("creativeFailureStage (#2515)", () => {
     expect(creativeFailureStage(new DOMException("a", "AbortError"))).toBe("timeout");
     expect(creativeFailureStage(new Error("?"))).toBe("other");
     expect(creativeFailureStage("?")).toBe("other");
+  });
+});
+
+describe("creativeFailureDetails (#2504)", () => {
+  it("keeps each failed angle's identity and only adds a code for missing provider keys", () => {
+    expect(creativeFailureDetails([
+      { angle: { id: "value", name: "Value" }, message: "No AI keys", error: new NoLLMKeysError() },
+      { angle: { id: "price", name: "Price" }, message: "This creative could not be generated.", error: new Error("failed") },
+    ])).toEqual([
+      { angle: "Value", angleId: "value", error: "No AI keys", stage: "provider", code: "NO_LLM_KEYS" },
+      { angle: "Price", angleId: "price", error: "This creative could not be generated.", stage: "other" },
+    ]);
   });
 });
