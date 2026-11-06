@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Creative } from "@/lib/types";
 
 const client = vi.hoisted(() => ({ drafts: vi.fn(), status: vi.fn(), saveDraft: vi.fn(), preflight: vi.fn() }));
@@ -43,6 +44,44 @@ describe("campaign composer video preparation (#781)", () => {
       const signal = mediaCalls()[0][1]?.signal;
       fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
       expect(signal?.aborted).toBe(true);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("keeps placement previews on the selected launch media and never treats a video poster as playback", async () => {
+    client.saveDraft.mockImplementation(async (input: DraftInput) => ({
+      draftId: "33333333-3333-4333-8333-333333333333",
+      version: 1,
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      input,
+    }));
+    const request = vi.fn<typeof fetch>(async (url) => String(url).startsWith("/api/media/")
+      ? Response.json({ status: "ready", kind: "video", videoId: "123" })
+      : Response.json({ state: "ready", numbers: [] }));
+    vi.stubGlobal("fetch", request);
+    try {
+      render(<Campaigns business={business} approved={[photo, video]} initialCampaigns={[]} initialResults={{}}
+        leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" videoAssetIds={["video-1"]} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Yours" }));
+      fireEvent.click(screen.getByRole("button", { name: "Photo ad, Your photo" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Video ad, Your video" }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      const photoPreview = screen.getByRole("region", { name: "Preview of Photo ad" });
+      expect(within(photoPreview).getByRole("img", { name: "Photo ad" })).toHaveAttribute("src", "/photo.png");
+      const videoPreview = screen.getByRole("region", { name: "Video preview of Video ad" });
+      expect(videoPreview).toHaveTextContent(/poster images can't confirm full video playback/i);
+      expect(within(videoPreview).queryByRole("img")).toBeNull();
+
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Photo ad, Your photo" })); });
+      expect(screen.queryByRole("region", { name: "Preview of Photo ad" })).toBeNull();
+      expect(screen.getByRole("region", { name: "Video preview of Video ad" })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /Save draft/ }));
+      await waitFor(() => expect(client.saveDraft).toHaveBeenCalled());
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      expect(client.saveDraft.mock.calls[0][0].creativeIds).toEqual(["video-ad"]);
     } finally { vi.unstubAllGlobals(); }
   });
 

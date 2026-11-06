@@ -996,6 +996,8 @@
       "checking": "Checking the saved campaign draft before review.",
       "nothingSent": "No campaign create or activation request was sent.",
       "whatYoureSending": "What you're sending",
+      "previewEachAd": "Preview each ad",
+      "videoPreviewUnavailable": "Poster images can't confirm full video playback, so this preview doesn't show one.",
       "locationNote": "Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.",
       "facts": {
         "budget": "Budget",

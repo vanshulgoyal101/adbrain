@@ -69,6 +69,7 @@ import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { PlacementPreview } from "@/components/placement-preview";
 import { brandDestination } from "@/lib/brand/usable";
 import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFacts, reviewWebsiteUrl, type ComposerDestination } from "@/components/campaign-destination";
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
@@ -479,6 +480,11 @@ function BusinessCampaigns({
   const adDraftUnsaved = editingAd !== null && ((adDraft !== null && !sameAdText(adDraft, savedAdText(editingAd))) || adPicture !== null);
   // While editing, the tile previews the unsaved headline (#387).
   const pickerAds = savedPickerAds.map((c) => (c.id === editingAdId && adDraft ? { ...c, headline: adDraft.headline } : c));
+  const previewCreativeIds = prepareReview?.draft.input.creativeIds ?? [...selected];
+  const previewAds = previewCreativeIds.flatMap((id) => {
+    const ad = pickerAds.find((creative) => creative.id === id);
+    return ad ? [ad] : [];
+  });
   const selectedVideoItems = showComposer && creationMode === "manual" && connectedForDraft
     ? pickerAds.flatMap((ad) => selected.has(ad.id) && ad.media_asset_id && videoAssetIds.includes(ad.media_asset_id)
       ? [{ id: ad.media_asset_id, label: ad.headline?.trim() || tc("picker.thisAd") }] : [])
@@ -2229,7 +2235,7 @@ function BusinessCampaigns({
                 </div>
                 </details>
 
-                <div className="border-t border-slate-200 pt-5">
+                <div className="grid gap-5 border-t border-slate-200 pt-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(15rem,1fr)]">
                   <CampaignLaunchReview
                     selectedCount={selected.size}
                     budget={totalDailyBudget}
@@ -2240,6 +2246,23 @@ function BusinessCampaigns({
                     weeklyCap={composerCap}
                     audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
+                  {previewAds.length > 0 && (
+                    <section aria-label={tc("review.previewEachAd")} className="min-w-0">
+                      <h3 className="mb-3 text-sm font-semibold text-slate-900">{tc("review.previewEachAd")}</h3>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                        {previewAds.map((ad) => {
+                          const title = ad.headline?.trim() || tc("picker.thisAd");
+                          const isVideo = ad.media_asset_id !== null && ad.media_asset_id !== undefined
+                            && videoAssetIds.includes(ad.media_asset_id);
+                          return isVideo
+                            ? <section key={ad.id} aria-label={`Video preview of ${title}`} className="flex aspect-[4/5] max-w-xs flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-600">
+                              <p>{tc("review.videoPreviewUnavailable")}</p>
+                            </section>
+                            : <PlacementPreview key={ad.id} imageUrl={ad.image_url} title={title} verdicts={null} />;
+                        })}
+                      </div>
+                    </section>
+                  )}
                 </div>
 
                 {placedError?.at === "composer" && <p ref={placedErrorRef} role="alert" className="scroll-mt-24 text-sm font-medium text-red-800">{placedError.message}</p>}
