@@ -226,7 +226,8 @@ describe("video uploads (#748)", () => {
       release();
       await expect(signing).resolves.toMatchObject({ duplicate: false });
       expect(upload.signingIntent).toBeNull();
-      expect(upload.tokenExpiresAt).toBe("2026-11-04T13:10:00.000Z");
+      expect(upload.tokenExpiresAt).toBe("2026-11-04T13:15:00.000Z");
+      expect(db.tables.media_assets[0].upload_expires_at).toBe("2026-11-04T13:15:00.000Z");
     } finally {
       release();
       await signing.catch(() => undefined);
@@ -324,18 +325,27 @@ describe("video uploads (#748)", () => {
     expect(db.tables.media_assets[0].deleted_at).toEqual(expect.any(String));
   });
 
-  it("retains the original upload reservation after expiry when an old token recreates that path", async () => {
+  it("does not issue a follow-up row update after atomic video removal", async () => {
+    const row = await uploaded(tall);
+    await finalizeUpload(db.client, row);
+    db.updateErrors.push({ message: "database unavailable" });
+    await expect(deleteMedia(db.client, row)).resolves.toBeUndefined();
+    expect(db.tables.media_assets[0].deleted_at).toEqual(expect.any(String));
+    expect(db.videoSlots.find((slot) => slot.slot === "final")?.state).toBe("removed");
+    expect(db.objects.has(row.path)).toBe(false);
+    expect(db.updateErrors).toHaveLength(1);
+    expect(db.videoSlots.find((slot) => slot.slot === "final")?.state).toBe("removed");
+  });
+
+  it("records the upload accounting expiry five minutes after the signed-token lifetime", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-04T09:00:00.000Z"));
     try {
       const row = { ...await uploaded(tall) };
-      await finalizeUpload(db.client, row);
-      vi.setSystemTime(new Date("2026-11-04T12:00:00.000Z"));
-      db.objects.set(row.path, tall);
       expect(db.videoSlots.find((slot) => slot.slot === "upload")).toMatchObject({
-        path: row.path, reservedBytes: 50 * MB, tokenExpiresAt: "2026-11-04T11:00:00.000Z",
+        path: row.path, reservedBytes: 50 * MB, tokenExpiresAt: "2026-11-04T11:05:00.000Z",
       });
-      expect(db.objects.has(row.path)).toBe(true);
+      expect(db.tables.media_assets[0].upload_expires_at).toBe("2026-11-04T11:05:00.000Z");
     } finally {
       vi.useRealTimers();
     }

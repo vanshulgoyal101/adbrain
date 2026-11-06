@@ -394,6 +394,7 @@ export async function deleteMedia(admin: SupabaseClient, row: MediaRow): Promise
     if (confirmError || (row.status === "ready" && data !== true)) {
       throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't confirm the video was removed. Try again.");
     }
+    if (data === true) return;
   }
   const { error: saveError } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id);
   if (saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't delete the photo. Try again.");

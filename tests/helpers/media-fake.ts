@@ -37,7 +37,7 @@ export function fakeSupabase() {
       const rows = tables[table];
       if (action.kind === "insert") {
         if (insertErrors.length) return { data: null, error: insertErrors.shift()! };
-        const row: Row = { id: crypto.randomUUID(), tags: [], checks: {}, status: "pending", deleted_at: null, source: "upload", created_at: new Date().toISOString(), confirmed_at: new Date().toISOString(), ...action.row };
+        const row: Row = { id: crypto.randomUUID(), tags: [], checks: {}, status: "pending", deleted_at: null, upload_expires_at: null, source: "upload", created_at: new Date().toISOString(), confirmed_at: new Date().toISOString(), ...action.row };
         if (table === "media_assets" && rows.some((other) => other.business_id === row.business_id && other.sha256 === row.sha256 && !other.deleted_at)) {
           return { data: null, error: { code: "23505", message: "duplicate" } };
         }
@@ -103,8 +103,10 @@ export function fakeSupabase() {
       }
       if (name === "media_video_sign_finish") {
         if (!upload || upload.signingIntent !== args.p_intent_id) return { data: null, error: { message: "MEDIA_VIDEO_STATE" } };
+        const expiry = new Date(Date.now() + 2 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString();
         upload.signingIntent = null;
-        upload.tokenExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+        upload.tokenExpiresAt = expiry;
+        if (row) row.upload_expires_at = expiry;
         return { data: Boolean(row && row.status === "pending" && !row.deleted_at && final?.state === "reserved"), error: null };
       }
       if (name === "media_video_finalize_claim") {
@@ -116,7 +118,13 @@ export function fakeSupabase() {
         return { data: true, error: null };
       }
       if (name === "media_video_final_removed") {
-        if (final?.state !== "verified" || final.path !== args.p_final_path || objects.has(args.p_final_path)) return { data: false, error: null };
+        if (!final || final.path !== args.p_final_path || objects.has(args.p_final_path)) return { data: false, error: null };
+        if (final.state === "removed") {
+          if (row && !row.deleted_at) row.deleted_at = new Date().toISOString();
+          return { data: true, error: null };
+        }
+        if (final.state !== "verified") return { data: false, error: null };
+        if (row) row.deleted_at = new Date().toISOString();
         final.state = "removed";
         return { data: true, error: null };
       }

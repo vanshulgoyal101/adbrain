@@ -1768,11 +1768,18 @@ async function verifyMediaUploadQuota(db, database) {
       await assert.rejects(db.query(insert, row()), { code: "P0001", message: "MEDIA_QUOTA" });
       await db.query(insert, row("image", "ai"));
 
-      // Retain quota history while removing only this fixture's storage holds between inserts.
+      // These rows were never signed, so expire their synthetic upload windows while retaining quota history and slots.
       for (let i = 0; i < 3; i++) {
         const id = (await service.query(`${insert} returning id`, row("video"))).rows[0].id;
-        await service.query("update public.media_assets set deleted_at=now()-interval '3 hours', updated_at=now()-interval '3 hours' where id=$1", [id]);
-        if (slotsInstalled) await asPostgres(db, () => db.query("delete from private.media_video_slots where asset_id=$1", [id]));
+        if (slotsInstalled) {
+          await service.query(`update public.media_assets
+            set deleted_at=now()-interval '3 hours',upload_expires_at=now()-interval '3 hours',updated_at=now()-interval '3 hours'
+            where id=$1`, [id]);
+          await asPostgres(db, () => db.query(`update private.media_video_slots
+            set token_expires_at=now()-interval '3 hours' where asset_id=$1 and slot='upload'`, [id]));
+        } else {
+          await service.query("update public.media_assets set deleted_at=now()-interval '3 hours',updated_at=now()-interval '3 hours' where id=$1", [id]);
+        }
       }
       assert.equal((await db.query(`select count(*)::int as n from public.media_assets where business_id=$1 and kind='video' and created_at >= ${monthStart}`, [business])).rows[0].n, 3);
       await assert.rejects(service.query(insert, row("video")), { code: "P0001", message: "MEDIA_QUOTA" });
@@ -1956,6 +1963,56 @@ async function verifyMediaVideoBudget(db, database) {
       assert.equal(await held(), 97517568);
     });
 
+    await check(`${database}: an upload between object and slot reads cannot disappear from one accounting snapshot (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      await put(path(asset.business, "pause"), { size: 1, pause_budget_scan: true });
+      const gate = BigInt(`0x${randomUUID().replaceAll("-", "").slice(0, 15)}`).toString();
+      const originalFunction = (await db.query(
+        "select pg_get_functiondef('private.media_video_object_bytes(jsonb)'::regprocedure) as definition",
+      )).rows[0].definition;
+      const reader = client(database);
+      let heldResult;
+      await reader.connect();
+      await reader.query("set role service_role");
+      const readerPid = (await reader.query("select pg_backend_pid() as pid")).rows[0].pid;
+      await db.query("select pg_advisory_lock($1::bigint)", [gate]);
+      try {
+        await asPostgres(db, () => db.query(`create or replace function private.media_video_object_bytes(p_metadata jsonb)
+          returns bigint language plpgsql immutable set search_path = '' as $$
+          begin
+            if p_metadata ->> 'pause_budget_scan' = 'true' then
+              perform pg_advisory_xact_lock(${gate}::bigint);
+            end if;
+            if p_metadata is null or jsonb_typeof(p_metadata) <> 'object'
+              or coalesce(p_metadata ->> 'size', '') !~ '^[0-9]+$' then
+              raise exception 'MEDIA_VIDEO_STORAGE_UNKNOWN' using errcode = 'P0001';
+            end if;
+            return (p_metadata ->> 'size')::bigint;
+          end;
+          $$`));
+        heldResult = reader.query("select private.media_video_held_bytes() as bytes");
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const waiting = (await db.query(`select exists (
+            select 1 from pg_locks where pid=$1 and locktype='advisory' and not granted
+          ) as waiting`, [readerPid])).rows[0].waiting;
+          if (waiting) break;
+          if (Date.now() >= deadline) throw new Error("accounting read did not reach the deterministic pause");
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        await put(asset.upload, { size: 52428800 });
+        await db.query("select pg_advisory_unlock($1::bigint)", [gate]);
+        assert.equal(Number((await heldResult).rows[0].bytes), 104857601,
+          "the snapshot must count the full pending reservation plus the unrelated one-byte object");
+      } finally {
+        await db.query("select pg_advisory_unlock($1::bigint)", [gate]).catch(() => undefined);
+        if (heldResult) await heldResult.catch(() => undefined);
+        await asPostgres(db, () => db.query(originalFunction));
+        await reader.end();
+      }
+    });
+
     await check(`${database}: ready requires the claimed final path and matching Storage metadata (#2653)`, async () => {
       await reset();
       const asset = await insert(), final = path(asset.business, "final"), other = path(asset.business, "other");
@@ -1975,7 +2032,7 @@ async function verifyMediaVideoBudget(db, database) {
       assert.equal(await held(), 52431268);
     });
 
-    await check(`${database}: signing intent fences finalization and completion records a fresh two-hour expiry (#2653)`, async () => {
+    await check(`${database}: signing intent fences finalization and completion records a two-hour expiry plus five-minute margin (#2653)`, async () => {
       await reset();
       const asset = await insert(), final = path(asset.business, "final");
       const intent = await begin(asset);
@@ -1987,13 +2044,17 @@ async function verifyMediaVideoBudget(db, database) {
       assert.equal(stale, false);
       assert.equal((await slots(asset.id)).find(slot => slot.slot === "upload").signing_intent, intent);
       await asPostgres(db, () => db.query("update private.media_video_slots set token_expires_at='2000-01-01' where asset_id=$1 and slot='upload'", [asset.id]));
+      await service.query("update public.media_assets set upload_expires_at='2000-01-01' where id=$1", [asset.id]);
+      assert.equal(await held(), 104857600, "a live signing intent retains both reservations despite an old expiry");
       const before = (await db.query("select clock_timestamp() as moment")).rows[0].moment;
       assert.equal(await finish(asset, intent), true);
       const expiry = (await db.query(`select signing_intent,
-        token_expires_at >= $2::timestamptz + interval '2 hours' as from_completion,
-        token_expires_at >= clock_timestamp() + interval '1 hour 59 minutes 59 seconds' as still_fresh
-        from private.media_video_slots where asset_id=$1 and slot='upload'`, [asset.id, before])).rows[0];
-      assert.deepEqual(expiry, { signing_intent: null, from_completion: true, still_fresh: true });
+        token_expires_at >= $2::timestamptz + interval '2 hours 5 minutes' as from_completion,
+        token_expires_at >= clock_timestamp() + interval '2 hours 4 minutes 59 seconds' as still_fresh,
+        m.upload_expires_at = u.token_expires_at as row_matches
+        from private.media_video_slots u join public.media_assets m on m.id=u.asset_id
+        where u.asset_id=$1 and u.slot='upload'`, [asset.id, before])).rows[0];
+      assert.deepEqual(expiry, { signing_intent: null, from_completion: true, still_fresh: true, row_matches: true });
       assert.equal(await claim(asset, final), true);
     });
 
@@ -2054,11 +2115,37 @@ async function verifyMediaVideoBudget(db, database) {
       const final = (await slots(asset.id)).find(slot => slot.slot === "final");
       assert.equal(final.state, "removed");
       assert.equal(final.reserved_bytes, "20971520");
-      assert.equal(await held(), 73400320, "metadata absence is not proof of backend deletion");
+      assert.equal(await held(), 52428800, "a ready row with a removed final path retains only its live-upload ceiling");
       await put(asset.final, { size: 31457280 });
       assert.equal(await held(), 83886080);
       await remove(asset.final);
-      assert.equal(await held(), 73400320);
+      assert.equal(await held(), 52428800);
+    });
+
+    await check(`${database}: final removal and asset deletion roll back together and can be retried (#2653)`, async () => {
+      await reset();
+      const asset = await makeReady();
+      await remove(asset.final);
+      await asPostgres(db, () => db.query(`create or replace function private.reject_video_asset_delete()
+        returns trigger language plpgsql set search_path = '' as $$
+        begin
+          raise exception 'TEST_MEDIA_VIDEO_DELETE_FAIL';
+        end;
+        $$;
+        create trigger reject_video_asset_delete before update of deleted_at on public.media_assets
+        for each row when (old.deleted_at is distinct from new.deleted_at and new.deleted_at is not null)
+        execute function private.reject_video_asset_delete()`));
+      try {
+        await assert.rejects(finalRemoved(asset, asset.final), { message: "TEST_MEDIA_VIDEO_DELETE_FAIL" });
+        assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "verified");
+        assert.equal((await db.query("select deleted_at from public.media_assets where id=$1", [asset.id])).rows[0].deleted_at, null);
+      } finally {
+        await asPostgres(db, () => db.query(`drop trigger if exists reject_video_asset_delete on public.media_assets;
+          drop function if exists private.reject_video_asset_delete()`));
+      }
+      assert.equal(await finalRemoved(asset, asset.final), true);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "removed");
+      assert.ok((await db.query("select deleted_at from public.media_assets where id=$1", [asset.id])).rows[0].deleted_at);
     });
 
     await check(`${database}: an expired old token's recreated logical path keeps its upload slot (#2653)`, async () => {
@@ -2066,8 +2153,10 @@ async function verifyMediaVideoBudget(db, database) {
       const asset = await makeReady(10485760);
       assert.equal(await held(), 62914560);
       await remove(asset.upload);
-      await asPostgres(db, () => db.query("update private.media_video_slots set token_expires_at=now()-interval '10 years' where asset_id=$1 and slot='upload'", [asset.id]));
-      assert.equal(await held(), 62914560, "expiry is not proof that an in-flight write drained");
+      await asPostgres(db, () => db.query(`update private.media_video_slots set token_expires_at=now()-interval '10 years'
+        where asset_id=$1 and slot='upload'`, [asset.id]));
+      await service.query("update public.media_assets set upload_expires_at=now()-interval '10 years' where id=$1", [asset.id]);
+      assert.equal(await held(), 10485760, "after the approved expiry window, only actual bytes remain held");
       await put(asset.upload, { size: 52428800 });
       assert.equal(await held(), 62914560);
       await remove(asset.final);
@@ -2075,12 +2164,12 @@ async function verifyMediaVideoBudget(db, database) {
       const final = (await slots(asset.id)).find(slot => slot.slot === "final");
       assert.equal(final.state, "removed");
       assert.equal(final.reserved_bytes, "10485760");
-      await service.query("update public.media_assets set deleted_at=now(),storage_reclaimed_at=now() where id=$1", [asset.id]);
-      assert.equal(await held(), 62914560);
+      assert.ok((await service.query("select deleted_at from public.media_assets where id=$1", [asset.id])).rows[0].deleted_at);
+      assert.equal(await held(), 52428800);
       await remove(asset.upload);
-      assert.equal(await held(), 62914560);
+      assert.equal(await held(), 0);
       await put(asset.upload, { size: 52428800 });
-      assert.equal(await held(), 62914560);
+      assert.equal(await held(), 52428800);
     });
 
     await check(`${database}: failed and soft-deleted videos keep both reservations despite reclaim timestamps (#2653)`, async () => {

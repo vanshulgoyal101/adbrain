@@ -17,6 +17,7 @@ end;
 $$;
 
 alter table public.media_assets add column if not exists upload_path text;
+alter table public.media_assets add column if not exists upload_expires_at timestamptz;
 alter table public.media_assets add column if not exists storage_reclaimed_at timestamptz;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -83,35 +84,79 @@ $$;
 create or replace function private.media_video_held_bytes()
 returns bigint language plpgsql security definer set search_path = '' as $$
 declare
-  item record;
-  object_size bigint;
-  held numeric := 0;
+  held numeric;
+  invalid_rows bigint;
 begin
-  for item in
-    select o.name, o.metadata, s.reserved_bytes
+  with object_sizes as materialized (
+    select o.name, private.media_video_object_bytes(o.metadata) as bytes
     from storage.objects o
-    left join private.media_video_slots s on s.path = o.name
     where o.bucket_id = 'media-video'
-  loop
-    object_size := private.media_video_object_bytes(item.metadata);
-    if item.reserved_bytes is null then
-      held := held + object_size;
-    else
-      held := held + greatest(item.reserved_bytes, object_size);
-    end if;
-  end loop;
-
-  for item in
-    select s.reserved_bytes
+  ),
+  slot_bytes as (
+    select s.asset_id,
+      count(*) filter (where s.slot = 'upload') as upload_slots,
+      count(*) filter (where s.slot = 'final') as final_slots,
+      max(s.path) filter (where s.slot = 'upload') as upload_path,
+      max(s.path) filter (where s.slot = 'final') as final_path,
+      max(s.state) filter (where s.slot = 'final') as final_state,
+      max(s.reserved_bytes) filter (where s.slot = 'final') as final_reserved_bytes,
+      max(s.token_expires_at) filter (where s.slot = 'upload') as token_expires_at,
+      bool_or(s.signing_intent is not null) filter (where s.slot = 'upload') as upload_signing,
+      coalesce(sum(o.bytes), 0::numeric) as actual_bytes,
+      max(o.bytes) filter (where s.slot = 'final') as final_object_bytes
     from private.media_video_slots s
-    where s.path is null
-      or not exists (
-        select 1 from storage.objects o
-        where o.bucket_id = 'media-video' and o.name = s.path
-      )
-  loop
-    held := held + item.reserved_bytes;
-  end loop;
+    left join object_sizes o on o.name = s.path
+    group by s.asset_id
+  ),
+  video_rows as (
+    select m.id as asset_id, m.status, m.upload_path as asset_upload_path,
+      greatest(m.upload_expires_at, b.token_expires_at) as upload_expires_at,
+      b.upload_slots, b.final_slots, b.upload_path, b.final_state, b.final_reserved_bytes, b.upload_signing,
+      b.actual_bytes, b.final_object_bytes
+    from public.media_assets m
+    left join slot_bytes b on b.asset_id = m.id
+    where m.kind = 'video'
+    union all
+    select b.asset_id, null::text, null::text, b.token_expires_at,
+      b.upload_slots, b.final_slots, b.upload_path, b.final_state, b.final_reserved_bytes, b.upload_signing,
+      b.actual_bytes, b.final_object_bytes
+    from slot_bytes b
+    where not exists (
+      select 1 from public.media_assets m where m.id = b.asset_id and m.kind = 'video'
+    )
+  ),
+  accounted as (
+    select greatest(
+      actual_bytes,
+      case
+        when not coalesce(upload_signing, false)
+          and upload_expires_at is not null and upload_expires_at <= statement_timestamp() then 0::numeric
+        when status = 'ready' or (status is null and final_state in ('verified', 'removed')) then
+          case when final_state = 'removed' then coalesce(final_object_bytes, 0::numeric)
+            else greatest(coalesce(final_object_bytes, 0::numeric), coalesce(final_reserved_bytes, 0)::numeric)
+          end + 52428800
+        else 104857600::numeric
+      end
+    ) as bytes,
+    (upload_slots is distinct from 1 or final_slots is distinct from 1
+      or upload_path is null
+      or (status is not null and upload_path is distinct from asset_upload_path)
+      or (status = 'ready' and (final_state is null or final_state not in ('verified', 'removed')))) as invalid
+    from video_rows
+  ),
+  orphan_bytes as (
+    select coalesce(sum(o.bytes), 0::numeric) as bytes
+    from object_sizes o
+    where not exists (select 1 from private.media_video_slots s where s.path = o.name)
+  )
+  select coalesce(sum(a.bytes), 0::numeric) + (select bytes from orphan_bytes),
+    count(*) filter (where a.invalid)
+  into held, invalid_rows
+  from accounted a;
+
+  if invalid_rows > 0 then
+    raise exception 'MEDIA_VIDEO_STORAGE_UNKNOWN' using errcode = 'P0001';
+  end if;
 
   if held > 9223372036854775807 then
     raise exception 'MEDIA_VIDEO_BUDGET' using errcode = 'P0001';
@@ -241,6 +286,7 @@ declare
   asset_status text;
   asset_deleted_at timestamptz;
   current_intent uuid;
+  expiry timestamptz := clock_timestamp() + interval '2 hours 5 minutes';
 begin
   if not private.media_video_bucket_safe() then
     raise exception 'MEDIA_VIDEO_BUCKET_UNSAFE' using errcode = 'P0001';
@@ -263,8 +309,15 @@ begin
   end if;
 
   update private.media_video_slots
-  set signing_intent = null, token_expires_at = clock_timestamp() + interval '2 hours'
+  set signing_intent = null, token_expires_at = greatest(token_expires_at, expiry)
   where asset_id = p_asset_id and slot = 'upload' and signing_intent = p_intent_id;
+  if not found then
+    return false;
+  end if;
+
+  update public.media_assets
+  set upload_expires_at = greatest(upload_expires_at, expiry)
+  where id = p_asset_id and kind = 'video' and status = 'pending' and deleted_at is null;
   return found;
 end;
 $$;
@@ -324,21 +377,41 @@ $$;
 create or replace function public.media_video_final_removed(p_asset_id uuid, p_final_path text)
 returns boolean language plpgsql security definer set search_path = '' as $$
 declare
+  asset_exists boolean := false;
   final_state text;
   final_path text;
 begin
+  select true into asset_exists
+  from public.media_assets m
+  where m.id = p_asset_id and m.kind = 'video'
+  for update;
+
   select f.state, f.path into final_state, final_path
   from private.media_video_slots f
   where f.asset_id = p_asset_id and f.slot = 'final'
   for update;
-  if not found or final_state <> 'verified' or final_path is distinct from p_final_path
-    or exists (select 1 from storage.objects o where o.bucket_id = 'media-video' and o.name = p_final_path) then
+  if not found or final_path is distinct from p_final_path
+    or exists (select 1 from storage.objects o where o.bucket_id = 'media-video' and o.name = p_final_path)
+    or final_state not in ('verified', 'removed') then
     return false;
   end if;
 
-  update private.media_video_slots set state = 'removed'
-  where asset_id = p_asset_id and slot = 'final' and state = 'verified' and path = p_final_path;
-  return found;
+  if final_state = 'verified' then
+    update private.media_video_slots set state = 'removed'
+    where asset_id = p_asset_id and slot = 'final' and state = 'verified' and path = p_final_path;
+    if not found then
+      return false;
+    end if;
+  end if;
+
+  if asset_exists then
+    update public.media_assets
+    set deleted_at = coalesce(deleted_at, clock_timestamp()),
+      updated_at = case when deleted_at is null then clock_timestamp() else updated_at end
+    where id = p_asset_id and kind = 'video';
+    return found;
+  end if;
+  return true;
 end;
 $$;
 
