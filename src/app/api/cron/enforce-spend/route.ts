@@ -187,9 +187,10 @@ async function handleGET(request: Request) {
       // since the last refresh, so Meta's own end time decides. An unreadable answer still pauses (fail closed).
       if (ended.has(id) && !decision.toPause.includes(id)) {
         const extended = await withMetaConnection(context, { purpose: "read_insights", binding, expectedGeneration: storedBinding.metaConnectionGeneration },
-          meta => meta.getCampaignInsights(campaign.meta_campaign_id!))
-          .then(async ({ metaState }) => {
-            const metaEnd = metaState ? metaCapEndTime(campaign.raw, metaState) : null;
+          meta => meta.getCampaignState(campaign.meta_campaign_id!))
+          .then(async (metaState) => {
+            if (!metaState) return false;
+            const metaEnd = metaCapEndTime(campaign.raw, metaState);
             if (!metaEnd || Date.parse(metaEnd) <= Date.now()) return false;
             await saveOutsideChanges(context, campaign, metaState).catch(() => null);
             return true;

@@ -236,7 +236,7 @@ test("a ₹ amount or % in docs/product must come from a source constant or be a
     "src/lib/payments/allocation.ts": "return Math.ceil(capPaise * (10_000 + (input.taxRateBps ?? 1_800)) / 10_000);\n",
     "src/lib/plan/status.ts": "export const PLAN_PRICE_PAISE = 99_900;\n",
     "src/lib/campaign/verdict.ts": "export const EVIDENCE_MIN_SPEND = 500;\n",
-    "src/lib/meta/insights.ts": "export const BEST_AD_MARGIN = 0.3;\n",
+    "src/lib/campaign/ad-results.ts": "export const BEST_AD_MARGIN = 0.3;\n",
     "src/lib/creative/design.ts": "export const STORY_SAFE = { top: 0.14, bottom: 0.35, side: 0.06 } as const;\n",
     "src/lib/campaign/preflight.ts": "export const META_MIN_DAILY_BUDGET_RUPEES = 96;\n",
   };
@@ -247,8 +247,8 @@ test("a ₹ amount or % in docs/product must come from a source constant or be a
   writeFileSync(resolve(root, "src/lib/payments/allocation.ts"), "(input.taxRateBps ?? 2_800)\n");
   writeFileSync(resolve(root, "src/lib/plan/status.ts"), "export const PLAN_PRICE_PAISE = 1_49_900;\n");
   assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts).map(({ amount }) => amount), ["₹708", "18%", "₹2,478", "₹999"]);
-  rmSync(resolve(root, "src/lib/meta/insights.ts"));
-  assert.deepEqual(moneyFacts(root).missing, ["src/lib/meta/insights.ts BEST_AD_MARGIN = ([\\d.]+)"]);
+  rmSync(resolve(root, "src/lib/campaign/ad-results.ts"));
+  assert.deepEqual(moneyFacts(root).missing, ["src/lib/campaign/ad-results.ts BEST_AD_MARGIN = ([\\d.]+)"]);
 });
 
 test("a code table has one row per source code, both ways (#2288)", () => {

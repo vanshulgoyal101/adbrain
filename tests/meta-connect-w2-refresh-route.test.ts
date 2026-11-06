@@ -252,4 +252,52 @@ describe("campaign refresh binding boundary", () => {
     expect(failedSave.status).toBe(200);
     expect(await failedSave.json()).toMatchObject({ result: { id: "result-1" } });
   });
+
+  it.each(["throttle", "expired token", "abort"])("surfaces a per-ad %s without running the spend guard", async (failure) => {
+    const { MetaError, MetaThrottledError } = await import("@/lib/meta/client");
+    const error = failure === "throttle"
+      ? new MetaThrottledError("Synthetic throttle", 429, 17, undefined, "account", 60_000)
+      : failure === "expired token"
+        ? new MetaError("Synthetic expired token", 400, 190)
+        : Object.assign(new Error("Synthetic abort"), { name: "AbortError" });
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    mocks.getAdResults.mockRejectedValue(error);
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ autoPaused: [], protectionConfirmed: false });
+    expect(mocks.enforceAutoPauseWithStatus).not.toHaveBeenCalled();
+    expect(mocks.saveResult).not.toHaveBeenCalled();
+  });
+
+  it.each(["history", "insights", "both", "malformed", "malformed-and-history"])("distinguishes optional history from required insights for %s", async (failedRead) => {
+    const adSet = { id: "adset-1", destination_type: "WEBSITE", promoted_object: { page_id: "page_123", custom_event_type: "PURCHASE" } };
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if ((init?.method ?? "GET") !== "GET") throw new Error("This test must not write to Meta.");
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/meta-campaign-1")) return Response.json({ id: "meta-campaign-1", account_id: "123", status: "ACTIVE" });
+      if (url.pathname.endsWith("/meta-campaign-1/adsets")) {
+        if (url.searchParams.has("filtering") && ["history", "both", "malformed-and-history"].includes(failedRead)) return new Response(null, { status: 429 });
+        return Response.json({ data: [adSet] });
+      }
+      if (url.pathname.endsWith("/meta-campaign-1/insights")) {
+        if (["insights", "both"].includes(failedRead)) return new Response(null, { status: 429 });
+        const spend = failedRead.startsWith("malformed") ? "not-a-number" : "3";
+        return Response.json({ data: [{ impressions: "1", clicks: "2", spend, actions: [], action_values: [] }] });
+      }
+      throw new Error(`Unexpected Graph read: ${url.pathname}`);
+    });
+    try {
+      const { MetaClient } = await import("@/lib/meta/client");
+      const client = new MetaClient({ adAccountId: "act_123", pageId: "page_123", accessToken: "test-token" });
+      mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute(client));
+      const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+      const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+      expect(response.status).toBe(502);
+      if (failedRead === "history") expect(mocks.enforceAutoPauseWithStatus).not.toHaveBeenCalled();
+      else expect(mocks.enforceAutoPauseWithStatus).toHaveBeenCalledWith("business-1");
+    } finally {
+      fetch.mockRestore();
+    }
+  });
 });

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdResultView } from "@/lib/campaign/ad-results-store";
-import { BEST_AD_MIN_RESULTS } from "@/lib/meta/insights";
+import { BEST_AD_MIN_RESULTS } from "@/lib/campaign/ad-results";
 
 /**
  * #1045 (#799's smallest slice): when one running ad costs far more per enquiry than the others, the
@@ -20,6 +20,7 @@ export type PauseSuggestion = {
 const running = (ad: AdResultView) => ad.status === "ACTIVE";
 
 export function pauseSuggestion(ads: AdResultView[]): PauseSuggestion | null {
+  if (ads.some((ad) => ad.conversionsUnavailable)) return null;
   const totalResults = ads.reduce((sum, ad) => sum + ad.results, 0);
   if (totalResults < BEST_AD_MIN_RESULTS) return null;
   const totalSpend = ads.reduce((sum, ad) => sum + ad.spend, 0);

@@ -11,7 +11,7 @@ import { isTokenFailure, reauthEntry, type ReauthEntry } from "@/lib/meta/reauth
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaign, saveCampaignHealth, saveCampaignResult } from "@/lib/campaign/trusted-write";
 import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
-import { CampaignGoneError, MetaError, MetaThrottledError, metaErrorCode } from "@/lib/meta/client";
+import { CampaignGoneError, MetaError, MetaThrottledError, metaErrorCode, optionalAdResultsFailure } from "@/lib/meta/client";
 import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/services/meta-throttle";
 import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
 import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@/lib/campaign/health";
@@ -104,8 +104,8 @@ async function handleGET(request: Request) {
       }, async meta => ({
         insights: await meta.getCampaignInsights(campaign.meta_campaign_id!),
         review: paused ? null : await meta.readAdReview(campaign.meta_campaign_id!).catch(() => null),
-        // #783: per-ad results ride along; a failure keeps the last stored rows.
-        ads: adResultsEnabled() ? await meta.getAdResults(campaign.meta_campaign_id!).catch(() => null) : null,
+        // #783: ordinary per-ad failures keep the last rows; throttling and expired credentials must surface.
+        ads: adResultsEnabled() ? await meta.getAdResults(campaign.meta_campaign_id!).catch(optionalAdResultsFailure) : null,
       }));
       const { error: resultError } = await saveCampaignResult(context, {
         campaign_id: campaign.id,

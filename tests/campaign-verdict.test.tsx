@@ -64,6 +64,14 @@ describe("<CampaignVerdict> (#1274)", () => {
     expect(region().getByRole("link", { name: "Try new ads" })).toHaveAttribute("href", "/create");
   });
 
+  it("uses the selected website sales goal in the card's result summary", () => {
+    const input = { ...base, destination: "website" as const, websiteGoal: "sales" as const, results: 3, spend: 30, opens: null };
+    render(<CampaignVerdict verdict={verdict(input)} destination="website" websiteGoal="sales" results={input.results} spend={input.spend}
+      details={<p>Results</p>} />);
+    expect(region().getByText("3 website purchases so far. AdBrain will tell you if it's working after 5.")).toBeInTheDocument();
+    expect(region().getByText(/per website purchase · 3 website purchases, ₹30 spent/)).toBeInTheDocument();
+  });
+
   it("not showing after a day: See Meta's status in Ads Manager", () => {
     card({ impressions: 0, results: 0, spend: 0, liveSince: "2026-10-26T10:00:00Z" });
     expect(region().getByRole("link", { name: "See Meta's status" })).toHaveAttribute("href", "https://adsmanager.facebook.com/x");

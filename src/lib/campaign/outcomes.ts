@@ -1,7 +1,17 @@
 import { z } from "zod";
+import type { ConversionGoal } from "@/lib/campaign/website-tracking";
 
 export const campaignDestinationSchema = z.enum(["instant_form", "whatsapp", "call", "website", "mixed", "unknown"]);
 export type CampaignDestination = z.infer<typeof campaignDestinationSchema>;
+
+/**
+ * #2716: a website leads/sales goal's Meta-attributed pixel result (Analyst fields, #2595). Meta lists the count in
+ * `actions` and the value in `action_values` under the same action type. Visits have no conversion.
+ */
+export const WEBSITE_CONVERSIONS = {
+  leads: { metaActions: ["offsite_conversion.fb_pixel_lead"], metaValueActions: ["offsite_conversion.fb_pixel_lead"] },
+  sales: { metaActions: ["offsite_conversion.fb_pixel_purchase"], metaValueActions: ["offsite_conversion.fb_pixel_purchase"] },
+} as const satisfies Record<ConversionGoal, { metaActions: readonly string[]; metaValueActions: readonly string[] }>;
 
 const DEFINITIONS = {
   whatsapp: {
@@ -31,14 +41,6 @@ const DEFINITIONS = {
 } as const;
 const UNJUDGED = { ...DEFINITIONS.instant_form, comparable: false, performanceRank: 3 } as const;
 
-/** Objectives do not change the result yet. Unjudged destinations retain readers' legacy lead fallback. */
-export function outcomeDefinition(destination: string | null | undefined, _objective?: string | null) {
-  void _objective;
-  if (destination === "whatsapp") return DEFINITIONS.whatsapp;
-  if (destination === "website") return DEFINITIONS.website;
-  return destination === "instant_form" ? DEFINITIONS.instant_form : UNJUDGED;
-}
-
 const storedOutcomeSchema = z.object({
   metaResult: z.object({ destination: campaignDestinationSchema }).optional(),
 });
@@ -56,6 +58,37 @@ export function campaignDestination(
   if (result?.conversations != null) return "whatsapp";
   if (campaign.objective === "leads") return "instant_form";
   return "unknown";
+}
+
+function websiteConversionOutcome(goal: ConversionGoal) {
+  const isLead = goal === "leads";
+  return {
+    ...DEFINITIONS.website,
+    campaignField: "conversions",
+    adField: "conversions",
+    insightField: "conversions",
+    metaActions: WEBSITE_CONVERSIONS[goal].metaActions,
+    metaValueActions: WEBSITE_CONVERSIONS[goal].metaValueActions,
+    unit: "conversion",
+    summaryUnit: isLead
+      ? { one: "website lead", many: "website leads", per: "website lead" }
+      : { one: "website purchase", many: "website purchases", per: "website purchase" },
+    figure: isLead ? "figures.websiteLeads" : "figures.websiteSales",
+    costFigure: isLead ? "figures.costWebsiteLead" : "figures.costWebsiteSale",
+    costField: null,
+    insightCostField: "costPerConversion",
+    performanceRank: 2,
+    countsAsEnquiry: false,
+  } as const;
+}
+
+/** Unjudged destinations retain readers' legacy lead fallback. Website goals are independent of enquiries. */
+export function outcomeDefinition(destination: string | null | undefined, objective?: string | null) {
+  if (destination === "whatsapp") return DEFINITIONS.whatsapp;
+  if (destination === "website") {
+    return objective === "leads" || objective === "sales" ? websiteConversionOutcome(objective) : DEFINITIONS.website;
+  }
+  return destination === "instant_form" ? DEFINITIONS.instant_form : UNJUDGED;
 }
 
 export function destinationFromAdSets(adSets: ReadonlyArray<{ destination_type?: string }>): CampaignDestination {

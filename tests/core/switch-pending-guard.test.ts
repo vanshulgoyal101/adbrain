@@ -41,7 +41,7 @@ const READS = new Set([
   "getPageAccessToken", "getPageInstagramId", "getWhatsAppNumber", "setupReads", "whatsappNumbers", "listLeadForms", "readActiveLeadForm",
   "listLeadFormsPage", "listLeadsForForm", "listLeadsForFormPage", "searchGeoLocations", "serviceAreaExclusionsFor",
   "resolveGeoTargeting", "resolveAudienceInterests", "listCampaigns", "listCampaignsPage", "listGoneCampaigns", "readBoundCampaign",
-  "getCampaignInsights", "getAdResults", "readLifetimeSpendPaise", "readAccountFunding", "readLiveCappedRuns",
+  "getCampaignInsights", "getCampaignState", "getAdResults", "readLifetimeSpendPaise", "readAccountFunding", "readLiveCappedRuns",
   "readCampaignStopped", "readMinCampaignSpendCapPaise", "readCampaignDelivery", "verifyCampaignActivation", "readAdSetBudget", "adSources", "readAdReview",
 ]);
 

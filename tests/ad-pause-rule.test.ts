@@ -13,6 +13,10 @@ describe("pause-this-ad rule (#1045)", () => {
     expect(pauseSuggestion([ad("A", 500, 5), ad("B", 900, 0)])?.ad.adId).toBe("B");
   });
 
+  it("does not suggest pausing when a website ad's conversion count is unavailable", () => {
+    expect(pauseSuggestion([ad("A", 500, 5, { best: true }), ad("B", 900, 0, { conversionsUnavailable: true })])).toBeNull();
+  });
+
   // Designer on #783: the offer names ads like the rows under it, by headline, not Meta's ad name.
   it("carries each ad's creative so the offer can name it by headline", () => {
     const best = ad("A", 500, 5, { creative: { headline: "Your rooftop could cut power bills", imageUrl: null } });
