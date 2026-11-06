@@ -250,7 +250,7 @@ const MONEY_SOURCES = {
   gstBps: ["src/lib/payments/allocation.ts", /taxRateBps \?\? ([\d_]+)/],
   planPaise: ["src/lib/plan/status.ts", /PLAN_PRICE_PAISE = ([\d_]+)/],
   evidenceSpend: ["src/lib/campaign/verdict.ts", /EVIDENCE_MIN_SPEND = ([\d_]+)/],
-  bestMargin: ["src/lib/meta/insights.ts", /BEST_AD_MARGIN = ([\d.]+)/],
+  bestMargin: ["src/lib/campaign/ad-results.ts", /BEST_AD_MARGIN = ([\d.]+)/],
   metaMinDaily: ["src/lib/campaign/preflight.ts", /META_MIN_DAILY_BUDGET_RUPEES = ([\d_]+)/],
   storySafe: ["src/lib/creative/design.ts", /STORY_SAFE = \{ top: ([\d.]+), bottom: ([\d.]+), side: ([\d.]+) \}/],
 };
