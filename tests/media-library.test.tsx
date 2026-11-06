@@ -93,19 +93,32 @@ describe("<MediaLibrary> Make ads from these (#780 slice 2a)", () => {
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
 
+  it("does not offer to pick a video without its signed link", () => {
+    render(<MediaLibrary business={biz} media={[video({ url: null })]} creatives={[]} brandAssets={[]} videoEnabled />);
+    fireEvent.click(screen.getByRole("tab", { name: "Videos" }));
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
   it("shows ready videos in their tab and lets the owner select a mixed photo/video batch", () => {
     const clip = video({ id: "55555555-5555-4555-8555-555555555555" });
+    const secondClip = video({ id: "77777777-7777-4777-8777-777777777777", name: "Tour reel" });
     const still = photo({ id: "66666666-6666-4666-8666-666666666666" });
-    render(<MediaLibrary business={biz} media={[still, clip]} creatives={[]} brandAssets={[]} videoEnabled />);
+    const extraStill = photo({ id: "88888888-8888-4888-8888-888888888888", name: "Bedroom" });
+    render(<MediaLibrary business={biz} media={[still, clip, secondClip, extraStill]} creatives={[]} brandAssets={[]} videoEnabled />);
 
     fireEvent.click(screen.getByRole("tab", { name: "Videos" }));
     expect(screen.getByLabelText("Bridal reel")).toHaveAttribute("src", clip.url);
     fireEvent.click(screen.getByRole("checkbox", { name: "Pick Bridal reel" }));
+    expect(screen.getByRole("link", { name: "Make ads from these (1)" }))
+      .toHaveAttribute("href", `/create?all=1&media=${clip.id}`);
     fireEvent.click(screen.getByRole("tab", { name: "All" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Pick Finished kitchen" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pick Tour reel" }));
 
-    expect(screen.getByRole("link", { name: "Make ads from these (2)" }))
-      .toHaveAttribute("href", `/create?all=1&media=${clip.id},${still.id}`);
+    expect(screen.getByRole("checkbox", { name: "Pick Bedroom" })).toBeDisabled();
+    expect(screen.queryByText("Pick up to 3 photos at a time.")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Make ads from these (3)" }))
+      .toHaveAttribute("href", `/create?all=1&media=${clip.id},${still.id},${secondClip.id}`);
   });
 
   it("drops a deleted photo from the pick", () => {
