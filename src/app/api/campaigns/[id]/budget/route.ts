@@ -9,6 +9,7 @@ import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connecti
 import { observeRoute } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
 import { ownerRefusal } from "@/lib/campaign/campaign-owner";
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,6 +26,8 @@ export const POST = observeRoute("/api/campaigns/[id]/budget", "POST", async (
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) => {
+  const fenced = refuseWhenFenced(req, "campaign_write");
+  if (fenced) return fenced;
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

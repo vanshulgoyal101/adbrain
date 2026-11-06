@@ -16,22 +16,25 @@ const mocks = vi.hoisted(() => ({
   current: vi.fn(),
   written: vi.fn(),
   logEvent: vi.fn(),
+  fenced: false,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock("next/headers", () => ({ headers: async () => ({ has: () => mocks.fenced }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ logEvent: mocks.logEvent }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: mocks.getUser },
     from: () => ({
-      select: () => ({ eq: () => ({ single: mocks.current }) }),
+      select: () => ({ eq: () => ({ single: mocks.current, eq: () => ({ single: mocks.current }) }) }),
       insert: (payload: unknown) => { mocks.insert(payload); return { select: () => ({ single: mocks.written }) }; },
-      update: (payload: unknown) => { mocks.update(payload); return { eq: () => ({ select: () => ({ single: mocks.written }) }) }; },
+      update: (payload: unknown) => mocks.update(payload) ?? { eq: () => ({ select: () => ({ single: mocks.written }) }) },
     }),
   }),
 }));
 
 const complete = { name: "SunPeak Solar", vertical: "Rooftop solar for homes", locations: "Jaipur\nAjmer", offer: "Free site survey", phone: "98765 43210" };
+const USER_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("core: setup fields (#1269)", () => {
   it("complete fields have no errors and make a usable Brand", () => {
@@ -81,7 +84,49 @@ describe("core: setup fields (#1269)", () => {
 describe("core: saveSetupBusiness writes only the five fields (#1269)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    mocks.update.mockReset();
+    mocks.fenced = false;
+    mocks.getUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+  });
+
+  it("a fenced setup save accepts unchanged saved details without writing or logging", async () => {
+    mocks.fenced = true;
+    const saved = {
+      id: "b1", name: complete.name, vertical: complete.vertical, phone: complete.phone,
+      locations: ["Jaipur", "Ajmer"], offers: [complete.offer], usps: [], website: null, default_destination: "whatsapp",
+    };
+    mocks.current.mockResolvedValue({ data: saved, error: null });
+    mocks.written.mockResolvedValue({ data: saved, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await expect(saveSetupBusiness("b1", complete)).resolves.toEqual({ ok: true, id: "b1", usable: true });
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.logEvent).not.toHaveBeenCalled();
+  });
+
+  it("a fenced setup save refuses changed or new business details", async () => {
+    mocks.fenced = true;
+    const saved = {
+      id: "b1", name: complete.name, vertical: complete.vertical, phone: complete.phone,
+      locations: ["Jaipur", "Ajmer"], offers: [complete.offer], usps: [], website: null, default_destination: "whatsapp",
+    };
+    mocks.current.mockResolvedValue({ data: saved, error: null });
+    mocks.written.mockResolvedValue({ data: saved, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await expect(saveSetupBusiness("b1", { ...complete, name: "Changed name" })).resolves.toMatchObject({ ok: false });
+    await expect(saveSetupBusiness(null, complete)).resolves.toMatchObject({ ok: false });
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.logEvent).not.toHaveBeenCalled();
+  });
+
+  it("a fenced setup save refuses the ad-language business write", async () => {
+    mocks.fenced = true;
+    mocks.current.mockResolvedValue({ data: { languages: [] }, error: null });
+    mocks.update.mockReturnValue({ eq: () => ({ eq: async () => ({ error: null }) }) });
+    const { saveAdLanguage } = await import("@/app/(app)/brand/actions");
+    await expect(saveAdLanguage("b1", "pa")).resolves.toMatchObject({ ok: false });
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("updates in place, keeps other offers, and logs a usable Brand for the #1136 row", async () => {
@@ -120,7 +165,7 @@ describe("core: saveSetupBusiness writes only the five fields (#1269)", () => {
     expect(mocks.insert).not.toHaveBeenCalled();
     mocks.written.mockResolvedValue({ data: { id: "b2", name: "SunPeak Solar", vertical: "local business", phone: null, locations: [], offers: [] }, error: null });
     await expect(saveSetupBusiness(null, { name: "SunPeak Solar", vertical: "", locations: "", offer: "", phone: "" })).resolves.toEqual({ ok: true, id: "b2", usable: false });
-    expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ owner_id: "u1", name: "SunPeak Solar", locations: [], offers: [] }));
+    expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ owner_id: USER_ID, name: "SunPeak Solar", locations: [], offers: [] }));
   });
 
   it("#2646: saves the destination and the full website link; a half-typed link waits", async () => {
@@ -190,6 +235,48 @@ describe("core: saveSetupBusiness writes only the five fields (#1269)", () => {
     await saveSetupBusiness("b1", complete);
     await saveSetupBusiness("b1", { ...complete, usp: " " });
     for (const [payload] of mocks.update.mock.calls) expect(payload).not.toHaveProperty("usps");
+  });
+});
+
+describe("core: draft-only smoke fences Brand writes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.update.mockReset();
+    mocks.fenced = true;
+    mocks.getUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+  });
+
+  it("refuses the full business-save action without writing Brand data", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+    mocks.written.mockResolvedValue({ data: { id: "b1", default_destination: "whatsapp" }, error: null });
+    const formData = new FormData();
+    for (const [key, value] of Object.entries({
+      id: "b1", name: complete.name, vertical: complete.vertical, locations: "Jaipur\nAjmer",
+      offers: complete.offer, phone: complete.phone,
+    })) formData.set(key, value);
+    const { saveBusiness } = await import("@/app/(app)/brand/actions");
+    await expect(saveBusiness({ ok: false }, formData)).resolves.toEqual({
+      ok: false,
+      error: "Business details are read-only during this smoke.",
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.logEvent).not.toHaveBeenCalled();
+  });
+
+  it("refuses saving a Brand fact without writing Brand data", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+    mocks.written.mockResolvedValue({ data: {
+      id: "b1", name: complete.name, vertical: complete.vertical, phone: complete.phone,
+      locations: ["Jaipur", "Ajmer"], offers: [complete.offer],
+    }, error: null });
+    const { saveBrandFact } = await import("@/app/(app)/brand/actions");
+    await expect(saveBrandFact("b1", "audience", "Families in Jaipur")).resolves.toEqual({
+      ok: false,
+      error: "Business details are read-only during this smoke.",
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.logEvent).not.toHaveBeenCalled();
   });
 });
 

@@ -1,3 +1,4 @@
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 import { observeRoute, currentRequestId, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { apiError, serverError } from "@/lib/api";
@@ -25,6 +26,8 @@ export const maxDuration = 60;
 export const POST = observeRoute("/api/creatives/assistant", "POST", handlePOST);
 
 async function handlePOST(req: Request) {
+  const fenced = refuseWhenFenced(req);
+  if (fenced) return fenced;
   const supabase = await createClient();
   const {
     data: { user },

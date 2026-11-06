@@ -3,6 +3,7 @@
  * number. When they differ, Prepare redraws the picture's phone with the chat number (no AI, $0).
  * Never a blocker: a failed redraw leaves the ad as it is and says so in one line.
  */
+import { SmokeFenceError } from "@/lib/security/smoke-fence";
 
 const digits = (value: string) => value.replace(/\D/g, "");
 
@@ -36,7 +37,7 @@ export type PrintedCreative = { id: string; imageUrl: string | null; printedPhon
 
 /**
  * Redraws every picture whose printed phone differs from the chat number. `redraw` returns the new
- * picture's URL, or null when it can't redraw (no background, image-only); a throw counts as null.
+ * picture's URL, or null when it can't redraw (no background, image-only); a throw counts as null, except the smoke fence's.
  */
 export async function alignPrintedNumbers<T extends PrintedCreative>(
   creatives: T[],
@@ -48,7 +49,11 @@ export async function alignPrintedNumbers<T extends PrintedCreative>(
   let stale = 0;
   const aligned = await Promise.all(creatives.map(async (creative) => {
     if (!printedNumberDiffers(creative.printedPhone, chatNumber)) return creative;
-    const imageUrl = await redraw(creative, phone).catch(() => null);
+    // #2861: the draft-only smoke fence stops the review; it never reads as a picture that couldn't be redrawn.
+    const imageUrl = await redraw(creative, phone).catch((error: unknown) => {
+      if (error instanceof SmokeFenceError) throw error;
+      return null;
+    });
     if (!imageUrl) {
       stale += 1;
       return creative;

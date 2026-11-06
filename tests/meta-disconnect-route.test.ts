@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), owned: vi.fn(), primary: vi.fn(), revoke: vi.fn(), order: [] as string[] }));
 vi.mock("@/lib/meta/revoke-grant", () => ({ revokeMetaGrant: mocks.revoke }));
@@ -33,6 +34,22 @@ describe("Meta disconnect target validation", () => {
     const { POST } = await import("@/app/api/meta/disconnect/route");
     expect((await POST(new Request("https://app.test/api/meta/disconnect", { method: "POST" }))).status).toBe(200);
     expect(mocks.rpc).toHaveBeenCalledWith("meta_disconnect", { p_business_id: "primary", p_user_id: "owner" });
+  });
+
+  it("refuses a fenced disconnect before revoking or removing the connection", async () => {
+    const { POST } = await import("@/app/api/meta/disconnect/route");
+    const response = await POST(new Request("https://app.test/api/meta/disconnect", {
+      method: "POST",
+      headers: { [SMOKE_FENCE_HEADER]: "draft-only" },
+      body: JSON.stringify({ businessId: "11111111-1111-4111-8111-111111111111" }),
+    }));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "SMOKE_FENCE" } });
+    expect(mocks.revoke).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.primary).not.toHaveBeenCalled();
+    expect(mocks.owned).not.toHaveBeenCalled();
   });
 
   it("disconnects only the explicitly owned business", async () => {

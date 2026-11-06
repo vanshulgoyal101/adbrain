@@ -4,10 +4,12 @@ import { pictureSource } from "@/lib/creative/picture-source";
 import { observeAction } from "@/lib/observability/logger";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { logEvent } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
 import { copyClaimWarnings, editableCopySchema, type EditableCopy } from "@/lib/creative/concept";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 import type { Creative } from "@/lib/types";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -35,6 +37,10 @@ export async function updateCreativeCopy(
   copy: EditableCopy,
 ): Promise<CopyEditResult> {
   return observeAction("server.updateCreativeCopy", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "This action is unavailable during a draft-only smoke." };
+    }
+
     const parsed = editableCopySchema.safeParse(copy);
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
@@ -139,6 +145,10 @@ export async function setCreativeStatus(
   status: "draft" | "approved",
 ): Promise<ActionResult> {
   return observeAction("server.setCreativeStatus", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "This action is unavailable during a draft-only smoke." };
+    }
+
     const supabase = await createClient();
     if (status !== "draft" && status !== "approved") return { ok: false, error: "Invalid creative status." };
     const { data: creative, error } = await supabase
@@ -166,6 +176,10 @@ export async function setCreativeStatus(
 
 export async function deleteCreative(id: string): Promise<ActionResult> {
   return observeAction("server.deleteCreative", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "This action is unavailable during a draft-only smoke." };
+    }
+
     const supabase = await createClient();
     const { data: creative, error } = await supabase
       .from("creatives")

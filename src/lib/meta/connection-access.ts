@@ -18,6 +18,7 @@ import { observeIdentity } from "@/lib/observability/context";
 import { recordProductEvent, withEventScope } from "@/lib/observability/logger";
 import { getManagedAccount, hasManagedAssets, isManagedReady, managedConnection, managedCredentials, type ManagedAccount } from "./managed-account";
 import { ConnectionAccessError } from "./connection-access-error";
+import { requestIsFenced } from "@/lib/security/smoke-fence-server";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -144,6 +145,8 @@ export async function withMetaConnection<Result>(
     signal?: AbortSignal;
     /** #1540: the product event's name when the call is gated by `purpose` but isn't that operation (a status read). */
     event?: "whatsapp_numbers";
+    /** #2861: a read that must not change the connection, e.g. mark it as needing Facebook again. */
+    leaveConnectionUnchanged?: boolean;
   },
   execute: (client: MetaClient, connection: ConnectionDTO) => Promise<Result>,
 ): Promise<Result> {
@@ -189,7 +192,7 @@ export function metaErrorAttributes(error: unknown) {
 
 async function withConnectionCredentials<Result>(
   context: AuthorizedBusiness,
-  options: { purpose: ConnectionPurpose | "verify"; binding?: ConnectionBinding; expectedGeneration?: number },
+  options: { purpose: ConnectionPurpose | "verify"; binding?: ConnectionBinding; expectedGeneration?: number; leaveConnectionUnchanged?: boolean },
   execute: (credentials: MetaCredentials, connection: ConnectionDTO) => Promise<Result>,
 ): Promise<Result> {
   if (!isAuthorizedBusiness(context)) {
@@ -292,7 +295,7 @@ async function withConnectionCredentials<Result>(
     return await execute(credentials, connection);
   } catch (error) {
     // #757: Meta refused the owner's token with no deauthorize callback; show the connection as needing Facebook again.
-    if (isMetaReauthError(error)) {
+    if (isMetaReauthError(error) && !options.leaveConnectionUnchanged && !await requestIsFenced()) {
       await admin.rpc("meta_connection_mark_reauth", { p_business_id: context.businessId, p_generation: connection.generation }).then(() => undefined, () => undefined);
     }
     throw error;

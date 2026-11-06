@@ -10,13 +10,16 @@ import { storedCappedAdSetIds } from "@/lib/campaign/activation";
 import type { SkippedCampaign } from "@/lib/campaign/sync-skips";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignsOwnedElsewhere, type CampaignClaim } from "@/lib/campaign/sync-ownership";
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export const POST = observeRoute("/api/campaigns/sync", "POST", handlePOST);
 
-async function handlePOST(request?: Request) {
+async function handlePOST(request: Request) {
+  const fenced = refuseWhenFenced(request, "campaign_write");
+  if (fenced) return fenced;
   const supabase = await createClient();
   const {
     data: { user },
@@ -30,7 +33,7 @@ async function handlePOST(request?: Request) {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
   }
 
-  const cursor = z.string().min(1).max(2_000).nullable().safeParse(request ? new URL(request.url).searchParams.get("after") : null);
+  const cursor = z.string().min(1).max(2_000).nullable().safeParse(new URL(request.url).searchParams.get("after"));
   if (!cursor.success) return NextResponse.json({ error: "Invalid sync cursor." }, { status: 400 });
   try {
     const context = await requireOwnedBusiness(business.id);

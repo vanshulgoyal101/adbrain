@@ -28,13 +28,15 @@ async function isManagedBusiness(businessId: string): Promise<boolean> {
  * never binds by pick: its parent's WABAs hold other customers' numbers, so only a number Meta
  * verified for it (Page link or Embedded Signup) can be bound.
  */
-export async function whatsappNumberForBusiness(businessId: string, meta: MetaClient, requested: string | null): Promise<string | null> {
+export async function whatsappNumberForBusiness(businessId: string, meta: MetaClient, requested: string | null, options: { onBind?: () => void } = {}): Promise<string | null> {
   const [bound, managed] = await Promise.all([boundWhatsAppNumbers(businessId), isManagedBusiness(businessId)]);
   const number = await meta.getWhatsAppNumber(requested, bound);
   if (number || !requested || managed) return number;
   const { business } = await meta.whatsappNumbers();
   const picked = await meta.getWhatsAppNumber(requested, business);
   if (!picked || !business.includes(picked)) return picked;
+  // #2861: a caller that must not write stops here, before the first use would bind the number.
+  options.onBind?.();
   const { error } = await createAdminClient().from("whatsapp_number_bindings")
     .upsert({ business_id: businessId, phone_e164: picked, source: "owner_pick" }, { onConflict: "business_id,phone_e164", ignoreDuplicates: true });
   if (error) throw new Error("The WhatsApp number could not be bound.");

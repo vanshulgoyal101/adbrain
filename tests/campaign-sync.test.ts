@@ -56,6 +56,8 @@ beforeEach(() => {
   mocks.insert.mockResolvedValue({ error: null });
 });
 
+const syncRequest = () => new Request("http://localhost/api/campaigns/sync");
+
 describe("verified campaign sync", () => {
   it("returns an owner-scoped display page and latest snapshots", async () => {
     mocks.getCampaignPage.mockResolvedValue({ campaigns: [{ id: "campaign" }], nextCursor: "display-next" });
@@ -85,7 +87,7 @@ describe("verified campaign sync", () => {
 
   it("saves only verified account/Page bindings and actual budgets", async () => {
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect((await POST()).status).toBe(200);
+    expect((await POST(syncRequest())).status).toBe(200);
     expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ business_id: "business", daily_budget: 500, meta_ad_account_id: "act_123", meta_page_id: "page_1", meta_connection_generation: 4, status: "paused" }));
   });
 
@@ -93,7 +95,7 @@ describe("verified campaign sync", () => {
     mocks.existing = { id: "stored", meta_ad_account_id: "act_123", meta_page_id: "page_1", raw: { cap: { adSetId: "capped-2" }, cappedAdSetIds: ["capped-1", "capped-2"] } };
     mocks.update.mockResolvedValue({ error: null });
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect((await POST()).status).toBe(200);
+    expect((await POST(syncRequest())).status).toBe(200);
     expect(mocks.readBoundCampaign).toHaveBeenCalledWith(expect.objectContaining({ id: "campaign" }), ["capped-1", "capped-2"]);
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ meta_adset_id: "set" }));
   });
@@ -102,7 +104,7 @@ describe("verified campaign sync", () => {
     mocks.readBoundCampaign.mockResolvedValue({ skip: "capped" });
     mocks.listCampaignsPage.mockResolvedValue({ campaigns: [{ id: "campaign", name: "Capped trial", status: "PAUSED" }], nextCursor: "next-page" });
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Capped trial", reason: "capped" }], nextCursor: "next-page" });
+    expect(await (await POST(syncRequest())).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Capped trial", reason: "capped" }], nextCursor: "next-page" });
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
@@ -110,7 +112,7 @@ describe("verified campaign sync", () => {
     mocks.readBoundCampaign.mockRejectedValue(new Error("Meta read timeout"));
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    const response = await POST();
+    const response = await POST(syncRequest());
     const entries = logs.mock.calls.map(([entry]) => JSON.parse(entry as string));
     logs.mockRestore();
     expect(response.status).toBe(502);
@@ -124,7 +126,7 @@ describe("verified campaign sync", () => {
   it.each(["DELETED", "ARCHIVED", "UNKNOWN"])("does not import %s campaigns as paused", async (status) => {
     mocks.listCampaignsPage.mockResolvedValue({ campaigns: [{ id: "campaign", status }], nextCursor: null });
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: null, reason: "not_running" }] });
+    expect(await (await POST(syncRequest())).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: null, reason: "not_running" }] });
     expect(mocks.readBoundCampaign).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
   });
@@ -132,20 +134,20 @@ describe("verified campaign sync", () => {
   it("preserves a known Page binding even when the stored account ID is missing", async () => {
     mocks.existing = { id: "stored", meta_ad_account_id: null, meta_page_id: "other" };
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Local leads", reason: "other_connection" }] });
+    expect(await (await POST(syncRequest())).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Local leads", reason: "other_connection" }] });
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("does not report a duplicate insertion conflict as a successful sync", async () => {
     mocks.insert.mockResolvedValue({ error: { code: "23505" } });
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect((await POST()).status).toBe(502);
+    expect((await POST(syncRequest())).status).toBe(502);
   });
 
   it("preserves an existing campaign belonging to a different bound Page", async () => {
     mocks.existing = { id: "stored", meta_ad_account_id: "act_other", meta_page_id: "other" };
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skipped: 1 });
+    expect(await (await POST(syncRequest())).json()).toMatchObject({ skipped: 1 });
     expect(mocks.update).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
   });
@@ -155,7 +157,7 @@ describe("verified campaign sync", () => {
   it("skips a campaign another business launched, without reading or saving it", async () => {
     mocks.claims = [{ business_id: "solaride", created_at: "2026-10-27T14:06:00Z", source: "campaign_operation" }].map(row => ({ ...row, meta_campaign_id: "campaign" }));
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Local leads", reason: "other_business" }] });
+    expect(await (await POST(syncRequest())).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Local leads", reason: "other_business" }] });
     expect(mocks.claimsFor).toHaveBeenCalledWith(["campaign"]);
     expect(mocks.readBoundCampaign).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
@@ -169,7 +171,7 @@ describe("verified campaign sync", () => {
       { meta_campaign_id: "campaign", business_id: "solaride", created_at: "2026-10-27T14:06:00Z", source: "campaign_operation" },
     ];
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skippedCampaigns: [{ reason: "other_business" }] });
+    expect(await (await POST(syncRequest())).json()).toMatchObject({ skippedCampaigns: [{ reason: "other_business" }] });
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
@@ -181,28 +183,28 @@ describe("verified campaign sync", () => {
       { meta_campaign_id: "campaign", business_id: "business", created_at: "2026-10-27T14:06:00Z", source: "campaign_operation" },
     ];
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect((await POST()).status).toBe(200);
+    expect((await POST(syncRequest())).status).toBe(200);
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ meta_campaign_id: "campaign" }));
   });
 
   it("leaves a campaign made in Meta to the business that imported it first", async () => {
     mocks.claims = [{ meta_campaign_id: "campaign", business_id: "demo", created_at: "2026-10-01T00:00:00Z", source: null }];
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skippedCampaigns: [{ reason: "other_business" }] });
+    expect(await (await POST(syncRequest())).json()).toMatchObject({ skippedCampaigns: [{ reason: "other_business" }] });
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
   it("fails closed when other businesses' claims can't be read", async () => {
     mocks.claimsError = { code: "57014" };
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect((await POST()).status).toBe(502);
+    expect((await POST(syncRequest())).status).toBe(502);
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
   it("blocks writes when the connection changes during discovery", async () => {
     mocks.getConnectionStatus.mockResolvedValue({ ...connection, generation: 5 });
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect((await POST()).status).toBe(409);
+    expect((await POST(syncRequest())).status).toBe(409);
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 });

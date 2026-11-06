@@ -19,6 +19,7 @@ import { resultsStale } from "@/lib/campaign/results-freshness";
 import { createClient } from "@/lib/supabase/server";
 import { saveCampaign, saveCampaignResult } from "@/lib/campaign/trusted-write";
 import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,6 +30,8 @@ async function handlePOST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const fenced = refuseWhenFenced(req, "campaign_write");
+  if (fenced) return fenced;
   const { id } = await params;
   const supabase = await createClient();
   const {

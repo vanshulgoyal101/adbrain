@@ -7,20 +7,28 @@
 // Signs in with TEST_SESSION_SECRET (CI) or the local service role (#2574). WS1_EMAIL must be a confirmed internal address (free image providers, #466) whose business has never gone live.
 // --plant injects a promise into step 3 and slows step 2's pictures, so the run must FAIL (proves the checks bite).
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { chromium, type CDPSession, type Page } from "@playwright/test";
+import { freeOnlyEligibility } from "../src/lib/internal-accounts";
 import { honestCopyFindings } from "../src/lib/copy/honest-copy-rules";
+import { SMOKE_FENCE_HEADER, fenceStop, policyParity, ws1WalkOutcome } from "./lib/smoke-fence.mjs";
 import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 
 const origin = "https://adbrain.vanshul.com";
 const env = await localEnv();
 const { WS1_EMAIL: email } = process.env;
 const plant = process.argv.includes("--plant");
+// #2861 --fenced: the server refuses every AI-provider call (autofill, ad generation, redraws), so the walk needs a
+// business whose five fields are filled and whose ads exist; if it would have to generate, it stops as a non-pass.
+const fenced = process.argv.includes("--fenced");
 const LCP_MS = 2500;
 const CLS_MAX = 0.1;
 const BIO = "Sweet Crumbs Bakery, Mohali Phase 7 | Eggless cakes, brownies and custom birthday cakes | Same-day delivery in Mohali, Chandigarh and Zirakpur | Order on WhatsApp 98140 00000 | Flat 10% off on first order";
 assert.ok(email, "Set WS1_EMAIL.");
 
 const failures: string[] = [];
+let skipped = false;
+class SkippedWalk extends Error {}
 const check = (ok: boolean, label: string, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${label}${detail ? ` (${detail})` : ""}`);
   if (!ok) failures.push(label);
@@ -86,6 +94,12 @@ try {
     }
     return route.continue();
   });
+  if (fenced) {
+    await context.route("**/*", (route) => {
+      if (new URL(route.request().url()).origin !== origin) return route.fallback();
+      return route.fallback({ headers: { ...route.request().headers(), [SMOKE_FENCE_HEADER]: "draft-only" } });
+    });
+  }
   await context.addInitScript(({ planted }) => {
     const w = window as unknown as { __lcp: number; __cls: number };
     w.__lcp = 0; w.__cls = 0;
@@ -98,9 +112,37 @@ try {
     }, 200);
   }, { planted: plant });
   const page = await context.newPage();
+  if (fenced) {
+    page.on("response", async (response) => {
+      if (response.status() !== 409 || new URL(response.url()).origin !== origin) return;
+      const stopped = fenceStop(await response.json().catch(() => null));
+      if (stopped) check(false, "Draft-only fence", stopped);
+    });
+  }
+
+  // #2861: the eligibility check below runs the checked-out policy, so it only speaks for production when production serves
+  // that same commit. Checked before sign-in or any page; unknown or different is a skip, not a pass.
+  const served = (await fetch(origin, { method: "HEAD", redirect: "follow" }).catch(() => null))?.headers.get("x-adbrain-release") ?? "";
+  const localSha = process.env.GITHUB_SHA || (() => { try { return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(); } catch { return ""; } })();
+  const parity = policyParity(served, localSha);
+  if (!parity.ok) {
+    console.log(`WS1 walk SKIPPED: free-provider eligibility can't be proved for the served app (${parity.reason}); no page opened and no AI call made. Coverage NOT run.`);
+    skipped = true;
+    throw new SkippedWalk();
+  }
 
   // #2574: a minted session, not the password form, so Supabase CAPTCHA (#1777) can stay on.
-  await signInBrowser(context, origin, email, { config: testSessionConfig(env, origin) });
+  const { user } = await signInBrowser(context, origin, email, { config: testSessionConfig(env, origin) });
+
+  // #2861: the walk may generate ads and fill Brand, which call AI providers. Only an identity the server holds to
+  // free providers (a listed smoke user for text, a verified internal non-exempt user for images) may run it; any
+  // other stops here, before any page or AI call, and says the coverage was skipped (never a pass).
+  const eligibility = freeOnlyEligibility(user);
+  if (!eligibility.text || !eligibility.images) {
+    console.log(`WS1 walk SKIPPED: the signed-in test account isn't held to free AI providers (text ${eligibility.text ? "yes" : "no"}, images ${eligibility.images ? "yes" : "no"}); no page opened and no AI call made. Coverage NOT run.`);
+    skipped = true;
+    throw new SkippedWalk();
+  }
 
   cdp = await context.newCDPSession(page);
   await cdp.send("Network.enable");
@@ -156,10 +198,11 @@ try {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   check(overflow <= 0, "Step 3 no horizontal overflow", `${overflow}px`);
 } catch (error) {
-  check(false, "WS1 walk ran to the end", error instanceof Error ? error.message.split("\n")[0].slice(0, 200) : String(error));
+  if (!(error instanceof SkippedWalk)) check(false, "WS1 walk ran to the end", error instanceof Error ? error.message.split("\n")[0].slice(0, 200) : String(error));
 } finally {
   await browser.close();
 }
 check(!metaWrites.length, "No Meta write attempted", metaWrites.join(", "));
-console.log(failures.length ? `WS1 walk FAILED: ${failures.length} check(s)` : "WS1 walk PASSED");
-process.exitCode = failures.length ? 1 : 0;
+const outcome = ws1WalkOutcome({ skipped, failureCount: failures.length });
+console.log(outcome.message);
+process.exitCode = outcome.exitCode;

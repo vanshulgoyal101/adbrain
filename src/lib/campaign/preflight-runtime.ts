@@ -12,6 +12,7 @@ import { checkWebsiteReach } from "@/lib/campaign/website-reach";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { draftRecordFromRow } from "@/lib/campaign/draft-store";
 import { whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
+import { SmokeFenceError, type SmokeFence } from "@/lib/security/smoke-fence";
 import type { PreflightLoaders } from "@/lib/campaign/preflight-service";
 import type { createClient } from "@/lib/supabase/server";
 import { resolveDraftTargeting } from "./draft-targeting";
@@ -24,7 +25,10 @@ export type CampaignSupabase = Awaited<ReturnType<typeof createClient>>;
 export function buildCampaignPreflightLoaders(
   supabase: CampaignSupabase,
   authorizedBusiness: AuthorizedBusiness,
+  /** #2861: under the draft-only smoke fence the loaders read only: no redraw, no number binding, no reauth marking. */
+  options: { fence?: SmokeFence | null } = {},
 ): PreflightLoaders {
+  const fenced = Boolean(options.fence);
   // #366: one connection read per preflight; four loaders used to read it separately.
   let connectionStatus: ReturnType<typeof getConnectionStatus> | undefined;
   const status = () => (connectionStatus ??= getConnectionStatus(authorizedBusiness));
@@ -61,14 +65,17 @@ export function buildCampaignPreflightLoaders(
         ownMedia: Boolean(creative.media_asset_id) || Boolean((creative.generation as { ownerPhoto?: unknown } | null)?.ownerPhoto) || pictureSource(creative.generation) === "yours",
       }));
     },
-    redrawPictureNumber: (actor, creativeId, phone) => redrawPictureNumber(supabase, actor.businessId, creativeId, phone),
+    redrawPictureNumber: (actor, creativeId, phone) => {
+      if (fenced) throw new SmokeFenceError("picture_redraw");
+      return redrawPictureNumber(supabase, actor.businessId, creativeId, phone);
+    },
     findCostPerResult: (actor, destination) => getCostPerResult(actor.businessId, destination),
     findForm: async (businessId, formId) => {
       const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") return null;
       const form = await withMetaConnection(
         authorizedBusiness,
-        { purpose: "create_paused" },
+        { purpose: "create_paused", leaveConnectionUnchanged: fenced },
         (meta) => meta.readActiveLeadForm(formId),
       );
       return form ? { id: form.id, businessId, active: true } : null;
@@ -77,7 +84,9 @@ export function buildCampaignPreflightLoaders(
       const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") return null;
       // #681: a failed read throws (Review says try again); swallowing it told the owner to link a number they had linked.
-      return withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null));
+      return withMetaConnection(authorizedBusiness, { purpose: "create_paused", leaveConnectionUnchanged: fenced }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null, {
+        onBind: () => { if (fenced) throw new SmokeFenceError("whatsapp_binding"); },
+      }));
     },
     findWhatsAppMessage: async (actor, draft) => {
       const [{ data: business, error }, { data: creatives, error: creativesError }] = await Promise.all([
@@ -140,7 +149,7 @@ export function buildCampaignPreflightLoaders(
       }
       return withMetaConnection(
         authorizedBusiness,
-        { purpose: "create_paused" },
+        { purpose: "create_paused", leaveConnectionUnchanged: fenced },
         async (meta) => {
           const names = draft.input.targeting.audience?.interestNames ?? [];
           // #271: geo and interest searches are independent, so they run together.

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import prepareTape from "./fixtures/meta/prepare.json";
 import leadFormTape from "./fixtures/meta/lead-form.json";
 import createTape from "./fixtures/meta/create.json";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 // #741: Meta's recorded region/country of each launched place (the service-area read).
 import geoTape from "./fixtures/meta/geo-exclusions.json";
 import interestsTape from "./fixtures/meta/interests-chiropractic.json";
@@ -200,10 +201,10 @@ async function seed(website: string | null) {
 /** What one review reads from Meta: Page token, lead form, Austin, and the Wellness interest. */
 const reviewReads = [prepareTape, leadFormTape, interestsTape];
 
-const post = async (route: "preflight" | "create", body: unknown) => {
+const post = async (route: "preflight" | "create", body: unknown, extraHeaders: Record<string, string> = {}) => {
   const { POST } = await import(`@/app/api/campaigns/${route}/route`);
   const response: Response = await POST(new Request(`http://localhost/api/campaigns/${route}`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    method: "POST", headers: { "Content-Type": "application/json", ...extraHeaders }, body: JSON.stringify(body),
   }));
   return { status: response.status, body: await response.json() };
 };
@@ -226,6 +227,18 @@ afterEach(() => {
 });
 
 describe("core: the launch routes, preflight → create → worker, on recorded Meta answers (#648)", () => {
+  it("refuses a fenced Go-live create before operation or Meta writes", async () => {
+    await seed("https://adbrain.vanshul.com");
+    const tape = replay();
+    const create = await post("create", createRequest({ planHash: "a".repeat(64), connectionGeneration: 1 }), {
+      [SMOKE_FENCE_HEADER]: "draft-only",
+    });
+    expect(create.status).toBe(409);
+    expect(create.body.error).toMatchObject({ code: "SMOKE_FENCE", effect: "campaign_write" });
+    expect(tape.sent).toEqual([]);
+    expect(db.tables.campaign_operations).toEqual([]);
+  });
+
   it("reviews a business without a website as blocked: 200, canCreatePaused false, no planHash, and create refuses it", async () => {
     await seed(null);
     // The create route reviews the draft again before anything else, so it reads the same answers.

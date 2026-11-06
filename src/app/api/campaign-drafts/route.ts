@@ -9,6 +9,8 @@ import {
   prepareDraftCreate,
 } from "@/lib/campaign/draft-store";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { FENCE_CAPABILITY_HEADER } from "@/lib/security/smoke-fence";
+import { issueDraftCapability } from "@/lib/security/smoke-fence-server";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
@@ -108,5 +110,6 @@ async function handlePOST(request: Request) {
   if (error || !row) return responseError(requestId, 503, "UNAVAILABLE", await ownerError("draftSaveUnavailable"), true);
 
   const draft = draftDtoSchema.parse(draftRecordToDTO(draftRecordFromRow(row)));
-  return NextResponse.json({ ok: true, data: draft, requestId });
+  const capability = issueDraftCapability(request, user.id, draft.draftId, row.created_at);
+  return NextResponse.json({ ok: true, data: draft, requestId }, capability ? { headers: { [FENCE_CAPABILITY_HEADER]: capability } } : undefined);
 }
