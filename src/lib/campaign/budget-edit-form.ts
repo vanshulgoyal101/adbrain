@@ -39,26 +39,29 @@ const amount = (raw: string) => {
   return raw.trim() !== "" && Number.isFinite(value) && value > 0 && Math.round(value * 100) === value * 100 ? value : null;
 };
 
+/** #1438: why the form can't be sent; the dialog says it in the owner's language. */
+export type BudgetFormError = "capMissing" | "endInvalid" | "dailyMissing" | "nothingCapped" | "nothingDaily";
+
 /** Only what the owner changed; a new end date keeps the run's time of day. */
-export function budgetChangeFromForm(start: BudgetFormStart, form: BudgetForm): { change: BudgetChangeBody } | { error: string } {
+export function budgetChangeFromForm(start: BudgetFormStart, form: BudgetForm): { change: BudgetChangeBody } | { error: BudgetFormError } {
   const change: BudgetChangeBody = {};
   if (start.capped) {
     const cap = amount(form.cap);
-    if (cap === null) return { error: "Enter the total cap in rupees." };
+    if (cap === null) return { error: "capMissing" };
     if (cap !== start.capRupees) change.capRupees = cap;
     if (start.endTime && form.endDate && form.endDate !== localDay(start.endTime)) {
       const [year, month, day] = form.endDate.split("-").map(Number);
       const end = new Date(start.endTime);
       end.setFullYear(year, month - 1, day);
-      if (!Number.isFinite(end.getTime())) return { error: "Choose a valid end date." };
+      if (!Number.isFinite(end.getTime())) return { error: "endInvalid" };
       change.endTime = end.toISOString();
     }
   } else {
     const daily = amount(form.daily);
-    if (daily === null) return { error: "Enter the daily budget in rupees." };
+    if (daily === null) return { error: "dailyMissing" };
     if (daily !== start.dailyRupees) change.dailyRupees = daily;
   }
-  return Object.keys(change).length ? { change } : { error: start.capped ? "Change the total cap or the end date." : "Change the daily budget." };
+  return Object.keys(change).length ? { change } : { error: start.capped ? "nothingCapped" : "nothingDaily" };
 }
 
 /** The card shows the saved budget at once, as the server mirrored it. */
