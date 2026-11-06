@@ -41,8 +41,9 @@ export const POST = observeRoute("/api/creatives/own", "POST", async (req: Reque
   try {
     const rows = await pickedOwnMedia(session.client, businessId, items.map((item) => item.mediaId), mediaVideoEnabled());
     photos = new Map(await Promise.all(rows.map(async (row) => {
-      const validMime = row.kind === "video" ? row.mime && isMediaVideoMime(row.mime) : row.mime && isMediaMime(row.mime);
-      if (!validMime) throw new MediaError(409, "MEDIA_TYPE", "This media isn't supported. Add it again.");
+      if (!row.mime || !(row.kind === "video" ? isMediaVideoMime(row.mime) : isMediaMime(row.mime))) {
+        throw new MediaError(409, "MEDIA_TYPE", "This media isn't supported. Add it again.");
+      }
       return [row.id, { bytes: await readVerifiedMedia(admin, row), contentType: row.mime, kind: row.kind }] as const;
     })));
   } catch (error) {

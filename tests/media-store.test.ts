@@ -169,6 +169,18 @@ describe("finalizeUpload (#1209)", () => {
       .rejects.toMatchObject({ status: 409, code: "MEDIA_NOT_UPLOADED" });
   });
 
+  it("#780: cannot select another business's media for owner-written ads", async () => {
+    const videoId = "55555555-5555-4555-8555-555555555556";
+    db.tables.media_assets.push({
+      id: videoId, business_id: "44444444-4444-4444-8444-444444444444", kind: "video", path: "other/clip.mp4",
+      name: "Clip", tags: [], sha256: "a".repeat(64), bytes: 1_000, mime: "video/mp4", width: 1080, height: 1920,
+      duration_ms: 30_000, checks: {}, status: "ready", deleted_at: null, created_at: "2026-10-29T10:00:00Z",
+    });
+
+    await expect(pickedOwnMedia(db.client, BUSINESS, [videoId], true))
+      .rejects.toMatchObject({ status: 404, code: "MEDIA_NOT_FOUND" });
+  });
+
   // Dev 7 (#1245 attack): a refused upload still counts toward the month, so a reused token can't dodge the limit.
   it("removes the object and retires the row (still counted) when the bytes aren't the photo described, or aren't a photo", async () => {
     const bytes = await photo(1080, 1350);
