@@ -870,11 +870,30 @@
     },
     "picker": {
       "yourPhoto": "Your photo",
+      "yourVideo": "Your video",
       "selectAd": "Select ad",
       "adPreview": "Ad preview",
       "edit": "Edit",
       "editAd": "Edit {headline}",
       "thisAd": "ad",
+      "choose": {
+        "title": "Choose ads",
+        "description": "Pick any mix. Each one runs as its own ad, and Meta spends more on the one that works.",
+        "filter": "Show",
+        "tabs": {
+          "all": "All",
+          "yours": "Yours",
+          "adbrain": "By AdBrain"
+        },
+        "adbrain": "AdBrain",
+        "videoWithDuration": "Your video · {duration}",
+        "emptyAdbrain": "No ads made yet.",
+        "emptyYours": "No photos or videos yet.",
+        "budgetAdvice": "At {money} a day, Meta tests about 3–4 ads well; more ads share the budget thinly.",
+        "pickOne": "Pick at least 1 ad",
+        "use": "{n, plural, one {Use # ad} other {Use # ads}}",
+        "maxAds": "Up to {n} ads per campaign."
+      },
       "preparing": "Facebook is preparing this video…",
       "prepareLong": "Facebook is still preparing this video. You can wait here or check again later.",
       "prepareWaiting": "Facebook is busy. We'll check this video again shortly.",

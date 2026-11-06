@@ -24,7 +24,7 @@ export function PickerAdTile({ ad, selected, hidden, editing, describedBy, label
         onClick={onToggle}
         aria-pressed={selected}
         aria-describedby={describedBy}
-        aria-label={ad.headline || labels.select}
+        aria-label={ad.media_asset_id ? `${ad.headline || labels.select}, ${labels.yours}` : ad.headline || labels.select}
         className={cn(
           "group relative min-w-0 overflow-hidden rounded-md border-2 text-left transition-colors",
           selected ? "border-slate-950 shadow-[0_8px_18px_rgba(15,23,42,0.12)]" : "border-slate-200 hover:border-slate-300",

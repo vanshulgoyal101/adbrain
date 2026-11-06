@@ -33,11 +33,11 @@ describe("campaign composer video preparation (#781)", () => {
     try {
       render(<Campaigns business={business} approved={[photo, video]} initialCampaigns={[]} initialResults={{}}
         leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" videoAssetIds={["video-1"]} />);
-      fireEvent.click(screen.getByRole("button", { name: "Photo ad" }));
-      await act(async () => {});
+      fireEvent.click(screen.getByRole("tab", { name: "Yours" }));
+      fireEvent.click(screen.getByRole("button", { name: "Photo ad, Your photo" }));
       const mediaCalls = () => request.mock.calls.filter(([url]) => String(url).startsWith("/api/media/"));
       expect(mediaCalls()).toHaveLength(0);
-      fireEvent.click(screen.getByRole("button", { name: "Video ad" }));
+      fireEvent.click(screen.getByRole("button", { name: "Video ad, Your video" }));
       await waitFor(() => expect(mediaCalls()).toHaveLength(1));
       expect(mediaCalls()[0][0]).toBe("/api/media/video-1/meta");
       const signal = mediaCalls()[0][1]?.signal;
@@ -52,7 +52,8 @@ describe("campaign composer video preparation (#781)", () => {
     try {
       render(<Campaigns business={business} approved={[video]} initialCampaigns={[]} initialResults={{}}
         leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" videoAssetIds={[]} />);
-      fireEvent.click(screen.getByRole("button", { name: "Video ad" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Yours" }));
+      fireEvent.click(screen.getByRole("button", { name: "Video ad, Your photo" }));
       await act(async () => {});
       expect(request.mock.calls.filter(([url]) => String(url).startsWith("/api/media/"))).toHaveLength(0);
     } finally { vi.unstubAllGlobals(); }
@@ -61,7 +62,7 @@ describe("campaign composer video preparation (#781)", () => {
   it("explains an over-limit selection without silently dropping an ad", async () => {
     const request = vi.fn<typeof fetch>(async () => Response.json({ state: "ready", numbers: [] }));
     vi.stubGlobal("fetch", request);
-    const ads = Array.from({ length: 7 }, (_, index) => ({ ...photo, id: `ad-${index + 1}`, headline: `Ad ${index + 1}` }));
+    const ads = Array.from({ length: 7 }, (_, index) => ({ ...photo, id: `ad-${index + 1}`, headline: `Ad ${index + 1}`, media_asset_id: null }));
     try {
       render(<Campaigns business={business} approved={ads} initialCampaigns={[]} initialResults={{}}
         leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" mediaPilotEnabled />);

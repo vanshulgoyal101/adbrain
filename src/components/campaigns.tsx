@@ -74,6 +74,7 @@ import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFacts, review
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
+import { ChooseAds, type ChoosableAd } from "@/components/choose-ads";
 import { PickerAdTile } from "@/components/picker-ad-tile";
 import { VideoPrepare, type VideoPreparationState } from "@/components/video-prepare";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
@@ -391,7 +392,7 @@ function BusinessCampaigns({
     const fieldId = placedError?.at === "leadform" || placedError?.at === "budget" ? placedError.at : placedError?.at === "ads" ? "campaign-ad-picker" : null;
     if (fieldId) {
       const target = document.getElementById(fieldId);
-      const field = fieldId === "campaign-ad-picker" ? target?.querySelector<HTMLElement>("button") : target;
+      const field = fieldId === "campaign-ad-picker" ? target?.querySelector<HTMLElement>('button[aria-pressed]') : target;
       field?.scrollIntoView?.({ block: "center" });
       field?.focus();
     } else if (placedError) placedErrorRef.current?.scrollIntoView?.({ block: "center" });
@@ -481,6 +482,13 @@ function BusinessCampaigns({
   const adDraftUnsaved = editingAd !== null && ((adDraft !== null && !sameAdText(adDraft, savedAdText(editingAd))) || adPicture !== null);
   // While editing, the tile previews the unsaved headline (#387).
   const pickerAds = savedPickerAds.map((c) => (c.id === editingAdId && adDraft ? { ...c, headline: adDraft.headline } : c));
+  const pickerAdsById = new Map(pickerAds.map((ad) => [ad.id, ad]));
+  const chooserAds: ChoosableAd[] = pickerAds.map((ad) => ({
+    id: ad.id,
+    kind: ad.media_asset_id ? videoAssetIds.includes(ad.media_asset_id) ? "video" : "photo" : "adbrain",
+    imageUrl: ad.image_url,
+    title: ad.headline?.trim() || tc("picker.thisAd"),
+  }));
   const selectedVideoItems = showComposer && creationMode === "manual" && connectedForDraft
     ? pickerAds.flatMap((ad) => selected.has(ad.id) && ad.media_asset_id && videoAssetIds.includes(ad.media_asset_id)
       ? [{ id: ad.media_asset_id, label: ad.headline?.trim() || tc("picker.thisAd") }] : [])
@@ -983,15 +991,10 @@ function BusinessCampaigns({
     return () => window.clearTimeout(timer);
   }, [metaReady, syncStorageKey]);
 
-  function toggle(id: string) {
+  function useSelectedAds(ids: string[]) {
     if (!unresolvedRecovery()) setPrepareReview(null);
     if (placedError?.at === "ads") setPlacedError(null);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected(new Set(ids));
   }
 
   function manualDraftInput(requireComplete = true): DraftInput {
@@ -1148,7 +1151,7 @@ function BusinessCampaigns({
       return;
     }
     if (reviewAfterSave && pilotLimitError) {
-      const field = document.getElementById("campaign-ad-picker")?.querySelector<HTMLElement>("button");
+      const field = document.getElementById("campaign-ad-picker")?.querySelector<HTMLElement>('button[aria-pressed]');
       field?.scrollIntoView?.({ block: "center" });
       field?.focus();
       return;
@@ -1995,26 +1998,34 @@ function BusinessCampaigns({
             ) : (
               <>
                 <div>
-                  <Label>Choose ads</Label>
                   {mediaPilotEnabled && <p className="mt-1 text-sm text-slate-600">{tc("picker.pilotLimit", { max: MEDIA_PILOT_AD_LIMIT })}</p>}
                   {pilotLimitError && <p id="pilot-limit-error" role="alert" className="mt-1 text-sm font-medium text-red-800">{pilotLimitError}</p>}
                   {/* #724: above the grid, so it shows where focus lands on the first ad. */}
                   {placedError?.at === "ads" && <p id="ads-error" role="alert" className="mt-1 text-sm font-medium text-red-800">{placedError.message}</p>}
-                  <div id="campaign-ad-picker" className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
-                    {pickerAds.map((c, index) => (
-                      <PickerAdTile
-                        key={c.id}
-                        ad={c}
-                        selected={selected.has(c.id)}
-                        hidden={!showAllAds && index >= PHONE_PICKER_ADS && !selected.has(c.id)}
-                        editing={editingAdId === c.id}
-                        describedBy={[placedError?.at === "ads" ? "ads-error" : null, pilotLimitError ? "pilot-limit-error" : null].filter(Boolean).join(" ") || undefined}
-                        labels={{ yours: tc("picker.yourPhoto"), select: tc("picker.selectAd"), preview: tc("picker.adPreview"), edit: tc("picker.edit"), editAd: (headline) => tc("picker.editAd", { headline: headline || tc("picker.thisAd") }) }}
-                        livePicture={c.id === editingAdId && adPicture ? <LivePicture preview={adPicture} /> : null}
-                        onToggle={() => toggle(c.id)}
-                        onEdit={() => { setAdEditNotes(null); setEditingAdId(c.id); }}
-                      />
-                    ))}
+                  <div id="campaign-ad-picker" className="mt-2">
+                    <ChooseAds
+                      ads={chooserAds}
+                      selected={[...selected]}
+                      maxAds={null}
+                      dailyBudgetInr={totalDailyBudget}
+                      words={campaignWords}
+                      onSelectionChange={useSelectedAds}
+                      renderAd={(choice, isSelected, onToggle, index) => {
+                        const ad = pickerAdsById.get(choice.id);
+                        if (!ad) return null;
+                        return <PickerAdTile
+                          ad={ad}
+                          selected={isSelected}
+                          hidden={!showAllAds && index >= PHONE_PICKER_ADS && !isSelected}
+                          editing={editingAdId === ad.id}
+                          describedBy={[placedError?.at === "ads" ? "ads-error" : null, pilotLimitError ? "pilot-limit-error" : null].filter(Boolean).join(" ") || undefined}
+                          labels={{ yours: videoAssetIds.includes(ad.media_asset_id ?? "") ? tc("picker.yourVideo") : tc("picker.yourPhoto"), select: tc("picker.selectAd"), preview: tc("picker.adPreview"), edit: tc("picker.edit"), editAd: (headline) => tc("picker.editAd", { headline: headline || tc("picker.thisAd") }) }}
+                          livePicture={ad.id === editingAdId && adPicture ? <LivePicture preview={adPicture} /> : null}
+                          onToggle={onToggle}
+                          onEdit={() => { setAdEditNotes(null); setEditingAdId(ad.id); }}
+                        />;
+                      }}
+                    />
                   </div>
                   {selectedVideos.length > 0 && <VideoPrepare
                     assetIds={selectedVideos}
