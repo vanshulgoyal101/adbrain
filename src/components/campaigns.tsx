@@ -74,10 +74,9 @@ import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFacts, review
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
-import { ChooseAds, type ChoosableAd } from "@/components/choose-ads";
-import { PickerAdTile } from "@/components/picker-ad-tile";
+import { CampaignAdPicker } from "@/components/campaign-ad-picker";
 import { VideoPrepare, type VideoPreparationState } from "@/components/video-prepare";
-import { LivePicture, type PicturePreview } from "@/components/live-picture";
+import type { PicturePreview } from "@/components/live-picture";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
@@ -154,9 +153,6 @@ function serviceAreaLine(area: NonNullable<ReviewDTO["serviceArea"]>, tc: Return
 
 const LEAD_FORMS_FRESH_MS = 60_000;
 const CAMPAIGNS_FRESH_MS = 15 * 60_000;
-/** Two rows of three on a phone, so Campaign name and budget are one scroll away (#305). */
-const PHONE_PICKER_ADS = 6;
-
 function readCampaignSyncTime(key: string): number {
   try { return Number(localStorage.getItem(key)); } catch { return 0; }
 }
@@ -406,7 +402,9 @@ function BusinessCampaigns({
     flushSync(() => setShowComposer(true));
     const target = targets.map((id) => document.getElementById(id)).find((element) => element !== null);
     if (target?.closest("details#who-sees-it") && !whoOpen) flushSync(() => setWhoOpen(true));
-    const control = target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
+    const control = target?.id === "campaign-ad-picker"
+      ? target.querySelector<HTMLElement>('button[aria-pressed]')
+      : target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
     control?.scrollIntoView?.({ block: "center" });
     control?.focus();
   }
@@ -474,7 +472,6 @@ function BusinessCampaigns({
   const [rewritingAsks, setRewritingAsks] = useState(false);
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
-  const [showAllAds, setShowAllAds] = useState(false);
   const [adDraft, setAdDraft] = useState<AdText | null>(null);
   const [adPicture, setAdPicture] = useState<PicturePreview | null>(null);
   const savedPickerAds = approved.map((c) => editedAds[c.id] ?? c);
@@ -482,13 +479,6 @@ function BusinessCampaigns({
   const adDraftUnsaved = editingAd !== null && ((adDraft !== null && !sameAdText(adDraft, savedAdText(editingAd))) || adPicture !== null);
   // While editing, the tile previews the unsaved headline (#387).
   const pickerAds = savedPickerAds.map((c) => (c.id === editingAdId && adDraft ? { ...c, headline: adDraft.headline } : c));
-  const pickerAdsById = new Map(pickerAds.map((ad) => [ad.id, ad]));
-  const chooserAds: ChoosableAd[] = pickerAds.map((ad) => ({
-    id: ad.id,
-    kind: ad.media_asset_id ? videoAssetIds.includes(ad.media_asset_id) ? "video" : "photo" : "adbrain",
-    imageUrl: ad.image_url,
-    title: ad.headline?.trim() || tc("picker.thisAd"),
-  }));
   const selectedVideoItems = showComposer && creationMode === "manual" && connectedForDraft
     ? pickerAds.flatMap((ad) => selected.has(ad.id) && ad.media_asset_id && videoAssetIds.includes(ad.media_asset_id)
       ? [{ id: ad.media_asset_id, label: ad.headline?.trim() || tc("picker.thisAd") }] : [])
@@ -2002,31 +1992,19 @@ function BusinessCampaigns({
                   {pilotLimitError && <p id="pilot-limit-error" role="alert" className="mt-1 text-sm font-medium text-red-800">{pilotLimitError}</p>}
                   {/* #724: above the grid, so it shows where focus lands on the first ad. */}
                   {placedError?.at === "ads" && <p id="ads-error" role="alert" className="mt-1 text-sm font-medium text-red-800">{placedError.message}</p>}
-                  <div id="campaign-ad-picker" className="mt-2">
-                    <ChooseAds
-                      ads={chooserAds}
-                      selected={[...selected]}
-                      maxAds={null}
-                      dailyBudgetInr={totalDailyBudget}
-                      words={campaignWords}
-                      onSelectionChange={useSelectedAds}
-                      renderAd={(choice, isSelected, onToggle, index) => {
-                        const ad = pickerAdsById.get(choice.id);
-                        if (!ad) return null;
-                        return <PickerAdTile
-                          ad={ad}
-                          selected={isSelected}
-                          hidden={!showAllAds && index >= PHONE_PICKER_ADS && !isSelected}
-                          editing={editingAdId === ad.id}
-                          describedBy={[placedError?.at === "ads" ? "ads-error" : null, pilotLimitError ? "pilot-limit-error" : null].filter(Boolean).join(" ") || undefined}
-                          labels={{ yours: videoAssetIds.includes(ad.media_asset_id ?? "") ? tc("picker.yourVideo") : tc("picker.yourPhoto"), select: tc("picker.selectAd"), preview: tc("picker.adPreview"), edit: tc("picker.edit"), editAd: (headline) => tc("picker.editAd", { headline: headline || tc("picker.thisAd") }) }}
-                          livePicture={ad.id === editingAdId && adPicture ? <LivePicture preview={adPicture} /> : null}
-                          onToggle={onToggle}
-                          onEdit={() => { setAdEditNotes(null); setEditingAdId(ad.id); }}
-                        />;
-                      }}
-                    />
-                  </div>
+                  <CampaignAdPicker
+                    ads={pickerAds}
+                    selected={[...selected]}
+                    dailyBudgetInr={totalDailyBudget}
+                    videoAssetIds={videoAssetIds}
+                    words={campaignWords}
+                    editingAdId={editingAdId}
+                    adPicture={adPicture}
+                    hasPlacedError={placedError?.at === "ads"}
+                    hasPilotLimitError={Boolean(pilotLimitError)}
+                    onSelectionChange={useSelectedAds}
+                    onEditAd={(id) => { setAdEditNotes(null); setEditingAdId(id); }}
+                  />
                   {selectedVideos.length > 0 && <VideoPrepare
                     assetIds={selectedVideos}
                     labels={Object.fromEntries(selectedVideoItems.map((item) => [item.id, item.label]))}
@@ -2034,11 +2012,6 @@ function BusinessCampaigns({
                     words={{ working: tc("picker.preparing"), delayed: tc("picker.prepareLong"), waiting: tc("picker.prepareWaiting"),
                       ready: tc("picker.prepared"), error: tc("picker.prepareFailed"), retry: tc("targeting.retry") }}
                   />}
-                  {!showAllAds && pickerAds.some((c, index) => index >= PHONE_PICKER_ADS && !selected.has(c.id)) && (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 h-11 w-full sm:hidden">
-                      Show all {pickerAds.length} ads
-                    </Button>
-                  )}
                   {editingAd && (
                     <section aria-label="Edit ad" className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                       <p className="mb-1 truncate text-sm font-medium text-slate-800">Editing: {adDraft?.headline ?? editingAd.headline}</p>

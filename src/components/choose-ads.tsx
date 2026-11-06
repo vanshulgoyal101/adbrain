@@ -46,7 +46,7 @@ function tag(ad: ChoosableAd, t: ReturnType<typeof campaignsTranslator>): string
  * #778 / #744 Designer frame 2: "Choose ads". The owner's photos and videos sit in one grid with AdBrain's ads, with
  * no Meta format names. Each pick runs as its own ad; up to MAX_ADS. Launch (#781) owns what happens on Use.
  */
-export function ChooseAds({ ads, initial = [], selected, dailyBudgetInr = 300, maxAds = MAX_ADS, onUse, onSelectionChange, words, renderAd }: {
+export function ChooseAds({ ads, initial = [], selected, dailyBudgetInr = 300, maxAds = MAX_ADS, onUse, onSelectionChange, words, renderAd, itemClassName }: {
   ads: ChoosableAd[];
   initial?: string[];
   selected?: string[];
@@ -57,6 +57,7 @@ export function ChooseAds({ ads, initial = [], selected, dailyBudgetInr = 300, m
   onSelectionChange?: (ids: string[]) => void;
   words?: Words<"campaigns">;
   renderAd?: (ad: ChoosableAd, selected: boolean, onToggle: () => void, index: number) => ReactNode;
+  itemClassName?: (ad: ChoosableAd, selected: boolean, index: number) => string | undefined;
 }) {
   const t = campaignsTranslator(words);
   const [tab, setTab] = useState<Tab>("all");
@@ -97,7 +98,7 @@ export function ChooseAds({ ads, initial = [], selected, dailyBudgetInr = 300, m
           {shown.map(({ ad, index }) => {
             const on = picked.includes(ad.id);
             return (
-              <li key={ad.id}>
+              <li key={ad.id} className={itemClassName?.(ad, on, index)}>
                 {renderAd ? renderAd(ad, on, () => toggle(ad.id), index) : (
                   <button type="button" aria-pressed={on} aria-label={`${ad.title}, ${tag(ad, t)}`} disabled={!on && full} onClick={() => toggle(ad.id)}
                     className={`relative block aspect-square w-full overflow-hidden rounded-lg border-2 bg-slate-100 disabled:opacity-50 ${on ? "border-blue-600" : "border-transparent"}`}>

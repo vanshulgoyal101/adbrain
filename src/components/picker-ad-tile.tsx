@@ -5,10 +5,9 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 /** One ad in Create's "Choose ads" grid; `labels.yours` marks an owner's own photo or video (#781). */
-export function PickerAdTile({ ad, selected, hidden, editing, describedBy, labels, livePicture, onToggle, onEdit }: {
+export function PickerAdTile({ ad, selected, editing, describedBy, labels, livePicture, onToggle, onEdit }: {
   ad: { id: string; headline: string | null; image_url: string | null; media_asset_id?: string | null };
   selected: boolean;
-  hidden: boolean;
   editing: boolean;
   describedBy?: string;
   labels: { yours: string; select: string; preview: string; edit: string; editAd: (headline: string | null) => string };
@@ -17,8 +16,7 @@ export function PickerAdTile({ ad, selected, hidden, editing, describedBy, label
   onEdit: () => void;
 }) {
   return (
-    // #305: on a phone, ads after the first two rows wait behind "Show all" unless selected.
-    <div className={cn("relative flex min-w-0 flex-col gap-1.5", hidden && "max-sm:hidden")}>
+    <div className="relative flex min-w-0 flex-col gap-1.5">
       <button
         type="button"
         onClick={onToggle}
