@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { getEnv } from "@/lib/env";
 import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
+import { mediaPilotEnabled } from "@/lib/media/pilot";
 import {
   isMediaMime, isMediaVideoMime, MAX_AD_PHOTOS, mediaBucket, MEDIA_EXTENSION, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, MEDIA_MONTHLY_UPLOADS,
   MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_EXTENSION, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, type MediaFit, type MediaMime,
@@ -21,6 +22,10 @@ export function mediaUploadsEnabled(): boolean {
 export function mediaVideoEnabled(): boolean {
   const env = getEnv();
   return env.MEDIA_UPLOADS_ENABLED && env.MEDIA_VIDEO_ENABLED;
+}
+
+function mediaVideosEnabledFor(authorizedBusinessId: string): boolean {
+  return mediaVideoEnabled() && mediaPilotEnabled(authorizedBusinessId);
 }
 
 export type MediaKind = "image" | "video";
@@ -291,16 +296,40 @@ export async function ownMedia(client: SupabaseClient, id: string): Promise<Medi
   return data as MediaRow;
 }
 
-/** #780 slice 2a: the photos the library sent to Create (`?photos=`), under the owner's RLS and in the owner's order.
- * Bad, unknown, another business's, unready and video ids are dropped; Create re-checks them when it runs. */
-export async function pickedMediaViews(client: SupabaseClient, businessId: string, ids: readonly string[]): Promise<MediaView[]> {
+/** #780 slice 2a: selected media under the owner's RLS and in the owner's order.
+ * The server must pass an authorized business ID; video eligibility is resolved here, never from request data. */
+export async function pickedMediaViews(client: SupabaseClient, authorizedBusinessId: string, ids: readonly string[]): Promise<MediaView[]> {
   const wanted = [...new Set(ids.filter((id) => UUID.test(id)))].slice(0, 10);
   if (!wanted.length) return [];
-  const { data, error } = await client.from("media_assets").select(COLUMNS).in("id", wanted).eq("business_id", businessId)
-    .eq("status", "ready").eq("kind", "image").is("deleted_at", null);
+  let query = client.from("media_assets").select(COLUMNS).in("id", wanted).eq("business_id", authorizedBusinessId).eq("status", "ready")
+    .is("deleted_at", null);
+  query = mediaVideosEnabledFor(authorizedBusinessId) ? query.in("kind", ["image", "video"]) : query.eq("kind", "image");
+  const { data, error } = await query;
   if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't load your photos. Try again.");
   const rows = new Map(((data ?? []) as MediaRow[]).map((row) => [row.id, row]));
   return mediaViews(client, wanted.flatMap((id) => rows.get(id) ?? []).slice(0, MAX_AD_PHOTOS));
+}
+
+/** Explicit selections for an owner-written request. The server must pass an authorized business ID. */
+export async function pickedOwnMedia(client: SupabaseClient, authorizedBusinessId: string, ids: readonly string[]): Promise<MediaRow[]> {
+  if (ids.some((id) => !UUID.test(id))) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
+  const wanted = [...new Set(ids)];
+  if (!wanted.length) return [];
+  const { data, error } = await client.from("media_assets").select(COLUMNS).in("id", wanted).eq("business_id", authorizedBusinessId)
+    .is("deleted_at", null);
+  if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't load your photos. Try again.");
+  const byId = new Map(((data ?? []) as MediaRow[]).map((row) => [row.id, row]));
+  if (byId.size !== wanted.length) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
+  const rows = wanted.map((id) => {
+    const row = byId.get(id);
+    if (!row) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
+    return row;
+  });
+  if (rows.some((row) => row.kind === "video") && !mediaVideosEnabledFor(authorizedBusinessId)) {
+    throw new MediaError(404, "MEDIA_VIDEO_DISABLED", "Video isn't available yet.");
+  }
+  if (rows.some((row) => row.status !== "ready")) throw new MediaError(409, "MEDIA_NOT_UPLOADED", "This photo isn't ready yet.");
+  return rows;
 }
 
 export async function updateMedia(admin: SupabaseClient, row: MediaRow, change: { name?: string | null; tags?: string[] }): Promise<MediaView> {
@@ -334,4 +363,3 @@ export async function deleteMedia(admin: SupabaseClient, row: MediaRow): Promise
   const { error: saveError } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id);
   if (saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't delete the photo. Try again.");
 }
-

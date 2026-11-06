@@ -55,6 +55,7 @@ const guardedModules = [
   "src/lib/meta/appsecret-proof.ts",
   "src/lib/meta/token-store.ts",
   "src/lib/meta/client.ts",
+  "src/lib/media/pilot.ts",
   "src/lib/payments/production-config.ts",
   "src/lib/payments/razorpay-production.ts",
   "src/lib/payments/razorpay-test.ts",
