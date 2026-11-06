@@ -40,7 +40,11 @@ export async function ownsBusiness(client: SupabaseClient, businessId: string): 
 export async function readPickedPhotos(client: SupabaseClient, businessId: string, ids: readonly string[]): Promise<ReadPhoto[] | NextResponse> {
   if (!mediaUploadsEnabled()) return apiError("Not found", 404);
   try {
-    return await readAdPhotos(createAdminClient() as unknown as SupabaseClient, await pickedMedia(client, businessId, ids));
+    const rows = await pickedMedia(client, businessId, ids);
+    if (rows.some((row) => row.kind !== "image")) {
+      throw new MediaError(415, "MEDIA_KIND_UNSUPPORTED", "Only photos can be used to create ads.");
+    }
+    return await readAdPhotos(createAdminClient() as unknown as SupabaseClient, rows);
   } catch (error) {
     if (error instanceof MediaError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     throw error;

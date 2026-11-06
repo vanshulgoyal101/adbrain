@@ -1830,6 +1830,7 @@
     "moreIdeas": "Ideas for more ads",
     "yourPhotos": "Your photos ({n})",
     "photosNote": "Each photo becomes one ad’s picture. The words come from your business details and what the photo shows.",
-    "removePhoto": "Remove photo {n}"
+    "removePhoto": "Remove photo {n}",
+    "videosNotSupported": "Videos aren't supported in Create yet. Choose photos instead."
   }
 }

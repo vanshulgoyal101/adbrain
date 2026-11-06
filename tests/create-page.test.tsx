@@ -183,7 +183,8 @@ describe("Create page for a first-timer (#1270)", () => {
     getPrimaryBusiness.mockResolvedValue(usable);
     hasLaunchedCampaign.mockResolvedValue(true);
     const photo = { id: "11111111-1111-4111-8111-111111111111", kind: "image", name: "Shop front", tags: [], width: 1080, height: 1350, bytes: 1, durationMs: null, fit: null, url: "https://example.com/p.jpg", createdAt: "2026-11-03T00:00:00Z" };
-    pickedMediaViews.mockResolvedValue([photo]);
+    const video = { ...photo, id: "22222222-2222-4222-8222-222222222222", kind: "video", name: "Promo clip", url: "https://example.com/promo.mp4", durationMs: 10_000 };
+    pickedMediaViews.mockResolvedValue([photo, video]);
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     mediaOn.value = false;
     const off = render(await CreatePage({ searchParams: Promise.resolve({ all: "1", photos: photo.id }) }));
@@ -197,6 +198,8 @@ describe("Create page for a first-timer (#1270)", () => {
       expect(pickedMediaViews).toHaveBeenCalledWith({ rls: true }, usable.id, [photo.id, "not-an-id"]);
       expect(screen.getByRole("heading", { name: "Your photos (1)" })).toBeInTheDocument();
       expect(screen.getByRole("img", { name: "Shop front" })).toHaveAttribute("src", photo.url);
+      expect(screen.queryByRole("img", { name: "Promo clip" })).toBeNull();
+      expect(screen.getByRole("status")).toHaveTextContent("Videos aren't supported in Create yet. Choose photos instead.");
       expect(assistantProps).toHaveBeenLastCalledWith(expect.objectContaining({ mediaIds: [photo.id] }));
       fireEvent.click(screen.getByRole("button", { name: "Remove photo 1" }));
       expect(screen.queryByRole("heading", { name: "Your photos (1)" })).toBeNull();

@@ -16,6 +16,8 @@ const IMAGE_MODEL = "openai/gpt-image-2.5-flare";
 const mocks = vi.hoisted(() => ({
   inserts: [] as Record<string, unknown>[],
   progress: [] as Record<string, unknown>[],
+  admissions: 0,
+  mediaRow: null as Record<string, unknown> | null,
   fastRaster: false,
   ownerPhotos: [] as string[],
   ownerPhotoStatus: 200,
@@ -26,7 +28,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     rpc: async (name: string, args: Record<string, unknown>) => {
-      if (name === "creative_generation_admit") return { data: { action: "start", status: "processing" }, error: null };
+      if (name === "creative_generation_admit") {
+        mocks.admissions++;
+        return { data: { action: "start", status: "processing" }, error: null };
+      }
       if (name === "creative_generation_progress") {
         mocks.progress.push(args);
         return { data: { status: args.p_uncertain ? "unresolved" : args.p_complete ? "complete" : "processing" }, error: null };
@@ -38,16 +43,22 @@ vi.mock("@/lib/supabase/admin", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) },
-    from: (table: string) => ({
-      select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: table === "businesses" ? run4.brand : null, error: null }) }),
-        limit: async () => ({ error: null }),
-      }),
-      insert: (row: Record<string, unknown>) => {
-        mocks.inserts.push(row);
-        return { select: () => ({ single: async () => ({ data: { id: `creative-${mocks.inserts.length}`, ...row }, error: null }) }) };
-      },
-    }),
+    from: (table: string) => {
+      const selected = () => ({ data: table === "businesses" ? run4.brand : table === "media_assets" ? mocks.mediaRow : null, error: null });
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => selected(),
+            is: () => ({ maybeSingle: async () => selected() }),
+          }),
+          limit: async () => ({ error: null }),
+        }),
+        insert: (row: Record<string, unknown>) => {
+          mocks.inserts.push(row);
+          return { select: () => ({ single: async () => ({ data: { id: `creative-${mocks.inserts.length}`, ...row }, error: null }) }) };
+        },
+      };
+    },
   }),
 }));
 vi.mock("@/lib/creative/references", () => ({ creativeAssets: async () => ({ references: [], photos: mocks.ownerPhotos }), recentCreativeCopy: async () => [] }));
@@ -114,6 +125,8 @@ beforeEach(() => {
   vi.resetModules();
   mocks.inserts.length = 0;
   mocks.progress.length = 0;
+  mocks.admissions = 0;
+  mocks.mediaRow = null;
   mocks.fastRaster = false;
   mocks.ownerPhotos = [];
   mocks.ownerPhotoStatus = 200;
@@ -123,6 +136,7 @@ beforeEach(() => {
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
+    MEDIA_UPLOADS_ENABLED: "true",
     GOOGLE_AI_API_KEYS: "core-google",
     OPENROUTER_API_KEYS: "core-openrouter",
     GROQ_API_KEYS: "core-groq",
@@ -200,11 +214,11 @@ function stubProviders(replay: Replay = {}) {
   }));
 }
 
-async function postCreate() {
+async function postCreate(overrides: { mediaIds?: string[] } = {}) {
   const { POST } = await import("@/app/api/creatives/generate/route");
   return () => POST(new Request("http://localhost/api/creatives/generate", {
     method: "POST",
-    body: JSON.stringify({ businessId: run4.brand.id, brief: run4.brief, count: 3, generationId: "6d0e7324-171e-45df-894a-28ef6c910196" }),
+    body: JSON.stringify({ businessId: run4.brand.id, brief: run4.brief, count: 3, generationId: "6d0e7324-171e-45df-894a-28ef6c910196", ...overrides }),
   }));
 }
 
@@ -233,6 +247,19 @@ const valueRejectedFirst = (angle: Angle, attempt: number) => angle.angleId === 
   : recorded(angle);
 
 describe("core: Create route on recorded run 4", () => {
+  it("refuses a selected video before admitting an image-only generation", async () => {
+    const videoId = "22222222-2222-4222-8222-222222222222";
+    mocks.mediaRow = { id: videoId, business_id: run4.brand.id, kind: "video", status: "ready", deleted_at: null };
+    stubProviders();
+    const response = await (await postCreate({ mediaIds: [videoId] }))();
+
+    expect(response.status).toBe(415);
+    expect(await response.json()).toMatchObject({ code: "MEDIA_KIND_UNSUPPORTED" });
+    expect(mocks.admissions).toBe(0);
+    expect(calls).toEqual([]);
+    expect(mocks.inserts).toEqual([]);
+  });
+
   it("saves all three recorded concepts through the production creative route", async () => {
     stubProviders();
     await expectThreeSavedAds(await (await postCreate())());
