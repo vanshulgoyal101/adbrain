@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BrandForm } from "@/components/brand-form";
 import { BrandTrackingCard, type BrandTrackingCardProps } from "@/components/brand-tracking-card";
+import { BrandTrackingPanel } from "@/components/brand-tracking-panel";
 import type { ReviewTracking } from "@/lib/campaign/website-tracking";
+import en from "../messages/en.json";
 
-vi.mock("@/app/(app)/brand/actions", () => ({ saveBusiness: vi.fn() }));
+const actions = vi.hoisted(() => ({ refreshBrandTracking: vi.fn() }));
+vi.mock("@/app/(app)/brand/actions", () => ({ saveBusiness: vi.fn(), ...actions }));
 vi.mock("@/components/ui/confirm-dialog", () => ({
   useConfirm: () => [async () => false, null],
 }));
@@ -30,6 +33,7 @@ const copy = {
   countsNote: "Counts are what Meta reports, not orders AdBrain has checked.",
   checkAgain: "Check again",
   checking: "Checking…",
+  refreshFailed: "We couldn't refresh website tracking. Try again.",
   checkAccess: "Check Meta access",
   eventsManager: "Open Events Manager",
 };
@@ -54,6 +58,7 @@ const ready = {
     lastSeenAt: "2026-10-20T14:00:00Z", counts: { Lead: 12, Purchase: 0 }, totalEvents: 12,
   },
 } satisfies ReviewTracking;
+const words = { locale: "en" as const, messages: en.websiteTracking };
 
 function BrandFormWithTracking({ trackingCard }: { trackingCard: BrandTrackingCardProps }) {
   return <BrandForm business={null} trackingCard={<BrandTrackingCard {...trackingCard} />} />;
@@ -65,15 +70,54 @@ describe("Brand website tracking", () => {
     expect(screen.getByRole("region", { name: copy.title })).toBeInTheDocument();
   });
 
-  it("shows a no-source state, working recovery links, and a recheck without submitting Brand", () => {
-    const onCheckAgain = vi.fn();
+  it("shows a no-source state, working recovery links, and a recheck without submitting Brand", async () => {
+    const onCheckAgain = vi.fn().mockResolvedValue(noSource);
     render(<BrandFormWithTracking trackingCard={{ tracking: noSource, copy, onCheckAgain }} />);
     const card = screen.getByRole("region", { name: copy.title });
     expect(within(card).getByText(copy.noSource)).toBeInTheDocument();
     expect(within(card).getByRole("link", { name: copy.checkAccess })).toHaveAttribute("href", "/settings");
     expect(within(card).getByRole("link", { name: copy.eventsManager })).toHaveAttribute("href", "https://business.facebook.com/events_manager2");
-    fireEvent.click(within(card).getByRole("button", { name: copy.checkAgain }));
+    await act(async () => fireEvent.click(within(card).getByRole("button", { name: copy.checkAgain })));
     expect(onCheckAgain).toHaveBeenCalledExactlyOnceWith(null);
+  });
+
+  it("replaces the account-level counts after a successful fresh check", async () => {
+    const refreshed: ReviewTracking = {
+      ...ready,
+      status: { ...ready.status, counts: { Lead: 13, Purchase: 1 }, totalEvents: 14 },
+    };
+    const onCheckAgain = vi.fn().mockResolvedValue(refreshed);
+    render(<BrandFormWithTracking trackingCard={{ tracking: ready, copy, onCheckAgain }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: copy.checkAgain }));
+
+    expect(await screen.findByText(copy.leadCount(13))).toBeInTheDocument();
+    expect(screen.queryByText(copy.leadCount(12))).not.toBeInTheDocument();
+    expect(onCheckAgain).toHaveBeenCalledExactlyOnceWith("101");
+  });
+
+  it("uses the server refresh action with serializable localized words", async () => {
+    const refreshed: ReviewTracking = {
+      ...ready,
+      status: { ...ready.status, counts: { Lead: 15, Purchase: 2 }, totalEvents: 17 },
+    };
+    actions.refreshBrandTracking.mockResolvedValue(refreshed);
+    render(<BrandTrackingPanel tracking={ready} words={words} />);
+
+    fireEvent.click(screen.getByRole("button", { name: copy.checkAgain }));
+
+    expect(await screen.findByText("Website leads (Lead): 15")).toBeInTheDocument();
+    expect(actions.refreshBrandTracking).toHaveBeenCalledExactlyOnceWith("101");
+  });
+
+  it("keeps the previous counts and explains when a fresh check cannot complete", async () => {
+    const onCheckAgain = vi.fn().mockResolvedValue(null);
+    render(<BrandFormWithTracking trackingCard={{ tracking: ready, copy, onCheckAgain }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: copy.checkAgain }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(copy.refreshFailed);
+    expect(screen.getByText(copy.leadCount(12))).toBeInTheDocument();
   });
 
   it("does not describe a failed read as an empty account or another business's ownership", () => {

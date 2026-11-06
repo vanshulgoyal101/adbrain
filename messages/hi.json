@@ -786,6 +786,7 @@
       "countsNote": "ये Meta के इवेंट हैं, AdBrain से सत्यापित ऑर्डर नहीं।",
       "checkAgain": "फिर से जाँचें",
       "checking": "जाँच रहे हैं…",
+      "refreshFailed": "वेबसाइट ट्रैकिंग अपडेट नहीं हो सकी। फिर से कोशिश करें।",
       "checkAccess": "Meta का ऐक्सेस जाँचें",
       "eventsManager": "Events Manager खोलें"
     },

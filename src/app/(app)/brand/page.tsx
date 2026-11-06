@@ -2,6 +2,7 @@ import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { localeChosen, requestWords, setupWords } from "@/i18n/request-locale";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
+import { BrandTrackingPanel } from "@/components/brand-tracking-panel";
 import { SetupBusinessStep } from "@/components/setup-business-step";
 import { WhatsAppMessageCard, type Suggested } from "@/components/whatsapp-message-card";
 import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
@@ -14,10 +15,11 @@ import {
   getPrimaryBusiness,
   hasLaunchedCampaign,
 } from "@/lib/supabase/queries";
-import { getMetaConnection } from "@/lib/meta/credentials";
+import { getMetaConnection, readTrackingStatusForBusiness } from "@/lib/meta/credentials";
 import { isInternalUser } from "@/lib/internal-accounts";
 import { createClient } from "@/lib/supabase/server";
 import { readWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status";
+import type { ReviewTracking } from "@/lib/campaign/website-tracking";
 
 export const metadata = { title: OWNER_WORDS.business };
 
@@ -26,6 +28,10 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
   void whatsappWordsPromise.catch((error: unknown) =>
     console.error("[brand.whatsappWords]", error instanceof Error ? error.message : typeof error));
   const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams]);
+  const internalUserPromise = createClient()
+    .then((supabase) => supabase.auth.getUser())
+    .then(({ data }) => isInternalUser(data.user))
+    .catch(() => false);
   const brandData = business && params.again !== "1"
     ? Promise.all([
         getBrandAssets(business.id),
@@ -40,13 +46,31 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
   // `?all=1` opens the full page. If the check fails, the full page shows as before.
   const setup = params.all !== "1" && (!business || !(await hasLaunchedCampaign(business.id).catch(() => true)));
   if (setup || (params.again === "1" && business)) {
-    const [words, offerWebsite] = await Promise.all([setupWords(),
-      createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => isInternalUser(data.user)).catch(() => false)]);
+    const [words, offerWebsite] = await Promise.all([setupWords(), internalUserPromise]);
     if (setup) return <SetupBusinessStep business={business} chooseLanguage={!(await localeChosen())} offerWebsite={offerWebsite} words={words} />;
     // #1934 (CPO #1924): "New campaign" after one went live re-enters the 3 steps; step 1 asks only for the new offer.
     return <SetupBusinessStep business={business} returning offerWebsite={offerWebsite} words={words} />;
   }
+  const showTrackingPromise = business?.website?.trim() ? internalUserPromise : Promise.resolve(false);
+  const trackingWordsPromise = showTrackingPromise.then((showTracking) =>
+    showTracking ? requestWords("websiteTracking") : undefined);
+  void trackingWordsPromise.catch((error: unknown) =>
+    console.error("[brand.trackingWords]", error instanceof Error ? error.message : typeof error));
+  const trackingStatusPromise = showTrackingPromise.then((showTracking) =>
+    showTracking && business
+      ? readTrackingStatusForBusiness(business.id).catch((error: unknown) => {
+          console.error("[brand.tracking]", error instanceof Error ? error.message : typeof error);
+          return null;
+        })
+      : null);
   const [assets, instructions, connection] = brandData ? await brandData : [[], [], null];
+  const [showTracking, trackingStatus, trackingWords] = await Promise.all([
+    showTrackingPromise, trackingStatusPromise, trackingWordsPromise,
+  ]);
+  const tracking: ReviewTracking = {
+    pixelId: trackingStatus?.pixelId ?? null,
+    status: trackingStatus,
+  };
   // The Call now note reads WhatsApp status; it never blocks the page.
   const whatsappStatus: Promise<WhatsAppStatus> | null = business && connection?.ready
     ? readWhatsAppStatus(business.id).catch((): WhatsAppStatus => ({ state: "unavailable" }))
@@ -86,7 +110,8 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
         ))}
       </nav>
       <div className="mt-6 flex flex-col gap-6">
-        <BrandForm business={business} photoCount={assets.filter((a) => a.type === "product_photo").length} />
+        <BrandForm business={business} photoCount={assets.filter((a) => a.type === "product_photo").length}
+          trackingCard={showTracking && trackingWords ? <BrandTrackingPanel tracking={tracking} words={trackingWords} /> : undefined} />
         {business && (
           <>
             {showMessage && (

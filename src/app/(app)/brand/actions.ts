@@ -11,9 +11,28 @@ import { SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom, se
 import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
 import { BRAND_LANGUAGE_NAME, CREATE_LANGUAGES } from "@/lib/languages";
 import { createClient } from "@/lib/supabase/server";
+import { getPrimaryBusiness } from "@/lib/supabase/queries";
+import { isInternalUser } from "@/lib/internal-accounts";
+import { readTrackingStatusForBusiness } from "@/lib/meta/credentials";
+import type { ReviewTracking } from "@/lib/campaign/website-tracking";
 import type { BusinessInsert } from "@/lib/types";
 
 export type SaveState = { ok: boolean; error?: string };
+
+export async function refreshBrandTracking(pixelId: string | null): Promise<ReviewTracking | null> {
+  return observeAction("server.refreshBrandTracking", async () => {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !isInternalUser(user)) return null;
+
+    const business = await getPrimaryBusiness();
+    if (!business?.website?.trim()) return null;
+    if (pixelId !== null && (typeof pixelId !== "string" || !/^\d+$/.test(pixelId))) return null;
+
+    const status = await readTrackingStatusForBusiness(business.id, pixelId ?? undefined);
+    return status ? { pixelId: status.pixelId, status } : null;
+  });
+}
 
 function str(fd: FormData, key: string): string | null {
   return fieldStr(fd.get(key));

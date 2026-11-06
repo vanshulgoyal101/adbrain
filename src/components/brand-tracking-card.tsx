@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ReviewTracking } from "@/lib/campaign/website-tracking";
@@ -26,6 +26,7 @@ export type BrandTrackingCopy = {
   countsNote: string;
   checkAgain: string;
   checking: string;
+  refreshFailed: string;
   checkAccess: string;
   eventsManager: string;
 };
@@ -33,31 +34,55 @@ export type BrandTrackingCopy = {
 export type BrandTrackingCardProps = {
   tracking: ReviewTracking;
   copy: BrandTrackingCopy;
-  onCheckAgain: (pixelId: string | null) => void;
+  onCheckAgain: (pixelId: string | null) => Promise<ReviewTracking | null>;
   onSelect?: (pixelId: string) => void;
   checking?: boolean;
   error?: string | null;
 };
 
-export function BrandTrackingCard({ tracking, copy, onCheckAgain, onSelect, checking = false, error }: BrandTrackingCardProps) {
+export function BrandTrackingCard({ tracking, copy, onCheckAgain, onSelect, checking: externalChecking, error: externalError }: BrandTrackingCardProps) {
   const id = useId();
-  const status = tracking.status;
-  const chosen = status?.pixels.find((pixel) => pixel.id === tracking.pixelId);
+  const [refreshed, setRefreshed] = useState<{ source: ReviewTracking; value: ReviewTracking } | null>(null);
+  const [localChecking, setLocalChecking] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const checking = externalChecking ?? localChecking;
+  const error = externalError === undefined ? localError : externalError;
+  const currentTracking = refreshed?.source === tracking ? refreshed.value : tracking;
+  const status = currentTracking.status;
+  const chosen = status?.pixels.find((pixel) => pixel.id === currentTracking.pixelId);
   const counts = status?.counts;
   const window = status?.window;
   const validCounts = counts && [counts.Lead, counts.Purchase].every((count) => Number.isSafeInteger(count) && count >= 0);
   const validWindow = window && Number.isFinite(Date.parse(window.since)) && Number.isFinite(Date.parse(window.until))
     && Date.parse(window.since) <= Date.parse(window.until);
-  const checked = status && status.pixelId === tracking.pixelId && chosen && !chosen.unavailable
+  const checked = status && status.pixelId === currentTracking.pixelId && chosen && !chosen.unavailable
     && status.state !== "none" && status.state !== "unreadable" && validCounts && validWindow;
   const noSources = status?.state === "none" && status.pixels.length === 0;
   const unreadable = !noSources && (!status || status.state === "unreadable" || status.state === "none"
-    || (tracking.pixelId !== null && !checked));
-  const guidance = noSources ? copy.noSource : unreadable ? copy.unreadable : !tracking.pixelId ? copy.choose
+    || (currentTracking.pixelId !== null && !checked));
+  const guidance = noSources ? copy.noSource : unreadable ? copy.unreadable : !currentTracking.pixelId ? copy.choose
     : status?.state === "quiet" ? copy.quiet : status?.state === "event_missing" ? copy.missing : null;
   const names = status?.pixels.map((pixel, index) => pixel.name.trim() || copy.unnamed(index + 1)) ?? [];
   const nameCounts = new Map<string, number>();
   for (const name of names) nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+
+  async function checkAgain() {
+    setLocalChecking(true);
+    setLocalError(null);
+    try {
+      const updated = await onCheckAgain(currentTracking.pixelId);
+      if (!updated) {
+        setLocalError(copy.refreshFailed);
+        return;
+      }
+      setRefreshed({ source: tracking, value: updated });
+    } catch (reason) {
+      console.error("[brand.trackingRefresh]", reason instanceof Error ? reason.message : typeof reason);
+      setLocalError(copy.refreshFailed);
+    } finally {
+      setLocalChecking(false);
+    }
+  }
 
   return (
     <section id="brand-tracking" aria-labelledby={`${id}-title`} className="scroll-mt-6">
@@ -81,7 +106,7 @@ export function BrandTrackingCard({ tracking, copy, onCheckAgain, onSelect, chec
                   const reasonId = pixel.unavailable ? `${id}-pixel-${index}-unavailable` : !onSelect ? `${id}-selection-unavailable` : undefined;
                   return (
                     <label key={pixel.id} className="flex min-h-11 min-w-0 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-blue-600">
-                      <input type="radio" name={`brand-tracking-${id}`} checked={tracking.pixelId === pixel.id}
+                      <input type="radio" name={`brand-tracking-${id}`} checked={currentTracking.pixelId === pixel.id}
                         aria-label={label} aria-disabled={unavailable || undefined} aria-describedby={reasonId}
                         onChange={() => { if (!unavailable) onSelect?.(pixel.id); }} className="h-4 w-4 flex-none accent-blue-600" />
                       <span className="min-w-0 break-words font-medium text-slate-900">{label}</span>
@@ -103,7 +128,7 @@ export function BrandTrackingCard({ tracking, copy, onCheckAgain, onSelect, chec
           )}
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Button type="button" variant="outline" onClick={() => onCheckAgain(tracking.pixelId)} disabled={checking}>
+            <Button type="button" variant="outline" onClick={() => void checkAgain()} disabled={checking}>
               {checking ? copy.checking : copy.checkAgain}
             </Button>
             {(noSources || unreadable) && <Link href="/settings" className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 underline underline-offset-4">{copy.checkAccess}</Link>}

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import en from "../../messages/en.json";
 import hi from "../../messages/hi.json";
 import type { AdInstruction, BrandAsset, Business } from "@/lib/types";
 import type { MetaConnection } from "@/lib/meta/credentials";
+import type { TrackingStatus } from "@/lib/meta/pixels";
 import BrandPage from "@/app/(app)/brand/page";
 
 const reads = vi.hoisted(() => ({
@@ -13,6 +15,10 @@ const reads = vi.hoisted(() => ({
   getBrandAssets: vi.fn(),
   getAdInstructions: vi.fn(),
   getMetaConnection: vi.fn(),
+  metaClientForBusiness: vi.fn(),
+  trackingStatus: vi.fn(),
+  getUser: vi.fn(),
+  isInternalUser: vi.fn(),
   requestWords: vi.fn(),
   setupWords: vi.fn(),
   localeChosen: vi.fn(),
@@ -20,7 +26,16 @@ const reads = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/queries", () => reads);
-vi.mock("@/lib/meta/credentials", () => ({ getMetaConnection: reads.getMetaConnection }));
+vi.mock("@/lib/meta/credentials", () => ({
+  getMetaConnection: reads.getMetaConnection,
+  metaClientForBusiness: reads.metaClientForBusiness,
+  readTrackingStatusForBusiness: async (businessId: string, pixelId?: string) => {
+    const meta = await reads.metaClientForBusiness(businessId);
+    if (!meta) return null;
+    return pixelId === undefined ? meta.trackingStatus() : meta.trackingStatus({ pixelId });
+  },
+}));
+vi.mock("@/app/(app)/brand/actions", () => ({ refreshBrandTracking: vi.fn() }));
 vi.mock("@/lib/meta/whatsapp-status", () => ({ readWhatsAppStatus: reads.readWhatsAppStatus }));
 vi.mock("@/i18n/request-locale", () => ({
   requestWords: reads.requestWords,
@@ -28,9 +43,9 @@ vi.mock("@/i18n/request-locale", () => ({
   localeChosen: reads.localeChosen,
 }));
 vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => ({ auth: { getUser: async () => ({ data: { user: null } }) } }),
+  createClient: async () => ({ auth: { getUser: reads.getUser } }),
 }));
-vi.mock("@/lib/internal-accounts", () => ({ isInternalUser: () => false }));
+vi.mock("@/lib/internal-accounts", () => ({ isInternalUser: reads.isInternalUser }));
 vi.mock("@/components/setup-business-step", () => ({
   SetupBusinessStep: ({ business, returning, chooseLanguage }: {
     business: Business | null;
@@ -39,8 +54,11 @@ vi.mock("@/components/setup-business-step", () => ({
   }) => <p>{returning ? "Returning setup" : "First setup"}: {business?.name ?? "new business"}; choose language: {String(chooseLanguage)}</p>,
 }));
 vi.mock("@/components/brand-form", () => ({
-  BrandForm: ({ business, photoCount }: { business: Business | null; photoCount: number }) =>
-    <p>{business?.name ?? "New business"}: {photoCount} photos</p>,
+  BrandForm: ({ business, photoCount, trackingCard }: {
+    business: Business | null;
+    photoCount: number;
+    trackingCard?: ReactNode;
+  }) => <><p>{business?.name ?? "New business"}: {photoCount} photos</p>{trackingCard}</>,
 }));
 vi.mock("@/components/brand-assets", () => ({
   BrandAssets: ({ initialAssets }: { initialAssets: BrandAsset[] }) => <p>Assets: {initialAssets.length}</p>,
@@ -72,6 +90,17 @@ const connection: MetaConnection = {
   tokenExpiresAt: null, expired: false, scopes: [],
 };
 const whatsappWords = { locale: "en", messages: en.whatsappMessage };
+const websiteTrackingWords = { locale: "en", messages: en.websiteTracking };
+const trackingStatus: TrackingStatus = {
+  state: "ready",
+  unreadable: null,
+  pixelId: "pixel-1",
+  pixels: [{ id: "pixel-1", name: "Shop website", lastFiredAt: "2026-11-05T00:00:00Z", unavailable: false }],
+  window: { since: "2026-10-29T00:00:00Z", until: "2026-11-05T00:00:00Z" },
+  lastSeenAt: "2026-11-05T00:00:00Z",
+  counts: { Lead: 2, Purchase: 1 },
+  totalEvents: 3,
+};
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -96,6 +125,10 @@ beforeEach(() => {
   reads.getBrandAssets.mockResolvedValue(assets);
   reads.getAdInstructions.mockResolvedValue(instructions);
   reads.getMetaConnection.mockResolvedValue(connection);
+  reads.metaClientForBusiness.mockResolvedValue({ trackingStatus: reads.trackingStatus });
+  reads.trackingStatus.mockResolvedValue(trackingStatus);
+  reads.getUser.mockResolvedValue({ data: { user: null } });
+  reads.isInternalUser.mockReturnValue(false);
   reads.requestWords.mockResolvedValue(whatsappWords);
   reads.setupWords.mockResolvedValue({ locale: "en", messages: en.setup });
   reads.localeChosen.mockResolvedValue(false);
@@ -289,5 +322,34 @@ describe("core: Brand page read concurrency (#2849)", () => {
     render(await brandPage());
     expect(screen.queryByText(/Message language:/)).not.toBeInTheDocument();
     expect(reads.readWhatsAppStatus).not.toHaveBeenCalled();
+  });
+
+  it("shows account-level website tracking to internal users on website brands", async () => {
+    const websiteBusiness = { ...business, website: "https://shop.example" };
+    reads.getPrimaryBusiness.mockResolvedValue(websiteBusiness);
+    reads.getUser.mockResolvedValue({ data: { user: { id: "team-user", email: "team@example.test", email_confirmed_at: "2026-01-01" } } });
+    reads.isInternalUser.mockReturnValue(true);
+    reads.requestWords.mockImplementation(async (namespace: string) =>
+      namespace === "websiteTracking" ? websiteTrackingWords : whatsappWords);
+
+    render(await brandPage());
+
+    expect(screen.getByRole("heading", { name: "Website tracking" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Shop website" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Website leads (Lead): 2")).toBeInTheDocument();
+    expect(reads.metaClientForBusiness).toHaveBeenCalledWith(business.id);
+    expect(reads.trackingStatus).toHaveBeenCalledWith();
+  });
+
+  it("does not read or show website tracking to non-internal users", async () => {
+    reads.getPrimaryBusiness.mockResolvedValue({ ...business, website: "https://shop.example" });
+    reads.getUser.mockResolvedValue({ data: { user: { id: "customer-user" } } });
+    reads.isInternalUser.mockReturnValue(false);
+
+    render(await brandPage());
+
+    expect(screen.queryByRole("heading", { name: "Website tracking" })).not.toBeInTheDocument();
+    expect(reads.metaClientForBusiness).not.toHaveBeenCalled();
+    expect(reads.requestWords).not.toHaveBeenCalledWith("websiteTracking");
   });
 });

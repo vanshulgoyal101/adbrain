@@ -786,6 +786,7 @@
       "countsNote": "These are Meta events, not orders verified by AdBrain.",
       "checkAgain": "Check again",
       "checking": "Checking…",
+      "refreshFailed": "We couldn't refresh website tracking. Try again.",
       "checkAccess": "Check Meta access",
       "eventsManager": "Open Events Manager"
     },

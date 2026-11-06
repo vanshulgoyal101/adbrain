@@ -27,7 +27,8 @@ export function websiteTrackingCopy(words?: Words<"websiteTracking">): {
       purchaseCount: (n) => t("card.purchaseCount", { n }),
       window: (since, until) => t("card.window", { since, until }),
       countsNote: t("card.countsNote"), checkAgain: t("card.checkAgain"),
-      checking: t("card.checking"), checkAccess: t("card.checkAccess"), eventsManager: t("card.eventsManager"),
+      checking: t("card.checking"), refreshFailed: t("card.refreshFailed"),
+      checkAccess: t("card.checkAccess"), eventsManager: t("card.eventsManager"),
     },
     goals: {
       legend: t("goals.legend"), visits: t("goals.visits"), leads: t("goals.leads"), sales: t("goals.sales"),
