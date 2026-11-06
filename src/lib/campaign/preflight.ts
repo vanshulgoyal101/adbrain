@@ -7,7 +7,7 @@ import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-con
 import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE, type ReviewDestination } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
-import { copyClaimWarnings } from "@/lib/creative/concept";
+import { ownerWrittenCopyWarning, type OwnerWrittenCreativeCopy } from "@/lib/campaign/own-words-preflight";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { translator, type AppLocale } from "@/i18n/locale";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
@@ -18,14 +18,11 @@ import { conversionGoal, goalWordsMismatch, trackingBlocker, type ReviewTracking
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
 
-export interface PreflightCreative {
+export interface PreflightCreative extends OwnerWrittenCreativeCopy {
   id: string;
   businessId: string;
   approved: boolean;
   imageUrl: string | null;
-  headline: string | null;
-  primaryText?: string | null;
-  description?: string | null;
   cta?: string | null;
   /** Its saved design can be laid out at 9:16 for Stories and Reels (#333). */
   storyReady?: boolean;
@@ -35,8 +32,6 @@ export interface PreflightCreative {
   printedPhone?: string | null;
   /** #784: its picture is the owner's own upload (`creatives.media_asset_id`), so launch needs their rights confirmation. */
   ownMedia?: boolean;
-  /** #780: the owner typed this ad's copy, so launch rechecks its claims against the current Brand. */
-  ownWords?: boolean;
 }
 
 export interface PreflightForm {
@@ -277,21 +272,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", say("noWebsite"), { kind: "open_brand" }));
   }
   if (input.mediaConsent === false && input.creatives.some((creative) => creative.ownMedia)) blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_MEDIA_RIGHTS", say("mediaRights")));
-  const ownWordsCreatives = input.creatives.filter((creative) => creative.ownWords);
-  const ownWordsContext = input.ownWordsContext
-    ?? (input.brandFacts !== undefined && input.vertical !== undefined
-      ? { brandFacts: input.brandFacts, vertical: input.vertical }
-      : undefined);
-  if (ownWordsCreatives.length && !ownWordsContext) {
-    throw new Error("Current Brand facts could not be checked for owner-written ads.");
-  }
-  const ownWordsWarning = ownWordsContext
-    ? ownWordsCreatives.flatMap((creative) => copyClaimWarnings({
-      headline: creative.headline ?? "",
-      primary_text: creative.primaryText ?? "",
-      description: creative.description ?? "",
-    }, ownWordsContext.brandFacts, ownWordsContext.vertical, { ownPicture: true }))[0]
-    : undefined;
+  const ownWordsWarning = ownerWrittenCopyWarning(input);
   if (ownWordsWarning) blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", ownWordsWarning));
   const policyHit = adPolicyHits(input.creatives.filter((creative) => !creative.ownWords), input.vertical)[0];
   if (policyHit) {
