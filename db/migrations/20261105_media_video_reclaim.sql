@@ -129,6 +129,7 @@ begin
     select greatest(
       actual_bytes,
       case
+        when final_state = 'writing' then 104857600::numeric
         when not coalesce(upload_signing, false)
           and upload_expires_at is not null and upload_expires_at <= statement_timestamp() then 0::numeric
         when status = 'ready' or (status is null and final_state in ('verified', 'removed')) then

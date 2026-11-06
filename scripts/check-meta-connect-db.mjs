@@ -2058,6 +2058,22 @@ async function verifyMediaVideoBudget(db, database) {
       assert.equal(await claim(asset, final), true);
     });
 
+    await check(`${database}: expired upload token retains both reservations while finalization is writing (#2653)`, async () => {
+      await reset();
+      const asset = await insert(), final = path(asset.business, "final");
+      await sign(asset);
+      await put(asset.upload, { size: 31457280 });
+      assert.equal(await claim(asset, final), true);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "writing");
+      assert.equal(await held(), 104857600);
+
+      await asPostgres(db, () => db.query(`update private.media_video_slots set token_expires_at='2000-01-01'
+        where asset_id=$1 and slot='upload'`, [asset.id]));
+      await service.query("update public.media_assets set upload_expires_at='2000-01-01' where id=$1", [asset.id]);
+
+      assert.equal(await held(), 104857600, "a finalization write may still complete after the upload token expires");
+    });
+
     await check(`${database}: concurrent finalizers can claim only one immutable final path (#2653)`, async () => {
       await reset();
       const asset = await insert(), finals = [path(asset.business, "first"), path(asset.business, "second")];
