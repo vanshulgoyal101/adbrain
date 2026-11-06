@@ -89,6 +89,13 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 const both = ["+919999994842", "+919999990874"];
 
 describe("core: WhatsApp button number against recorded Graph reads (#157)", () => {
+  it("#2841: preserves confirmed WABA numbers when the recorded Page link state is unreadable", async () => {
+    replay(recorded.tape);
+    await expect(new MetaClient(creds).whatsappNumbers()).resolves.toEqual({
+      page: null, business: both, pageUnavailable: true,
+    });
+  });
+
   it("uses a stable, tenant-scoped opaque identity without exposing the full numbers", async () => {
     allowWhatsAppRead();
     replay();
@@ -504,6 +511,17 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     allowWhatsAppRead();
     replay(recorded.tape.map((entry) => entry.path.includes(WABA)
       ? { ...entry, body: { data: [] } } : entry));
+    const { result, statuses, client } = await goLiveThroughWhatsAppRoute();
+    expect(statuses).toEqual([503]);
+    expect(result).toEqual({ kind: "failed", message: "Couldn't check your WhatsApp number with Meta. Nothing was spent. Try again." });
+    expect(client.saveDraft).not.toHaveBeenCalled();
+    expect(client.preflight).not.toHaveBeenCalled();
+    expect(client.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("#2841: an unreadable Page state blocks Go live even when WABA numbers are returned", async () => {
+    allowWhatsAppRead();
+    replay(recorded.tape);
     const { result, statuses, client } = await goLiveThroughWhatsAppRoute();
     expect(statuses).toEqual([503]);
     expect(result).toEqual({ kind: "failed", message: "Couldn't check your WhatsApp number with Meta. Nothing was spent. Try again." });

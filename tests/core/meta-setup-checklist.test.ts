@@ -21,9 +21,8 @@ function replay(tape: Exchange[]) {
   });
 }
 
-// The same real tape with the two things a new owner usually lacks taken out: Meta then omits
-// `funding_source_details`, and the portfolio owns no WhatsApp Business account. The Page's own
-// answer (no WhatsApp number) is already the real one.
+// The same real tape with the two things a new owner usually lacks taken out. The captured Page
+// response omits the link-state flag, so this known-negative scenario supplies an explicit false.
 function withoutCardOrWhatsApp(tape: Exchange[]): Exchange[] {
   return tape.map((entry) => {
     if (entry.path.includes("funding_source_details")) {
@@ -32,6 +31,9 @@ function withoutCardOrWhatsApp(tape: Exchange[]): Exchange[] {
       return { ...entry, body: rest };
     }
     if (entry.path.includes("owned_whatsapp_business_accounts")) return { ...entry, body: { data: [] } };
+    if (entry.path.includes("fields=id,has_whatsapp_business_number,whatsapp_number")) {
+      return { ...entry, body: { id: recorded.pageId, has_whatsapp_business_number: false } };
+    }
     return entry;
   });
 }

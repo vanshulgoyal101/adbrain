@@ -9,8 +9,9 @@ import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
 import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
 import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
-import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, type WhatsAppNumberSource } from "./whatsapp-status-shared";
+import { type WhatsAppNumberSource } from "./whatsapp-status-shared";
 import { normalizeWhatsAppNumber, readBusinessWhatsAppNumbers } from "./whatsapp-numbers";
+import { resolveWhatsAppNumberCandidate } from "./whatsapp-number-selection";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { ConnectionAccessError } from "./connection-access-error";
@@ -900,26 +901,12 @@ export class MetaClient {
 
   /** The caller must enforce business bindings before using a business-number candidate. */
   async resolveWhatsAppNumberCandidate(requested: string | null | undefined, source?: WhatsAppNumberSource): Promise<{ number: string; source: WhatsAppNumberSource } | null> {
-    const masked = Boolean(requested && maskedWhatsAppNumberPattern.test(requested));
-    const wanted = requested && !masked ? normalizeWhatsAppNumber(requested) : null;
-    const pageRead = this.pageWhatsAppNumber();
-    if (!requested || source === "page" || !masked) {
-      const page = await pageRead;
-      if (!requested) return page ? { number: page, source: "page" } : null;
-      if (!masked && !wanted) return null;
-      if (source !== "business" && page && (masked ? maskWhatsAppNumber(page) === requested : page === wanted)) {
-        return { number: page, source: "page" };
-      }
-      if (source === "page") return null;
-    }
-    // Unknown legacy masks must be unique across all WABAs, not just already-bound numbers.
-    const [page, business] = await Promise.all([pageRead, this.businessWhatsAppNumbers()]);
-    if (business instanceof MetaError) throw business;
-    const matches = [
-      ...(source !== "business" && page ? [{ number: page, source: "page" as const }] : []),
-      ...business.filter((number) => source === "business" || number !== page).map((number) => ({ number, source: "business" as const })),
-    ].filter(({ number }) => masked ? maskWhatsAppNumber(number) === requested : number === wanted);
-    return matches.length === 1 ? matches[0] : null;
+    return resolveWhatsAppNumberCandidate(
+      requested,
+      source,
+      this.pageWhatsAppNumber(),
+      () => this.businessWhatsAppNumbers(),
+    );
   }
 
   /** WhatsApp numbers usable for this Page's ads: the Page's own, and those on the ad account business's WABAs (#235). */
@@ -946,11 +933,20 @@ export class MetaClient {
     };
   }
 
-  async whatsappNumbers(): Promise<{ page: string | null; business: string[]; businessUnavailable?: true }> {
-    const [page, business] = await Promise.all([this.pageWhatsAppNumber(), this.businessWhatsAppNumbers()]);
+  async whatsappNumbers(): Promise<{ page: string | null; business: string[]; businessUnavailable?: true; pageUnavailable?: true }> {
+    const [pageResult, businessResult] = await Promise.allSettled([
+      this.pageWhatsAppNumber(), this.businessWhatsAppNumbers(),
+    ]);
+    if (businessResult.status === "rejected") throw businessResult.reason;
+    const page = pageResult.status === "fulfilled" ? pageResult.value : null;
+    const business = businessResult.value;
     if (business instanceof MetaError) {
       if (!page) throw business;
       return { page, business: [], businessUnavailable: true };
+    }
+    if (pageResult.status === "rejected") {
+      if (!business.length) throw pageResult.reason;
+      return { page: null, business, pageUnavailable: true };
     }
     return { page, business: business.filter((number) => number !== page) };
   }
@@ -975,7 +971,7 @@ export class MetaClient {
     if (!account || (account.id !== this.creds.adAccountId && `act_${account.id}` !== this.creds.adAccountId)) {
       throw new MetaError("WhatsApp ad account could not be read.");
     }
-    if (account.business === undefined) throw new MetaError("WhatsApp business could not be read.");
+    if (account.business === undefined) return new MetaError("WhatsApp business could not be read.");
     if (account.business === null) return [];
     const businessId = account.business?.id;
     if (typeof businessId !== "string" || !/^\d{1,64}$/.test(businessId)) throw new MetaError("WhatsApp business could not be read.");
