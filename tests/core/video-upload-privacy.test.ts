@@ -4,6 +4,17 @@ import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
 
 const source = readFileSync("tests/fixtures/media/data-track.mp4");
 
+function seiLengthOffset(bytes: Buffer, marker: Buffer): number {
+  const markerOffset = bytes.indexOf(marker);
+  for (let offset = markerOffset - 5; offset >= 0; offset--) {
+    const length = bytes.readUInt32BE(offset);
+    const payload = offset + 4;
+    if (length > 0 && payload + length <= bytes.length && payload <= markerOffset
+      && markerOffset + marker.length <= payload + length && (bytes[payload] & 0x1f) === 6) return offset;
+  }
+  throw new Error("Missing length-prefixed SEI fixture");
+}
+
 describe("video-upload privacy gate (#2857)", () => {
   it("removes a recorded non-media track and rejects an unsupported sample map", () => {
     const secret = Buffer.from("TRACKSECRET");
@@ -31,5 +42,13 @@ describe("video-upload privacy gate (#2857)", () => {
     } else {
       expect(Buffer.from(stripVideoMetadata(bytes)).includes(marker)).toBe(false);
     }
+  });
+
+  it("rejects a malformed AVC NAL length instead of preserving unparsed sample bytes", () => {
+    const bytes = Buffer.from(source);
+    const marker = Buffer.from("x264 - core");
+    const offset = seiLengthOffset(bytes, marker);
+    bytes.writeUInt32BE(0x7fffffff, offset);
+    expect(() => stripVideoMetadata(bytes)).toThrow();
   });
 });

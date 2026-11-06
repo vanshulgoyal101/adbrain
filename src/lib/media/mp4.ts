@@ -1,18 +1,39 @@
+import { parseAvcNalLengthSize } from "@/lib/media/avc";
+import { sanitizeVideoMetadata } from "@/lib/media/mp4-sanitize";
+export { UnsafeVideoError } from "@/lib/media/mp4-sanitize";
+
 /**
  * #748 (#2653 = A): the little of MP4/MOV (ISO BMFF / QuickTime boxes) the server needs to check an owner's video
  * without decoding it: its container, length and shown size. Both formats share the box layout.
  */
 export type VideoInfo = { mime: "video/mp4" | "video/quicktime"; durationMs: number; width: number; height: number };
 
-type Box = { type: string; start: number; content: number; end: number };
-type Chunk = { start: number; end: number; keep: boolean };
-type Range = { start: number; end: number };
-type Privacy = { privateBoxes: Box[]; padding: Box[]; fields: Range[] };
-type VideoPlan = Privacy & { info: VideoInfo; mdats: Box[]; chunks: Chunk[] };
+export type Box = { type: string; start: number; content: number; end: number };
+export type Sample = {
+  start: number;
+  end: number;
+  sizeField: number | null;
+  fixedSizeField: number | null;
+  nalLengthSize: number | null;
+  sanitizedSize: number | null;
+};
+export type Chunk = {
+  start: number;
+  end: number;
+  keep: boolean;
+  video: boolean;
+  offsetField: number;
+  offsetWide: boolean;
+  samples: Sample[];
+};
+export type Range = { start: number; end: number };
+export type Privacy = { privateBoxes: Box[]; padding: Box[]; fields: Range[] };
+export type VideoPlan = Privacy & { info: VideoInfo; mdats: Box[]; chunks: Chunk[] };
 
 const MAX_BOXES = 100_000;
 const MAX_CHUNKS = 100_000;
 const MAX_SAMPLES = 1_000_000;
+const MAX_VIDEO_SAMPLES = 100_000;
 const MAX_DEPTH = 16;
 const KEPT_TRACKS = new Set(["vide", "soun"]);
 const PRIVATE = new Set(["udta", "meta", "uuid", "XMP_", "loci", "ID32", "ilst", "keys"]);
@@ -129,7 +150,16 @@ function samplePrivacy(bytes: Uint8Array, view: DataView, handler: string, descr
   return privacy;
 }
 
-function trackChunks(bytes: Uint8Array, view: DataView, trak: Box, mdats: Box[], remainingChunks: number, remainingSamples: number, budget: { boxes: number }):
+function trackChunks(
+  bytes: Uint8Array,
+  view: DataView,
+  trak: Box,
+  mdats: Box[],
+  remainingChunks: number,
+  remainingSamples: number,
+  remainingVideoSamples: number,
+  budget: { boxes: number },
+):
   (Privacy & { handler: string; chunks: Chunk[]; chunkCount: number; sampleCount: number }) | null {
   const trakBoxes = children(bytes, trak);
   const mdia = only(trakBoxes, "mdia");
@@ -160,12 +190,19 @@ function trackChunks(bytes: Uint8Array, view: DataView, trak: Box, mdats: Box[],
   if (budget.boxes < 0) return null;
   const privacy = samplePrivacy(bytes, view, handler, descriptions, budget);
   if (!privacy) return null;
+  const nalLengthSizes = descriptions.map((description) => {
+    if (handler !== "vide" || (description.type !== "avc1" && description.type !== "avc3")) return null;
+    const avcConfiguration = only(boxes(bytes, description.content + 78, description.end), "avcC");
+    return avcConfiguration
+      ? parseAvcNalLengthSize(bytes.subarray(avcConfiguration.content, avcConfiguration.end))
+      : null;
+  });
   const fixed = view.getUint32(stsz.content + 4);
   const samples = view.getUint32(stsz.content + 8);
   const runs = view.getUint32(stsc.content + 4);
   const count = view.getUint32(stco.content + 4);
   const wide = stco.type === "co64";
-  if (samples > remainingSamples || count > remainingChunks
+  if (samples > remainingSamples || (handler === "vide" && samples > remainingVideoSamples) || count > remainingChunks
     || stsz.end - stsz.content !== 12 + (fixed ? 0 : samples * 4)
     || stsc.end - stsc.content !== 8 + runs * 12
     || stco.end - stco.content !== 8 + count * (wide ? 8 : 4)) return null;
@@ -185,22 +222,35 @@ function trackChunks(bytes: Uint8Array, view: DataView, trak: Box, mdats: Box[],
   for (let chunk = 1; chunk <= count; chunk++) {
     while (run + 1 < runs && view.getUint32(stsc.content + 8 + (run + 1) * 12) <= chunk) run++;
     const perChunk = view.getUint32(stsc.content + 12 + run * 12);
+    const description = view.getUint32(stsc.content + 16 + run * 12);
     if (perChunk > samples - sample) return null;
-    let size = fixed * perChunk;
-    if (!fixed) {
-      for (let i = 0; i < perChunk; i++) {
-        size += view.getUint32(stsz.content + 12 + (sample + i) * 4);
-        if (size > bytes.length) return null;
-      }
-    }
-    if (!Number.isSafeInteger(size) || size > bytes.length) return null;
-    sample += perChunk;
     const offsetAt = stco.content + 8 + (chunk - 1) * (wide ? 8 : 4);
     const raw = wide ? view.getBigUint64(offsetAt) : BigInt(view.getUint32(offsetAt));
     if (raw > BigInt(bytes.length)) return null;
-    const start = Number(raw), end = start + size;
+    const start = Number(raw);
+    const chunkSamples: Sample[] = [];
+    let size = 0;
+    for (let index = 0; index < perChunk; index++) {
+      const sampleIndex = sample + index;
+      const sampleSize = fixed || view.getUint32(stsz.content + 12 + sampleIndex * 4);
+      if (sampleSize > bytes.length - size) return null;
+      chunkSamples.push({
+        start: start + size,
+        end: start + size + sampleSize,
+        sizeField: fixed ? null : stsz.content + 12 + sampleIndex * 4,
+        fixedSizeField: fixed ? stsz.content + 4 : null,
+        nalLengthSize: handler === "vide" ? nalLengthSizes[description - 1] : null,
+        sanitizedSize: null,
+      });
+      size += sampleSize;
+    }
+    if (!Number.isSafeInteger(size) || size > bytes.length) return null;
+    sample += perChunk;
+    const end = start + size;
     if (end > bytes.length || !containsChunk(mdats, start, end)) return null;
-    if (size) chunks.push({ start, end, keep });
+    chunks.push({
+      start, end, keep, video: handler === "vide", offsetField: offsetAt, offsetWide: wide, samples: chunkSamples,
+    });
   }
   return sample === samples ? { ...privacy, handler, chunks, chunkCount: count, sampleCount: samples } : null;
 }
@@ -267,13 +317,14 @@ function planVideo(bytes: Uint8Array): VideoPlan | null {
   const privateBoxes: Box[] = [], padding: Box[] = [], fields: Range[] = [];
   const removedTracks = new Set<number>();
   const budget = { boxes: MAX_BOXES };
-  let remainingChunks = MAX_CHUNKS, remainingSamples = MAX_SAMPLES;
+  let remainingChunks = MAX_CHUNKS, remainingSamples = MAX_SAMPLES, remainingVideoSamples = MAX_VIDEO_SAMPLES;
   let video: Box | null = null;
   for (const trak of movieBoxes.filter((box) => box.type === "trak")) {
-    const track = trackChunks(bytes, view, trak, mdats, remainingChunks, remainingSamples, budget);
+    const track = trackChunks(bytes, view, trak, mdats, remainingChunks, remainingSamples, remainingVideoSamples, budget);
     if (!track) return null;
     remainingChunks -= track.chunkCount;
     remainingSamples -= track.sampleCount;
+    if (track.handler === "vide") remainingVideoSamples -= track.sampleCount;
     for (const chunk of track.chunks) chunks.push(chunk);
     for (const box of track.privateBoxes) privateBoxes.push(box);
     for (const box of track.padding) padding.push(box);
@@ -329,30 +380,9 @@ export function readVideo(bytes: Uint8Array): VideoInfo | null {
 }
 
 /**
- * Blank known private boxes and everything in `mdat` except proven picture and sound chunks. Unsupported or incomplete
- * sample maps are rejected; same-size `free` boxes preserve media offsets. Encoded samples are not inspected, so this
- * alone does not establish a complete metadata-privacy guarantee.
+ * Remove SEI NALs from AVC samples, blank known private boxes and clear data outside proven picture and sound chunks.
+ * Unsupported or incomplete sample maps and NAL streams are rejected; same-size `free` boxes preserve media offsets.
  */
 export function stripVideoMetadata(bytes: Uint8Array): Uint8Array {
-  const plan = planVideo(bytes);
-  if (!plan) throw new Error("unsafe video metadata");
-  const out = new Uint8Array(bytes);
-  let index = 0;
-  for (const mdat of plan.mdats) {
-    let cursor = mdat.content;
-    while (index < plan.chunks.length && plan.chunks[index].start < mdat.end) {
-      const chunk = plan.chunks[index++];
-      if (!chunk.keep) continue;
-      out.fill(0, cursor, chunk.start);
-      cursor = chunk.end;
-    }
-    out.fill(0, cursor, mdat.end);
-  }
-  for (const box of plan.privateBoxes) {
-    out.set([0x66, 0x72, 0x65, 0x65], box.start + 4);
-    out.fill(0, box.content, box.end);
-  }
-  for (const box of plan.padding) out.fill(0, box.content, box.end);
-  for (const field of plan.fields) out.fill(0, field.start, field.end);
-  return out;
+  return sanitizeVideoMetadata(bytes, planVideo(bytes));
 }

@@ -32,6 +32,22 @@ const compact = () => modified((bytes) => {
   bytes.writeUInt8(2, stsz + 17);
 });
 
+function malformedSeiLength(): Buffer {
+  const bytes = Buffer.from(source);
+  const marker = Buffer.from("x264 - core");
+  const markerOffset = bytes.indexOf(marker);
+  for (let offset = markerOffset - 5; offset >= 0; offset--) {
+    const length = bytes.readUInt32BE(offset);
+    const payload = offset + 4;
+    if (length > 0 && payload + length <= bytes.length && payload <= markerOffset
+      && markerOffset + marker.length <= payload + length && (bytes[payload] & 0x1f) === 6) {
+      bytes.writeUInt32BE(0x7fffffff, offset);
+      return bytes;
+    }
+  }
+  throw new Error("Missing length-prefixed SEI fixture");
+}
+
 function wideOffsets(): Buffer {
   const start = lastBox(source, "stco") - 4;
   const oldSize = source.readUInt32BE(start);
@@ -262,6 +278,25 @@ describe("video metadata sanitation", () => {
 
   it("rejects an unsafe original at finalize without promoting it", async () => {
     const bytes = compact();
+    const db = fakeSupabase();
+    const admin = Object.assign({}, db.client, {
+      rpc: async () => ({ data: { status: "reserved" }, error: null }),
+    }) as unknown as SupabaseClient;
+    const signed = await signUpload(admin, {
+      businessId, userId: "u", mime: "video/mp4", bytes: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"), width: 720, height: 1280, durationMs: 2000, rightsConfirmedAt: "x",
+    });
+    if (signed.duplicate) throw new Error("Unexpected duplicate");
+    db.objects.set(signed.path, bytes);
+    const row = db.tables.media_assets.find((entry) => entry.id === signed.id) as MediaRow;
+    await expect(finalizeUpload(admin, row)).rejects.toMatchObject({ status: 415, code: "MEDIA_TYPE" });
+    expect(db.objects.has(signed.path)).toBe(false);
+    expect(db.storageCalls.filter((call) => call.op === "upload")).toHaveLength(0);
+    expect(db.tables.media_assets[0]).toMatchObject({ status: "pending", deleted_at: expect.any(String) });
+  });
+
+  it("rejects malformed AVC samples before promoting them", async () => {
+    const bytes = malformedSeiLength();
     const db = fakeSupabase();
     const admin = Object.assign({}, db.client, {
       rpc: async () => ({ data: { status: "reserved" }, error: null }),

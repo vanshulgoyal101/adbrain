@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
+import { readVideo, stripVideoMetadata, UnsafeVideoError } from "@/lib/media/mp4";
 import { mediaVideoEnabled } from "@/lib/media/config";
 import { MEDIA_ASSET_COLUMNS, MediaError, mediaViews, type MediaRow, type MediaView } from "@/lib/media/models";
 import {
@@ -120,7 +120,13 @@ async function finalizeVideo(admin: SupabaseClient, row: MediaRow, bytes: Buffer
   if (!info) return reject(415, "MEDIA_TYPE", wrongType);
   const refusal = videoRefusal(info.mime, bytes.length, info.durationMs);
   if (refusal) return reject(refusal.status, refusal.code, refusal.message);
-  const stored = stripVideoMetadata(bytes);
+  let stored: Uint8Array;
+  try {
+    stored = stripVideoMetadata(bytes);
+  } catch (error) {
+    if (error instanceof UnsafeVideoError) return reject(415, "MEDIA_TYPE", wrongType);
+    throw error;
+  }
   return promoteVideo(admin, row, stored, {
     mime: info.mime, extension: MEDIA_VIDEO_EXTENSION[info.mime], width: info.width, height: info.height,
     durationMs: info.durationMs, fit: mediaFit(info.width, info.height, "video"),
