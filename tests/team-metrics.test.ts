@@ -62,7 +62,7 @@ describe("team metrics: DORA four keys and active hours (#620)", () => {
     const workflows = [{ id: 1, name: "CI" }, { id: 2, name: "Scheduled jobs" }];
     const since = "2026-11-05T00:00:00.000Z";
     const until = "2026-11-06T00:00:00.000Z";
-    const runs = collectWorkflowRuns(workflows, (id) => ({
+    const runs = collectWorkflowRuns(workflows, (id: number) => ({
       totalCount: id === 1 ? 1_001 : 1,
       runs: id === 1
         ? Array.from({ length: 1_001 }, (_, index) => ({ id: index }))
@@ -78,7 +78,7 @@ describe("team metrics: DORA four keys and active hours (#620)", () => {
     const since = "2026-11-05T00:00:00.000Z";
     const until = "2026-11-06T00:00:00.000Z";
     const reads: Array<[number, string, string]> = [];
-    const runs = collectWorkflowRuns(workflows, (id, from, to) => {
+    const runs = collectWorkflowRuns(workflows, (id: number, from: string, to: string) => {
       reads.push([id, from, to]);
       if (id === 2) return { totalCount: 1, runs: [{ id: 2_000 }] };
       if (from === since && to === until) {
@@ -89,7 +89,7 @@ describe("team metrics: DORA four keys and active hours (#620)", () => {
       return { totalCount: end - start, runs: Array.from({ length: end - start }, (_, index) => ({ id: start + index })) };
     }, since, until);
     expect(runs).toHaveLength(1_002);
-    expect(new Set(runs.map((run) => run.id)).size).toBe(1_002);
+    expect(new Set(runs.map((run: { id: number }) => run.id)).size).toBe(1_002);
     expect(reads).toHaveLength(4);
   });
 
