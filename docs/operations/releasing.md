@@ -207,6 +207,9 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   count as advisory only, and **holds only on Vercel's own answer**: if the newest
   production deploy failed within the last hour, it alerts once and retries after the hour.
   Avoid `vercel redeploy`/`deploy` from the CLI on a busy day; push or promote instead.
+  This is not a workaround for account-wide `402 DEPLOYMENT_DISABLED`: follow
+  [Host or account pause](releasing-recovery.md#host-or-account-pause-http-402)
+  and the owner's restoration gate; do not retry, push or promote around that hold.
   Direct merges to `main` only with `hotfix` or a migration. The train then merges `main`
   into `next` itself (a `Train sync: main → next` PR whose head is `main`'s CI-checked
   commit), dispatches CI on the merged commit and promotes once it's green. Only a conflict

@@ -59,6 +59,61 @@ deletes everything afterwards. DevOps runs it every Monday.
    database as an improvised code rollback. Data recovery needs its own plan.
 5. Verify the affected workflow after recovery and record the cause and evidence.
 
+### Host or account pause (HTTP 402)
+
+`402 DEPLOYMENT_DISABLED` on the homepage, login and health route is not the
+API/CLI-only `api-deployments-free-per-day` refusal described in
+[Deploy train](releasing.md#deploy-train). Treat it as a host/account incident,
+not evidence that the application needs a rebuild or that rollback will restore it.
+
+1. Keep the train disabled and preserve the incident's source/promotion hold.
+   Stop manual retries, Create batches and production mutations while 402 persists;
+   do not push, promote, roll back or re-enable a workflow to evade the pause.
+2. With authorized read-only account access, check the host's Usage and notice for
+   the exact resource/limit, usage driver, scope and reset date. Record confirmed
+   facts separately from unknowns and priced options; an HTTP 402 alone does not
+   identify the limit. Keep account/customer evidence private.
+3. The owner chooses any plan, payment, hosting or account-restoration change
+   through the CEO. DevOps executes only the authorized action. Account restoration
+   does not authorize releasing held source, changing secrets/flags or migrations.
+
+**Post-restoration checklist (DevOps, then QA 2):** prepare before the owner decides;
+execute only after restoration is authorized and the host pause has actually cleared.
+
+1. Check `/`, `/login` and `/api/health` once. Require successful responses and
+   verify the app's `X-AdBrain-Release` header, not just a READY deployment or the
+   latest GitHub SHA. For #2884, the recovery target is rolled-back
+   `9c9b49dceb1cc22f04b21091a1c29d921507bcd5`, **not** held `4ee12935`.
+   If still 402 or the source differs, stop and return the evidence to the CEO;
+   do not promote another build to make the check pass.
+2. Confirm the incident's smoke scope and draft-only safety gates (#2861/#2838)
+   before dispatch. The existing guard has no core-only dispatch input: it runs
+   core smoke followed by WS1. Do not silently skip WS1, use `force_fail`/`drill`,
+   or mistake a known preflight failure for proof of recovery. Once authorized,
+   dispatch the existing [Production guard](../../.github/workflows/production-guard.yml)
+   on `main`:
+   `gh workflow run production-guard.yml -R vanshulgoyal101/adbrain --ref main`.
+   A manual run does not verify serving identity itself; retain step 1's evidence,
+   the workflow/script ref and the run URL, and inspect the core step separately
+   from the overall verdict. No automatic rollback is enabled by this dispatch.
+3. Check today's existing [Create smoke](../../.github/workflows/create-smoke.yml)
+   runs before requesting one. After the free-only scope and capacity are confirmed,
+   use the next scheduled Create or one explicitly authorized
+   `gh workflow run create-smoke.yml -R vanshulgoyal101/adbrain --ref main -f mode=create`.
+   Record all three saved ads, provider/cost evidence and cleanup, not just a green
+   sign-in or picture check. No paid fallback, duplicate batch or retry.
+4. Review scheduler health and the newest successful spend-enforcement and lead-sync
+   evidence. Catch up only under the incident's explicit mutation scope:
+   [enforce-spend and sync-leads](scheduled-jobs.md#scheduled-jobs) are GET routes
+   with side effects, including Meta pauses and persisted leads. The whole
+   `scheduled-jobs.yml` workflow runs additional jobs, so it is not a two-job-only
+   recovery command. Avoid overlapping pg_cron/workflow invocations; report failures
+   and unreadable spend as unknown, never zero or campaign safety.
+5. Post the served SHA, run URLs, core/WS1/Create results and scheduler evidence on
+   the incident (private data stays private). Hand the next scheduled acceptance
+   read to QA 2. Keep the train, main/source promotion and migration holds until
+   separately lifted; restoring the account alone does not close them.
+
 ### Production guard
 
 [`production-guard.yml`](../../.github/workflows/production-guard.yml) runs without
