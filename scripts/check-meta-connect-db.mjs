@@ -45,6 +45,12 @@ const editAdCreativeMigration = await readFile(join(root, "db/migrations/2026102
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const mediaLibraryMigration = await readFile(join(root, "db/migrations/20261103_media_library.sql"), "utf8");
 const mediaUploadQuotaMigration = await readFile(join(root, "db/migrations/20261103_media_upload_quota.sql"), "utf8");
+const mediaMetaUploadsMigration = await readFile(join(root, "db/migrations/20261104_media_meta_uploads.sql"), "utf8");
+const mediaVideoReclaimMigration = await readFile(join(root, "db/migrations/20261105_media_video_reclaim.sql"), "utf8");
+const mediaVideoFollowups = await Promise.all(
+  appendedMigrations(root).filter(name => name > "20261105_media_video_reclaim.sql")
+    .map(async name => [name, await readFile(join(root, "db/migrations", name), "utf8")]),
+);
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
@@ -85,7 +91,9 @@ const bootstrap = `
   create schema storage;
   alter default privileges for role postgres in schema storage grant execute on functions to anon, authenticated, service_role;
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
-  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
+  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, metadata jsonb);
+  insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
+    values ('media-video', 'media-video', false, 52428800, array['video/mp4', 'video/quicktime']);
   alter table storage.objects enable row level security;
   create function storage.foldername(name text) returns text[] language sql immutable as
     $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1)-1] $$;
@@ -102,6 +110,107 @@ async function check(label, run) {
   } catch (error) {
     failures.push(label);
     console.error(`FAIL ${label}: ${error.message}`);
+  }
+}
+
+async function asPostgres(db, run) {
+  await db.query("begin");
+  try {
+    await db.query("set local role postgres");
+    const result = await run();
+    await db.query("commit");
+    return result;
+  } catch (error) {
+    await db.query("rollback").catch(() => undefined);
+    throw error;
+  }
+}
+
+async function raceServiceTransactions(db, database, actions) {
+  const gate = BigInt(`0x${randomUUID().replaceAll("-", "").slice(0, 15)}`).toString();
+  const sessions = [];
+  let locked = false;
+  let results;
+  try {
+    // The exclusive gate holds every contender; shared locks release them without serializing the race.
+    await db.query("select pg_advisory_lock($1::bigint)", [gate]);
+    locked = true;
+    for (let index = 0; index < actions.length; index++) {
+      const session = client(database);
+      sessions.push(session);
+      await session.connect();
+      await session.query("begin");
+      await session.query("set local role service_role; set local statement_timeout='20s'; set local lock_timeout='10s'");
+    }
+    const pids = await Promise.all(sessions.map(async session => (await session.query("select pg_backend_pid() as pid")).rows[0].pid));
+    results = Promise.allSettled(sessions.map(async (session, index) => {
+      try {
+        await session.query("select pg_advisory_xact_lock_shared($1::bigint)", [gate]);
+        const result = await actions[index](session);
+        await session.query("commit");
+        return result;
+      } catch (error) {
+        await session.query("rollback").catch(() => undefined);
+        throw error;
+      }
+    }));
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      const { waiting } = (await db.query(`select count(distinct pid)::int as waiting
+        from pg_locks where locktype='advisory' and mode='ShareLock' and not granted and pid=any($1::int[])`, [pids])).rows[0];
+      if (waiting === sessions.length) break;
+      if (Date.now() >= deadline) throw new Error(`Race gate: only ${waiting} of ${sessions.length} transactions blocked`);
+    }
+    await db.query("select pg_advisory_unlock($1::bigint)", [gate]);
+    locked = false;
+    return await results;
+  } finally {
+    if (locked) await db.query("select pg_advisory_unlock($1::bigint)", [gate]).catch(() => undefined);
+    if (results) await results;
+    await Promise.all(sessions.map(session => session.end().catch(() => undefined)));
+  }
+}
+
+async function seedLegacyVideo(db) {
+  const owner = randomUUID(), business = randomUUID(), id = randomUUID();
+  const upload = `${business}/upgrade-${randomUUID()}.mp4`;
+  const orphan = `${business}/orphan-${randomUUID()}.mp4`;
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Legacy video')", [business, owner]);
+  await db.query(`insert into public.media_assets(id,business_id,path,sha256,kind,mime,bytes,duration_ms,source)
+    values ($1,$2,$3,$4,'video','video/mp4',12345,10000,'ai')`, [id, business, upload, createHash("sha256").update(id).digest("hex")]);
+  await db.query(`insert into storage.objects(bucket_id,name,metadata)
+    values ('media-video',$1,jsonb_build_object('size',12345)),
+           ('media-video',$2,jsonb_build_object('size',10485760))`, [upload, orphan]);
+  return { owner, business, id, upload, orphan };
+}
+
+async function verifyLegacyVideoUpgrade(db, database, asset) {
+  try {
+    await check(`${database}: unreconciled legacy videos block upgrade without deleting data (#2653)`, async () => {
+      const migration = mediaVideoReclaimMigration.replace(/^\s*begin;/i, "").replace(/commit;\s*$/i, "");
+      assert.notEqual(migration, mediaVideoReclaimMigration, "Expected a transactional video migration");
+      await db.query("begin");
+      try {
+        await assert.rejects(db.query(migration), { code: "P0001", message: "MEDIA_VIDEO_LEGACY_UNSAFE" });
+      } finally {
+        await db.query("rollback");
+      }
+      assert.deepEqual((await db.query("select path,status,bytes::text from public.media_assets where id=$1", [asset.id])).rows[0],
+        { path: asset.upload, status: "pending", bytes: "12345" });
+      assert.deepEqual((await db.query(`select name,metadata->>'size' as size from storage.objects
+        where bucket_id='media-video' and name=any($1::text[]) order by name`, [[asset.upload, asset.orphan]])).rows,
+      [{ name: asset.orphan, size: "10485760" }, { name: asset.upload, size: "12345" }].sort((a, b) => a.name.localeCompare(b.name)));
+    });
+  } finally {
+    const installed = (await db.query("select to_regclass('private.media_video_slots') is not null as installed")).rows[0].installed;
+    await asPostgres(db, async () => {
+      await db.query("delete from storage.objects where bucket_id='media-video' and name=any($1::text[])", [[asset.upload, asset.orphan]]);
+      if (installed) await db.query("delete from private.media_video_slots where asset_id=$1", [asset.id]);
+      await db.query("delete from public.media_assets where id=$1", [asset.id]);
+      await db.query("delete from public.businesses where id=$1", [asset.business]);
+      await db.query("delete from auth.users where id=$1", [asset.owner]);
+    });
   }
 }
 
@@ -1640,26 +1749,709 @@ async function verifyMediaUploadQuota(db, database) {
   const row = (kind = "image", source = "upload") => [business, `${business}/${randomUUID()}.${kind === "video" ? "mp4" : "jpg"}`, sha(), kind, source];
   const insert = "insert into public.media_assets(business_id,path,sha256,kind,source) values ($1,$2,$3,$4,$5)";
   const monthStart = "date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata'";
-  await check(`${database}: media uploads: the monthly limit holds under parallel inserts, per kind, counting retired rows (#1209)`, async () => {
-    await db.query(`insert into public.media_assets(business_id,path,sha256,created_at) values ($1::uuid,$1::text||'/old.jpg',$2,${monthStart} - interval '1 day')`, [business, sha()]);
-    for (let i = 0; i < 48; i++) await db.query(insert, row());
-    await db.query(`update public.media_assets set deleted_at=now() where id in (select id from public.media_assets where business_id=$1 and created_at >= ${monthStart} limit 5)`, [business]);
-    const racers = await Promise.all(Array.from({ length: 5 }, async () => { const c = client(database); await c.connect(); return c; }));
-    try {
-      const results = await Promise.allSettled(racers.map(async (c) => {
-        await c.query("begin");
-        await c.query("set local role service_role");
-        try { await c.query(insert, row()); await c.query("commit"); } catch (error) { await c.query("rollback"); throw error; }
-      }));
+  const slotsInstalled = (await db.query("select to_regclass('private.media_video_slots') is not null as installed")).rows[0].installed;
+  const service = client(database);
+  await service.connect();
+  await service.query("set role service_role");
+  try {
+    await check(`${database}: media uploads: the monthly limit holds under parallel inserts, per kind, counting retired rows (#1209)`, async () => {
+      await db.query(`insert into public.media_assets(business_id,path,sha256,created_at) values ($1::uuid,$1::text||'/old.jpg',$2,${monthStart} - interval '1 day')`, [business, sha()]);
+      for (let i = 0; i < 48; i++) await db.query(insert, row());
+      await db.query(`update public.media_assets set deleted_at=now() where id in (select id from public.media_assets where business_id=$1 and created_at >= ${monthStart} limit 5)`, [business]);
+      const results = await raceServiceTransactions(db, database, Array.from({ length: 5 }, () => c => c.query(insert, row())));
       assert.equal(results.filter(r => r.status === "fulfilled").length, 2, "exactly two of five parallel uploads fit under 50");
-      for (const r of results.filter(r => r.status === "rejected")) assert.equal(r.reason.message, "MEDIA_QUOTA");
-    } finally { await Promise.all(racers.map(c => c.end())); }
-    assert.equal((await db.query(`select count(*)::int as n from public.media_assets where business_id=$1 and kind='image' and created_at >= ${monthStart}`, [business])).rows[0].n, 50);
-    await assert.rejects(db.query(insert, row()), { code: "P0001", message: "MEDIA_QUOTA" });
-    await db.query(insert, row("image", "ai"));
-    for (let i = 0; i < 3; i++) await db.query(insert, row("video"));
-    await assert.rejects(db.query(insert, row("video")), { code: "P0001", message: "MEDIA_QUOTA" });
-  });
+      for (const r of results.filter(r => r.status === "rejected")) {
+        assert.equal(r.reason.code, "P0001");
+        assert.equal(r.reason.message, "MEDIA_QUOTA");
+      }
+      assert.equal((await db.query(`select count(*)::int as n from public.media_assets where business_id=$1 and kind='image' and created_at >= ${monthStart}`, [business])).rows[0].n, 50);
+      await assert.rejects(db.query(insert, row()), { code: "P0001", message: "MEDIA_QUOTA" });
+      await db.query(insert, row("image", "ai"));
+
+      // These rows were never signed, so expire their synthetic upload windows while retaining quota history and slots.
+      for (let i = 0; i < 3; i++) {
+        const id = (await service.query(`${insert} returning id`, row("video"))).rows[0].id;
+        if (slotsInstalled) {
+          await service.query(`update public.media_assets
+            set deleted_at=now()-interval '3 hours',upload_expires_at=now()-interval '3 hours',updated_at=now()-interval '3 hours'
+            where id=$1`, [id]);
+          await asPostgres(db, () => db.query(`update private.media_video_slots
+            set token_expires_at=now()-interval '3 hours' where asset_id=$1 and slot='upload'`, [id]));
+        } else {
+          await service.query("update public.media_assets set deleted_at=now()-interval '3 hours',updated_at=now()-interval '3 hours' where id=$1", [id]);
+        }
+      }
+      assert.equal((await db.query(`select count(*)::int as n from public.media_assets where business_id=$1 and kind='video' and created_at >= ${monthStart}`, [business])).rows[0].n, 3);
+      await assert.rejects(service.query(insert, row("video")), { code: "P0001", message: "MEDIA_QUOTA" });
+    });
+  } finally {
+    await service.end();
+    await asPostgres(db, async () => {
+      if (slotsInstalled) await db.query("delete from private.media_video_slots where asset_id in (select id from public.media_assets where business_id=$1)", [business]);
+      await db.query("delete from public.media_assets where business_id=$1", [business]);
+      await db.query("delete from public.businesses where id=$1", [business]);
+      await db.query("delete from auth.users where id=$1", [owner]);
+    });
+  }
+}
+
+async function verifyMediaVideoBudget(db, database) {
+  const owner = randomUUID(), businesses = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  for (const [i, id] of businesses.entries()) await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,$3)", [id, owner, `Budget ${i}`]);
+  const sha = () => createHash("sha256").update(randomUUID()).digest("hex");
+  const marker = `/video-fixture-${randomUUID()}/`, assetIds = new Set();
+  const path = (business, label) => `${business}${marker}${label}-${randomUUID()}.mp4`;
+  const pending = (business, bytes = 12345) => {
+    const id = randomUUID(), upload = path(business, "upload");
+    assetIds.add(id);
+    return {
+      id, business, upload, expectedFinalSha256: sha(),
+      sql: `insert into public.media_assets(id,business_id,path,sha256,kind,mime,bytes,duration_ms,source)
+        values ($1,$2,$3,$4,'video','video/mp4',$5,10000,'ai') returning id`,
+      values: [id, business, upload, sha(), bytes],
+    };
+  };
+  const service = client(database);
+  await service.connect();
+  await service.query("set role service_role");
+  const insert = async (business = businesses[0], bytes) => {
+    const asset = pending(business, bytes);
+    await service.query(asset.sql, asset.values);
+    return asset;
+  };
+  const put = (name, metadata, bucket = "media-video") => db.query(
+    "insert into storage.objects(bucket_id,name,metadata) values ($1,$2,$3::jsonb)",
+    [bucket, name, metadata === null ? null : JSON.stringify(metadata)],
+  );
+  const remove = name => db.query("delete from storage.objects where bucket_id='media-video' and name=$1", [name]);
+  const held = async () => Number((await service.query("select private.media_video_held_bytes() as bytes")).rows[0].bytes);
+  const slots = async id => (await db.query(`select slot,path,reserved_bytes::text as reserved_bytes,state,signing_intent,token_expires_at,
+      attempt_id,expected_sha256,expected_bytes::text as expected_bytes
+    from private.media_video_slots where asset_id=$1 order by slot`, [id])).rows;
+  const begin = async asset => (await service.query("select public.media_video_sign_begin($1,$2) as intent", [asset.id, asset.upload])).rows[0].intent;
+  const finish = async (asset, intent) => (await service.query("select public.media_video_sign_finish($1,$2) as finished", [asset.id, intent])).rows[0].finished;
+  const claimAttempt = async (asset, final, expectedBytes = 1234, expectedSha256 = asset.expectedFinalSha256) => {
+    const result = await service.query(
+      "select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)",
+      [asset.id, asset.upload, final, expectedSha256, expectedBytes],
+    );
+    const attempt = result.rows[0] ?? null;
+    if (attempt) asset.finalAttempt = attempt;
+    return attempt;
+  };
+  const finalizeState = async asset => (await service.query(
+    "select * from public.media_video_finalize_state($1,$2)", [asset.id, asset.upload],
+  )).rows[0] ?? null;
+  const claim = async (asset, final, expectedBytes = 1234, expectedSha256 = asset.expectedFinalSha256) =>
+    Boolean((await claimAttempt(asset, final, expectedBytes, expectedSha256))?.newly_claimed);
+  const terminal = async (asset, attempt = asset.finalAttempt) => (await service.query(
+    "select public.media_video_finalize_terminal($1,$2) as terminal", [asset.id, attempt.attempt_id],
+  )).rows[0].terminal;
+  const finalRemoved = async (asset, final) => (await service.query("select public.media_video_final_removed($1,$2) as removed", [asset.id, final])).rows[0].removed;
+  const complete = async (asset, final, expectedBytes, attempt = asset.finalAttempt) => (await service.query(
+    `select public.media_video_finalize_complete(
+      $1,$2,$3,$4,$5,$6,'video/mp4',720,1280,10000,$7::jsonb
+    ) as completed`,
+    [asset.id, asset.upload, attempt.attempt_id, final, attempt.expected_sha256, expectedBytes,
+      JSON.stringify({ storedSha256: attempt.expected_sha256 })],
+  )).rows[0].completed;
+  const sign = async asset => {
+    const intent = await begin(asset);
+    assert.match(intent, /^[0-9a-f-]{36}$/);
+    assert.equal(await finish(asset, intent), true);
+  };
+  const ready = async (asset, final, bytes) => ({ completed: await complete(asset, final, bytes) });
+  const makeReady = async (finalBytes = 20971520) => {
+    const asset = await insert();
+    const final = path(asset.business, "final");
+    await sign(asset);
+    await put(asset.upload, { size: 31457280 });
+    assert.equal(await claim(asset, final, finalBytes), true);
+    await put(final, { size: finalBytes });
+    assert.equal((await ready(asset, final, finalBytes)).completed, true);
+    return { ...asset, final };
+  };
+  const refused = promise => assert.rejects(promise, { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+  const mustNotUpdate = async (sql, values) => {
+    let result, failure;
+    try { result = await service.query(sql, values); } catch (error) { failure = error; }
+    if (failure) assert.ok(["P0001", "23514", "22023"].includes(failure.code), `${failure.code}: ${failure.message}`);
+    else assert.equal(result.rowCount, 0);
+  };
+  const reset = async () => {
+    const installed = (await db.query("select to_regclass('private.media_video_slots') is not null as installed")).rows[0].installed;
+    await asPostgres(db, async () => {
+      await db.query("delete from storage.objects where position($1::text in name)>0", [marker]);
+      if (installed) await db.query("delete from private.media_video_slots where asset_id=any($1::uuid[])", [[...assetIds]]);
+      await db.query("delete from public.media_assets where id=any($1::uuid[])", [[...assetIds]]);
+      await db.query(`insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+        values ('media-video','media-video',false,52428800,array['video/mp4','video/quicktime'])
+        on conflict (id) do update set name=excluded.name,public=excluded.public,
+          file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types`);
+    });
+  };
+
+  try {
+    await check(`${database}: video insert creates two durable 50 MiB slots and an immutable upload path (#2653)`, async () => {
+      await reset();
+      assert.deepEqual((await db.query("select public,file_size_limit::int from storage.buckets where id='media-video'")).rows[0],
+        { public: false, file_size_limit: 52428800 });
+      const asset = await insert(businesses[0], 1);
+      assert.deepEqual((await db.query("select path,upload_path,status from public.media_assets where id=$1", [asset.id])).rows[0],
+        { path: asset.upload, upload_path: asset.upload, status: "pending" });
+      assert.deepEqual((await slots(asset.id)).map(({ slot, path: name, reserved_bytes }) => ({ slot, path: name, reserved_bytes })), [
+        { slot: "final", path: null, reserved_bytes: "52428800" },
+        { slot: "upload", path: asset.upload, reserved_bytes: "52428800" },
+      ]);
+      assert.equal(await held(), 104857600);
+      await mustNotUpdate("update public.media_assets set upload_path=$2 where id=$1 returning id", [asset.id, path(asset.business, "changed")]);
+      assert.equal((await db.query("select upload_path from public.media_assets where id=$1", [asset.id])).rows[0].upload_path, asset.upload);
+    });
+
+    await check(`${database}: ambiguous final writes reconcile the pinned object and atomically complete the row (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      const firstPath = path(asset.business, "attempt-first");
+      const retryPath = path(asset.business, "attempt-retry");
+      assert.deepEqual(await finalizeState(asset), {
+        status: "reserved", attempt_id: null, final_path: null, expected_sha256: null, expected_bytes: null,
+      });
+      assert.equal(await finalizeState({ ...asset, upload: path(asset.business, "wrong-upload") }), null);
+      await sign(asset);
+
+      const first = await claimAttempt(asset, firstPath, 1234);
+      assert.equal(first.newly_claimed, true);
+      assert.equal(first.final_path, firstPath);
+      assert.equal(first.expected_sha256, asset.expectedFinalSha256);
+      assert.equal(Number(first.expected_bytes), 1234);
+      assert.equal(first.state, "writing");
+      assert.deepEqual(await finalizeState(asset), {
+        status: "writing", attempt_id: first.attempt_id, final_path: firstPath,
+        expected_sha256: asset.expectedFinalSha256, expected_bytes: "1234",
+      });
+
+      await put(asset.upload, { size: 31457280 });
+      await put(firstPath, { size: 1234 });
+      const retry = await claimAttempt(asset, retryPath, 1234);
+      assert.deepEqual(
+        { attempt_id: retry.attempt_id, final_path: retry.final_path, expected_sha256: retry.expected_sha256,
+          expected_bytes: Number(retry.expected_bytes), state: retry.state, newly_claimed: retry.newly_claimed },
+        { attempt_id: first.attempt_id, final_path: firstPath, expected_sha256: asset.expectedFinalSha256,
+          expected_bytes: 1234, state: "writing", newly_claimed: false },
+      );
+      assert.equal(await held(), 104857600);
+      assert.equal(await complete(asset, firstPath, 1234, retry), true);
+      assert.deepEqual((await db.query("select status,path,bytes from public.media_assets where id=$1", [asset.id])).rows[0],
+        { status: "ready", path: firstPath, bytes: "1234" });
+      assert.deepEqual(await finalizeState(asset), {
+        status: "ready", attempt_id: first.attempt_id, final_path: firstPath,
+        expected_sha256: asset.expectedFinalSha256, expected_bytes: "1234",
+      });
+      assert.deepEqual((await slots(asset.id)).find(slot => slot.slot === "final"),
+        { slot: "final", path: firstPath, reserved_bytes: "1234", state: "verified", signing_intent: null,
+          token_expires_at: null, attempt_id: first.attempt_id, expected_sha256: asset.expectedFinalSha256, expected_bytes: "1234" });
+      assert.equal(await complete(asset, firstPath, 1234, first), true, "a lost completion response is idempotent");
+      assert.equal((await db.query("select path from public.media_assets where id=$1", [asset.id])).rows[0].path, firstPath);
+      assert.equal(await held(), 52430034);
+      assert.equal((await db.query("select count(*)::int as n from storage.objects where bucket_id='media-video' and name=$1", [retryPath])).rows[0].n, 0,
+        "retry must not create another final path");
+    });
+
+    await check(`${database}: missing or mismatched final bytes stay unresolved until terminal proof and stale attempts are fenced (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      await sign(asset);
+      const firstPath = path(asset.business, "terminal-first");
+      const first = await claimAttempt(asset, firstPath, 1234);
+      assert.equal(await complete(asset, firstPath, 1234, first), false, "missing bytes cannot complete");
+      assert.equal(await held(), 104857600, "missing bytes keep both reservations");
+      await put(firstPath, { size: 1235 });
+      assert.equal(await complete(asset, firstPath, 1234, first), false, "mismatched bytes cannot complete");
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "writing");
+
+      await remove(firstPath);
+      assert.equal(await terminal(asset, first), true, "a definitive terminal failure may release only an absent object");
+      assert.deepEqual(
+        (({ path: name, state, attempt_id, expected_sha256, expected_bytes }) => ({
+          path: name, state, attempt_id, expected_sha256, expected_bytes,
+        }))((await slots(asset.id)).find(slot => slot.slot === "final")),
+        { path: null, state: "reserved", attempt_id: null, expected_sha256: null, expected_bytes: null },
+      );
+
+      const secondPath = path(asset.business, "terminal-second");
+      const second = await claimAttempt(asset, secondPath, 1234);
+      assert.equal(second.newly_claimed, true);
+      assert.notEqual(second.attempt_id, first.attempt_id);
+      await put(secondPath, { size: 1234 });
+      assert.equal(await complete(asset, secondPath, 1234, first), false, "a stale attempt cannot complete the replacement");
+      assert.equal(await complete(asset, secondPath, 1234, second), true);
+      assert.equal((await db.query("select path from public.media_assets where id=$1", [asset.id])).rows[0].path, secondPath);
+    });
+
+    await check(`${database}: concurrent finalization retries share one persisted attempt (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      const candidates = Array.from({ length: 4 }, (_, i) => path(asset.business, `retry-${i}`));
+      await sign(asset);
+      const results = await raceServiceTransactions(db, database, candidates.map(candidate => c => c.query(
+        "select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)",
+        [asset.id, asset.upload, candidate, asset.expectedFinalSha256, 1234],
+      )));
+      assert.ok(results.every(result => result.status === "fulfilled"));
+      const attempts = results.map(result => result.value.rows[0]);
+      assert.equal(attempts.filter(attempt => attempt.newly_claimed).length, 1);
+      assert.equal(new Set(attempts.map(attempt => attempt.attempt_id)).size, 1);
+      assert.equal(new Set(attempts.map(attempt => attempt.final_path)).size, 1);
+      assert.ok(attempts.every(attempt => attempt.state === "writing" && attempt.matches_request));
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").path, attempts[0].final_path);
+      assert.equal(await held(), 104857600);
+    });
+
+    await check(`${database}: failed ready-row transaction preserves the attempt for idempotent recovery (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      const final = path(asset.business, "save-retry");
+      await sign(asset);
+      const attempt = await claimAttempt(asset, final, 1234);
+      await put(final, { size: 1234 });
+      await asPostgres(db, () => db.query(`create function public.reject_video_finalize_save() returns trigger
+        language plpgsql set search_path = '' as $$
+        begin raise exception 'intentional media finalize save failure'; end $$;
+        create trigger reject_video_finalize_save before update on public.media_assets
+        for each row when (new.id = '${asset.id}'::uuid and new.status = 'ready')
+        execute function public.reject_video_finalize_save()`));
+      try {
+        await assert.rejects(complete(asset, final, 1234, attempt), { message: "intentional media finalize save failure" });
+      } finally {
+        await asPostgres(db, () => db.query("drop trigger if exists reject_video_finalize_save on public.media_assets; drop function if exists public.reject_video_finalize_save()"));
+      }
+      assert.deepEqual((await db.query("select status,path from public.media_assets where id=$1", [asset.id])).rows[0],
+        { status: "pending", path: asset.upload });
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "writing");
+      assert.equal(await held(), 104857600);
+      assert.equal(await complete(asset, final, 1234, attempt), true);
+      assert.deepEqual((await db.query("select status,path from public.media_assets where id=$1", [asset.id])).rows[0],
+        { status: "ready", path: final });
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "verified");
+    });
+
+    await check(`${database}: 150 MiB is admitted exactly, but one additional byte is not (#2653)`, async () => {
+      await reset();
+      await put(path(businesses[0], "orphan"), { size: 52428800 });
+      await insert(businesses[1]);
+      assert.equal(await held(), 157286400);
+      const denied = pending(businesses[2]);
+      await refused(service.query(denied.sql, denied.values));
+
+      await reset();
+      await put(path(businesses[0], "orphan"), { size: 52428800 });
+      await put(path(businesses[0], "one-byte"), { size: 1 });
+      const over = pending(businesses[1]);
+      await refused(service.query(over.sql, over.values));
+      assert.equal(await held(), 52428801);
+      assert.equal((await db.query("select count(*)::int as n from public.media_assets where id=$1", [over.id])).rows[0].n, 0);
+    });
+
+    await check(`${database}: simultaneous cross-business video admissions share one global 150 MiB budget (#2653)`, async () => {
+      await reset();
+      await put(path(businesses[0], "orphan"), { size: 52428800 });
+      const candidates = Array.from({ length: 8 }, (_, i) => pending(businesses[i % businesses.length], 1));
+      const results = await raceServiceTransactions(db, database, candidates.map(asset => c => c.query(asset.sql, asset.values)));
+      assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+      for (const result of results.filter(result => result.status === "rejected")) {
+        assert.equal(result.reason.code, "P0001");
+        assert.equal(result.reason.message, "MEDIA_VIDEO_BUDGET");
+      }
+      assert.equal(await held(), 157286400);
+      assert.equal((await db.query("select count(*)::int as n from public.media_assets where id=any($1::uuid[])", [candidates.map(asset => asset.id)])).rows[0].n, 1);
+
+      await reset();
+      await put(path(businesses[0], "orphan"), { size: 52428800 });
+      await put(path(businesses[0], "one-byte"), { size: 1 });
+      const over = Array.from({ length: 8 }, (_, i) => pending(businesses[i % businesses.length], 1));
+      const refusedResults = await raceServiceTransactions(db, database, over.map(asset => c => c.query(asset.sql, asset.values)));
+      assert.equal(refusedResults.filter(result => result.status === "fulfilled").length, 0);
+      for (const result of refusedResults) {
+        assert.equal(result.reason.code, "P0001");
+        assert.equal(result.reason.message, "MEDIA_VIDEO_BUDGET");
+      }
+      assert.equal(await held(), 52428801);
+    });
+
+    await check(`${database}: video accounting includes all 1,001 unowned objects, not just one Storage page (#2653)`, async () => {
+      await reset();
+      const prefix = `${businesses[0]}${marker}orphan-`;
+      await db.query(`insert into storage.objects(bucket_id,name,metadata)
+        select 'media-video',$1::text||g::text||'.mp4',jsonb_build_object('size',52377)
+        from generate_series(1,1001) g`, [prefix]);
+      assert.equal(await held(), 52429377);
+      const over = pending(businesses[1]);
+      await refused(service.query(over.sql, over.values));
+      await remove(`${prefix}1001.mp4`);
+      await insert(businesses[1]);
+      assert.equal(await held(), 157234600);
+    });
+
+    await check(`${database}: each slot counts the greater of its reservation and object size; only unowned objects are added (#2653)`, async () => {
+      await reset();
+      const asset = await insert(), final = path(asset.business, "final");
+      await sign(asset);
+      await put(asset.upload, { size: 31457280 });
+      assert.equal(await claim(asset, final, 20971520), true);
+      await put(final, { size: 20971520 });
+      assert.equal(await held(), 104857600, "two existing objects must not also be counted as orphans");
+      assert.equal((await ready(asset, final, 20971520)).completed, true);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").reserved_bytes, "20971520");
+      assert.equal(await held(), 73400320);
+      await db.query("update storage.objects set metadata=jsonb_build_object('size',41943040) where bucket_id='media-video' and name=$1", [final]);
+      assert.equal(await held(), 94371840, "a larger actual object must dominate its verified reservation");
+      await put(path(asset.business, "orphan"), { size: 3145728 });
+      await put(path(asset.business, "image"), {}, "media");
+      assert.equal(await held(), 97517568);
+    });
+
+    await check(`${database}: an upload between object and slot reads cannot disappear from one accounting snapshot (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      await put(path(asset.business, "pause"), { size: 1, pause_budget_scan: true });
+      const gate = BigInt(`0x${randomUUID().replaceAll("-", "").slice(0, 15)}`).toString();
+      const originalFunction = (await db.query(
+        "select pg_get_functiondef('private.media_video_object_bytes(jsonb)'::regprocedure) as definition",
+      )).rows[0].definition;
+      const reader = client(database);
+      let heldResult;
+      await reader.connect();
+      await reader.query("set role service_role");
+      const readerPid = (await reader.query("select pg_backend_pid() as pid")).rows[0].pid;
+      await db.query("select pg_advisory_lock($1::bigint)", [gate]);
+      try {
+        await asPostgres(db, () => db.query(`create or replace function private.media_video_object_bytes(p_metadata jsonb)
+          returns bigint language plpgsql immutable set search_path = '' as $$
+          begin
+            if p_metadata ->> 'pause_budget_scan' = 'true' then
+              perform pg_advisory_xact_lock(${gate}::bigint);
+            end if;
+            if p_metadata is null or jsonb_typeof(p_metadata) <> 'object'
+              or coalesce(p_metadata ->> 'size', '') !~ '^[0-9]+$' then
+              raise exception 'MEDIA_VIDEO_STORAGE_UNKNOWN' using errcode = 'P0001';
+            end if;
+            return (p_metadata ->> 'size')::bigint;
+          end;
+          $$`));
+        heldResult = reader.query("select private.media_video_held_bytes() as bytes");
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const waiting = (await db.query(`select exists (
+            select 1 from pg_locks where pid=$1 and locktype='advisory' and not granted
+          ) as waiting`, [readerPid])).rows[0].waiting;
+          if (waiting) break;
+          if (Date.now() >= deadline) throw new Error("accounting read did not reach the deterministic pause");
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        await put(asset.upload, { size: 52428800 });
+        await db.query("select pg_advisory_unlock($1::bigint)", [gate]);
+        assert.equal(Number((await heldResult).rows[0].bytes), 104857601,
+          "the snapshot must count the full pending reservation plus the unrelated one-byte object");
+      } finally {
+        await db.query("select pg_advisory_unlock($1::bigint)", [gate]).catch(() => undefined);
+        if (heldResult) await heldResult.catch(() => undefined);
+        await asPostgres(db, () => db.query(originalFunction));
+        await reader.end();
+      }
+    });
+
+    await check(`${database}: ready requires the claimed final path and matching Storage metadata (#2653)`, async () => {
+      await reset();
+      const asset = await insert(), final = path(asset.business, "final"), other = path(asset.business, "other");
+      await sign(asset);
+      assert.equal(await claim(asset, asset.upload), false, "a signed upload path cannot become the verified final path");
+      await put(other, { size: 1234 });
+      await mustNotUpdate("update public.media_assets set path=$2,status='ready',bytes=1234 where id=$1 returning id", [asset.id, other]);
+      assert.equal(await claim(asset, final), true);
+      assert.equal(await finalRemoved(asset, final), false, "an unverified claimed slot cannot be released");
+      await mustNotUpdate("update public.media_assets set path=$2,status='ready',bytes=1234 where id=$1 returning id", [asset.id, other]);
+      await mustNotUpdate("update public.media_assets set path=$2,status='ready',bytes=1234 where id=$1 returning id", [asset.id, final]);
+      await put(final, { size: 1234 });
+      await mustNotUpdate("update public.media_assets set path=$2,status='ready',bytes=1235 where id=$1 returning id", [asset.id, final]);
+      assert.equal((await db.query("select status from public.media_assets where id=$1", [asset.id])).rows[0].status, "pending");
+      assert.equal((await ready(asset, final, 1234)).completed, true);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").reserved_bytes, "1234");
+      assert.equal(await held(), 52431268);
+    });
+
+    await check(`${database}: signing intent fences finalization and completion records a two-hour expiry plus five-minute margin (#2653)`, async () => {
+      await reset();
+      const asset = await insert(), final = path(asset.business, "final");
+      const intent = await begin(asset);
+      assert.match(intent, /^[0-9a-f-]{36}$/);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "upload").signing_intent, intent);
+      assert.equal(await claim(asset, final), false);
+      let stale;
+      try { stale = await finish(asset, randomUUID()); } catch (error) { assert.equal(error.code, "P0001"); stale = false; }
+      assert.equal(stale, false);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "upload").signing_intent, intent);
+      await asPostgres(db, () => db.query("update private.media_video_slots set token_expires_at='2000-01-01' where asset_id=$1 and slot='upload'", [asset.id]));
+      await service.query("update public.media_assets set upload_expires_at='2000-01-01' where id=$1", [asset.id]);
+      assert.equal(await held(), 104857600, "a live signing intent retains both reservations despite an old expiry");
+      const before = (await db.query("select clock_timestamp() as moment")).rows[0].moment;
+      assert.equal(await finish(asset, intent), true);
+      const expiry = (await db.query(`select signing_intent,
+        token_expires_at >= $2::timestamptz + interval '2 hours 5 minutes' as from_completion,
+        token_expires_at >= clock_timestamp() + interval '2 hours 4 minutes 59 seconds' as still_fresh,
+        m.upload_expires_at = u.token_expires_at as row_matches
+        from private.media_video_slots u join public.media_assets m on m.id=u.asset_id
+        where u.asset_id=$1 and u.slot='upload'`, [asset.id, before])).rows[0];
+      assert.deepEqual(expiry, { signing_intent: null, from_completion: true, still_fresh: true, row_matches: true });
+      assert.equal(await claim(asset, final), true);
+    });
+
+    await check(`${database}: expired upload token retains both reservations while finalization is writing (#2653)`, async () => {
+      await reset();
+      const asset = await insert(), final = path(asset.business, "final");
+      await sign(asset);
+      await put(asset.upload, { size: 31457280 });
+      assert.equal(await claim(asset, final), true);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "writing");
+      assert.equal(await held(), 104857600);
+
+      await asPostgres(db, () => db.query(`update private.media_video_slots set token_expires_at='2000-01-01'
+        where asset_id=$1 and slot='upload'`, [asset.id]));
+      await service.query("update public.media_assets set upload_expires_at='2000-01-01' where id=$1", [asset.id]);
+
+      assert.equal(await held(), 104857600, "a finalization write may still complete after the upload token expires");
+    });
+
+    await check(`${database}: concurrent finalizers can claim only one immutable final path (#2653)`, async () => {
+      await reset();
+      const asset = await insert(), finals = [path(asset.business, "first"), path(asset.business, "second")];
+      await sign(asset);
+      const expectedSha256 = asset.expectedFinalSha256;
+      const results = await raceServiceTransactions(db, database, finals.map(final => c => c.query(
+        "select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)",
+        [asset.id, asset.upload, final, expectedSha256, 1000],
+      )));
+      assert.ok(results.every(result => result.status === "fulfilled"));
+      const accepted = results.map(result => result.value.rows[0]?.newly_claimed ?? false);
+      assert.deepEqual([...accepted].sort(), [false, true]);
+      const winner = results[accepted.indexOf(true)].value.rows[0].final_path;
+      const loser = finals.find(final => final !== winner);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").path, winner);
+      assert.equal(await claim(asset, loser, 1000), false);
+      await put(winner, { size: 1000 });
+      await put(loser, { size: 1000 });
+      await mustNotUpdate("update public.media_assets set path=$2,status='ready',bytes=1000 where id=$1 returning id", [asset.id, loser]);
+      assert.equal((await ready(asset, winner, 1000)).completed, true);
+      assert.equal(await held(), 52430800);
+    });
+
+    await check(`${database}: a concurrent re-sign and finalize cannot both proceed (#2653)`, async () => {
+      await reset();
+      const asset = await insert(), final = path(asset.business, "final");
+      await sign(asset);
+      const [signing, finalizing] = await raceServiceTransactions(db, database, [
+        c => c.query("select public.media_video_sign_begin($1,$2) as intent", [asset.id, asset.upload]),
+        c => c.query("select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)",
+          [asset.id, asset.upload, final, asset.expectedFinalSha256, 1234]),
+      ]);
+      assert.equal(finalizing.status, "fulfilled");
+      const claimed = finalizing.value.rows[0]?.newly_claimed ?? false;
+      assert.equal(typeof claimed, "boolean");
+      if (signing.status === "fulfilled") {
+        const intent = signing.value.rows[0].intent;
+        assert.match(intent, /^[0-9a-f-]{36}$/);
+        assert.equal(claimed, false);
+        assert.equal((await slots(asset.id)).find(slot => slot.slot === "upload").signing_intent, intent);
+      } else {
+        assert.equal(signing.reason.code, "P0001");
+        assert.equal(claimed, true);
+        assert.equal((await slots(asset.id)).find(slot => slot.slot === "upload").signing_intent, null);
+      }
+    });
+
+    await check(`${database}: failed or logically successful removal never proves physical deletion (#2653)`, async () => {
+      await reset();
+      const asset = await makeReady();
+      assert.equal(await held(), 73400320);
+      await service.query("update public.media_assets set storage_reclaimed_at=now() where id=$1", [asset.id]);
+      assert.equal(await finalRemoved(asset, asset.final), false);
+      assert.equal(await held(), 73400320, "both upload and final copies remain accounted");
+      await remove(asset.final);
+      assert.equal(await finalRemoved(asset, path(asset.business, "wrong")), false);
+      assert.equal(await held(), 73400320, "absence alone does not release an unacknowledged slot");
+      assert.equal(await finalRemoved(asset, asset.final), true);
+      const final = (await slots(asset.id)).find(slot => slot.slot === "final");
+      assert.equal(final.state, "removed");
+      assert.equal(final.reserved_bytes, "20971520");
+      assert.equal(await held(), 52428800, "a ready row with a removed final path retains only its live-upload ceiling");
+      await put(asset.final, { size: 31457280 });
+      assert.equal(await held(), 83886080);
+      await remove(asset.final);
+      assert.equal(await held(), 52428800);
+    });
+
+    await check(`${database}: final removal and asset deletion roll back together and can be retried (#2653)`, async () => {
+      await reset();
+      const asset = await makeReady();
+      await remove(asset.final);
+      await asPostgres(db, () => db.query(`create or replace function private.reject_video_asset_delete()
+        returns trigger language plpgsql set search_path = '' as $$
+        begin
+          raise exception 'TEST_MEDIA_VIDEO_DELETE_FAIL';
+        end;
+        $$;
+        create trigger reject_video_asset_delete before update of deleted_at on public.media_assets
+        for each row when (old.deleted_at is distinct from new.deleted_at and new.deleted_at is not null)
+        execute function private.reject_video_asset_delete()`));
+      try {
+        await assert.rejects(finalRemoved(asset, asset.final), { message: "TEST_MEDIA_VIDEO_DELETE_FAIL" });
+        assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "verified");
+        assert.equal((await db.query("select deleted_at from public.media_assets where id=$1", [asset.id])).rows[0].deleted_at, null);
+      } finally {
+        await asPostgres(db, () => db.query(`drop trigger if exists reject_video_asset_delete on public.media_assets;
+          drop function if exists private.reject_video_asset_delete()`));
+      }
+      assert.equal(await finalRemoved(asset, asset.final), true);
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "removed");
+      assert.ok((await db.query("select deleted_at from public.media_assets where id=$1", [asset.id])).rows[0].deleted_at);
+    });
+
+    await check(`${database}: an expired old token's recreated logical path keeps its upload slot (#2653)`, async () => {
+      await reset();
+      const asset = await makeReady(10485760);
+      assert.equal(await held(), 62914560);
+      await remove(asset.upload);
+      await asPostgres(db, () => db.query(`update private.media_video_slots set token_expires_at=now()-interval '10 years'
+        where asset_id=$1 and slot='upload'`, [asset.id]));
+      await service.query("update public.media_assets set upload_expires_at=now()-interval '10 years' where id=$1", [asset.id]);
+      assert.equal(await held(), 10485760, "after the approved expiry window, only actual bytes remain held");
+      await put(asset.upload, { size: 52428800 });
+      assert.equal(await held(), 62914560);
+      await remove(asset.final);
+      assert.equal(await finalRemoved(asset, asset.final), true);
+      const final = (await slots(asset.id)).find(slot => slot.slot === "final");
+      assert.equal(final.state, "removed");
+      assert.equal(final.reserved_bytes, "10485760");
+      assert.ok((await service.query("select deleted_at from public.media_assets where id=$1", [asset.id])).rows[0].deleted_at);
+      assert.equal(await held(), 52428800);
+      await remove(asset.upload);
+      assert.equal(await held(), 0);
+      await put(asset.upload, { size: 52428800 });
+      assert.equal(await held(), 52428800);
+    });
+
+    await check(`${database}: failed and soft-deleted videos keep both reservations despite reclaim timestamps (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      await service.query("update public.media_assets set status='delete_failed' where id=$1", [asset.id]);
+      await service.query("update public.media_assets set storage_reclaimed_at=now(),deleted_at=now()-interval '10 years',updated_at=now()-interval '10 years' where id=$1", [asset.id]);
+      assert.equal((await slots(asset.id)).length, 2);
+      assert.equal(await held(), 104857600);
+      const denied = pending(businesses[1]);
+      await refused(service.query(denied.sql, denied.values));
+    });
+
+    await check(`${database}: hard deletion leaves the upload and final slots durable (#2653)`, async () => {
+      await reset();
+      const asset = await makeReady();
+      assert.equal((await service.query("delete from public.media_assets where id=$1", [asset.id])).rowCount, 1);
+      assert.equal((await slots(asset.id)).length, 2);
+      assert.equal(await held(), 73400320);
+      await remove(asset.upload);
+      await remove(asset.final);
+      assert.equal(await held(), 73400320);
+      await put(asset.upload, { size: 52428800 });
+      assert.equal(await held(), 73400320);
+      const denied = pending(businesses[1]);
+      await refused(service.query(denied.sql, denied.values));
+    });
+
+    await check(`${database}: a business cascade leaves its video slots and old-token capacity durable (#2653)`, async () => {
+      await reset();
+      const asset = await insert(businesses[3]);
+      await asPostgres(db, () => db.query("delete from public.businesses where id=$1", [asset.business]));
+      assert.equal((await db.query("select count(*)::int as n from public.media_assets where id=$1", [asset.id])).rows[0].n, 0);
+      assert.equal((await slots(asset.id)).length, 2);
+      assert.equal(await held(), 104857600);
+      await put(asset.upload, { size: 52428800 });
+      assert.equal(await held(), 104857600);
+      const denied = pending(businesses[1]);
+      await refused(service.query(denied.sql, denied.values));
+    });
+
+    await check(`${database}: missing or invalid Storage sizes fail closed for owned and unowned paths (#2653)`, async () => {
+      for (const metadata of [null, {}, { size: null }, { size: "not-a-number" }, { size: -1 }, { size: "1.5" }]) {
+        for (const owned of [true, false]) {
+          await reset();
+          const asset = await insert(), name = owned ? asset.upload : path(asset.business, "orphan");
+          await put(name, metadata);
+          await assert.rejects(service.query("select private.media_video_held_bytes()"), { code: "P0001", message: "MEDIA_VIDEO_STORAGE_UNKNOWN" });
+          const denied = pending(businesses[1]);
+          await assert.rejects(service.query(denied.sql, denied.values), { code: "P0001", message: "MEDIA_VIDEO_STORAGE_UNKNOWN" });
+        }
+      }
+    });
+
+    await check(`${database}: video accounting and lifecycle functions deny anonymous and authenticated callers (#2653)`, async () => {
+      await reset();
+      const asset = await insert(), final = path(asset.business, "final");
+      for (const role of ["anon", "authenticated"]) {
+        const session = client(database);
+        await session.connect();
+        try {
+          await session.query("begin");
+          await session.query(`set local role ${role}`);
+          if (role === "authenticated") await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+          for (const [sql, values] of [
+            ["select private.media_video_held_bytes()", []],
+            ["select * from private.media_video_slots", []],
+            ["select public.media_video_sign_begin($1,$2)", [asset.id, asset.upload]],
+            ["select public.media_video_sign_finish($1,$2)", [asset.id, randomUUID()]],
+            ["select * from public.media_video_finalize_state($1,$2)", [asset.id, asset.upload]],
+            ["select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)", [asset.id, asset.upload, final, asset.expectedFinalSha256, 1234]],
+            ["select public.media_video_finalize_complete($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+              [asset.id, asset.upload, randomUUID(), final, asset.expectedFinalSha256, 1234, "video/mp4", 720, 1280, 10000, "{}"]],
+            ["select public.media_video_finalize_terminal($1,$2)", [asset.id, randomUUID()]],
+            ["select public.media_video_final_removed($1,$2)", [asset.id, final]],
+          ]) {
+            await session.query("savepoint denied");
+            await assert.rejects(session.query(sql, values), { code: "42501" }, `${role}: ${sql}`);
+            await session.query("rollback to savepoint denied");
+          }
+        } finally { await session.query("rollback").catch(() => undefined); await session.end(); }
+      }
+    });
+
+    for (const [label, sql, blocksReservation] of [
+      ["missing", "delete from storage.buckets where id='media-video'", true],
+      ["NULL limit", "update storage.buckets set file_size_limit=null where id='media-video'", true],
+      ["limit above 50 MiB", "update storage.buckets set file_size_limit=52428801 where id='media-video'", true],
+      ["public", "update storage.buckets set public=true where id='media-video'", false],
+    ]) {
+      await check(`${database}: ${label} video bucket fails closed before signing${blocksReservation ? " or reserving" : ""} (#2653)`, async () => {
+        await reset();
+        if (blocksReservation) {
+          await asPostgres(db, () => db.query(sql));
+          const candidate = pending(businesses[0]);
+          await assert.rejects(service.query(candidate.sql, candidate.values), { code: "P0001", message: "MEDIA_VIDEO_BUCKET_UNSAFE" });
+          assert.equal((await db.query("select count(*)::int as n from public.media_assets where id=$1", [candidate.id])).rows[0].n, 0);
+          assert.equal((await slots(candidate.id)).length, 0);
+          await reset();
+        }
+        const asset = await insert();
+        await asPostgres(db, () => db.query(sql));
+        await assert.rejects(begin(asset), { code: "P0001", message: "MEDIA_VIDEO_BUCKET_UNSAFE" });
+        assert.equal((await slots(asset.id)).find(slot => slot.slot === "upload").signing_intent, null);
+      });
+    }
+  } finally {
+    await reset();
+    await service.end();
+    await asPostgres(db, async () => {
+      await db.query("delete from public.businesses where id=any($1::uuid[])", [businesses]);
+      await db.query("delete from auth.users where id=$1", [owner]);
+    });
+  }
 }
 
 async function verifyMediaAssets(db, database) {
@@ -3306,6 +4098,22 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query("alter default privileges for role postgres in schema public revoke execute on functions from anon");
     }
     await db.query(source);
+    if (database === "customer_fresh") {
+      await check(`${database}: canonical fresh schema installs the video accounting contract`, async () => {
+        const installed = (await db.query(`select
+          to_regclass('private.media_video_slots') is not null as slots,
+          to_regprocedure('private.media_video_held_bytes()') is not null as held,
+          to_regprocedure('public.media_video_sign_begin(uuid,text)') is not null as sign_begin,
+          to_regprocedure('public.media_video_sign_finish(uuid,uuid)') is not null as sign_finish,
+          to_regprocedure('public.media_video_finalize_state(uuid,text)') is not null as finalize_state,
+          to_regprocedure('public.media_video_finalize_claim(uuid,text,text,text,bigint)') is not null as finalize_claim,
+          to_regprocedure('public.media_video_finalize_complete(uuid,text,uuid,text,text,bigint,text,integer,integer,integer,jsonb)') is not null as finalize_complete,
+          to_regprocedure('public.media_video_finalize_terminal(uuid,uuid)') is not null as finalize_terminal,
+          to_regprocedure('public.media_video_final_removed(uuid,text)') is not null as final_removed`)).rows[0];
+        assert.deepEqual(installed, { slots: true, held: true, sign_begin: true, sign_finish: true,
+          finalize_state: true, finalize_claim: true, finalize_complete: true, finalize_terminal: true, final_removed: true });
+      });
+    }
     if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
     if (database === "customer_upgrade") {
       const name = "20261102_security_definer_search_path.sql";
@@ -3502,11 +4310,22 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await verifyConnectionReauth(db,database);
       await db.query(mediaLibraryMigration);
       await db.query(mediaLibraryMigration);
+      await db.query(mediaUploadQuotaMigration);
+      await db.query(mediaUploadQuotaMigration);
+      await db.query(mediaMetaUploadsMigration);
+      await db.query(mediaMetaUploadsMigration);
+      const legacyVideo = database === "customer_fresh" ? null : await seedLegacyVideo(db);
+      if (legacyVideo) await verifyLegacyVideoUpgrade(db, database, legacyVideo);
+      await db.query(mediaVideoReclaimMigration);
+      await db.query(mediaVideoReclaimMigration);
+      for (const [, sql] of mediaVideoFollowups) {
+        await db.query(sql);
+        await db.query(sql);
+      }
       await verifyMediaAssets(db,database);
       await verifyMediaConsents(db,database);
-      await db.query(mediaUploadQuotaMigration);
-      await db.query(mediaUploadQuotaMigration);
       await verifyMediaUploadQuota(db,database);
+      await verifyMediaVideoBudget(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
@@ -4636,6 +5455,12 @@ try {
   const schema = buildSchema(root);
   const preDefinerSchema = schema.replace(definerHardeningMigration.trim(), "");
   assert.notEqual(preDefinerSchema, schema, "Canonical schema must include the exact definer hardening migration");
+  let preVideoUpgradeSchema = preDefinerSchema.replace(mediaVideoReclaimMigration.trim(), "");
+  assert.notEqual(preVideoUpgradeSchema, preDefinerSchema, "Canonical schema must include the exact video migration");
+  for (const [name, sql] of mediaVideoFollowups) {
+    assert.ok(preVideoUpgradeSchema.includes(sql.trim()), `Canonical schema must include ${name}`);
+    preVideoUpgradeSchema = preVideoUpgradeSchema.replace(sql.trim(), "");
+  }
   const baseline = execFileSync("git", ["show", "d8d789071c74a7a93b1f270a0c4f119aff79aa34:db/schema.sql"], { cwd: root, encoding: "utf8" });
   const metaMigration = await readFile(join(root, "db/migrations/20260907_meta_instant_connect.sql"), "utf8");
   const campaignMigration = await readFile(join(root, "db/migrations/20260907_campaign_connect.sql"), "utf8");
@@ -4696,7 +5521,7 @@ try {
     await verifyDefaultPrivilegeMigrationLedger();
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_legacy_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
-    await verify("customer_upgrade",preDefinerSchema,undefined,true);
+    await verify("customer_upgrade",preVideoUpgradeSchema,undefined,true);
     if (!process.argv.includes("--customer-only")) {
       await verify("pricing_fresh",schema);
       await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));
