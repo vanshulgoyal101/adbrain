@@ -1840,6 +1840,9 @@ async function verifyMediaVideoBudget(db, database) {
     if (attempt) asset.finalAttempt = attempt;
     return attempt;
   };
+  const finalizeState = async asset => (await service.query(
+    "select * from public.media_video_finalize_state($1,$2)", [asset.id, asset.upload],
+  )).rows[0] ?? null;
   const claim = async (asset, final, expectedBytes = 1234, expectedSha256 = asset.expectedFinalSha256) =>
     Boolean((await claimAttempt(asset, final, expectedBytes, expectedSha256))?.newly_claimed);
   const terminal = async (asset, attempt = asset.finalAttempt) => (await service.query(
@@ -1911,6 +1914,10 @@ async function verifyMediaVideoBudget(db, database) {
       const asset = await insert();
       const firstPath = path(asset.business, "attempt-first");
       const retryPath = path(asset.business, "attempt-retry");
+      assert.deepEqual(await finalizeState(asset), {
+        status: "reserved", attempt_id: null, final_path: null, expected_sha256: null, expected_bytes: null,
+      });
+      assert.equal(await finalizeState({ ...asset, upload: path(asset.business, "wrong-upload") }), null);
       await sign(asset);
 
       const first = await claimAttempt(asset, firstPath, 1234);
@@ -1919,6 +1926,10 @@ async function verifyMediaVideoBudget(db, database) {
       assert.equal(first.expected_sha256, asset.expectedFinalSha256);
       assert.equal(Number(first.expected_bytes), 1234);
       assert.equal(first.state, "writing");
+      assert.deepEqual(await finalizeState(asset), {
+        status: "writing", attempt_id: first.attempt_id, final_path: firstPath,
+        expected_sha256: asset.expectedFinalSha256, expected_bytes: "1234",
+      });
 
       await put(asset.upload, { size: 31457280 });
       await put(firstPath, { size: 1234 });
@@ -1933,6 +1944,10 @@ async function verifyMediaVideoBudget(db, database) {
       assert.equal(await complete(asset, firstPath, 1234, retry), true);
       assert.deepEqual((await db.query("select status,path,bytes from public.media_assets where id=$1", [asset.id])).rows[0],
         { status: "ready", path: firstPath, bytes: "1234" });
+      assert.deepEqual(await finalizeState(asset), {
+        status: "ready", attempt_id: first.attempt_id, final_path: firstPath,
+        expected_sha256: asset.expectedFinalSha256, expected_bytes: "1234",
+      });
       assert.deepEqual((await slots(asset.id)).find(slot => slot.slot === "final"),
         { slot: "final", path: firstPath, reserved_bytes: "1234", state: "verified", signing_intent: null,
           token_expires_at: null, attempt_id: first.attempt_id, expected_sha256: asset.expectedFinalSha256, expected_bytes: "1234" });
@@ -2392,6 +2407,7 @@ async function verifyMediaVideoBudget(db, database) {
             ["select * from private.media_video_slots", []],
             ["select public.media_video_sign_begin($1,$2)", [asset.id, asset.upload]],
             ["select public.media_video_sign_finish($1,$2)", [asset.id, randomUUID()]],
+            ["select * from public.media_video_finalize_state($1,$2)", [asset.id, asset.upload]],
             ["select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)", [asset.id, asset.upload, final, asset.expectedFinalSha256, 1234]],
             ["select public.media_video_finalize_complete($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
               [asset.id, asset.upload, randomUUID(), final, asset.expectedFinalSha256, 1234, "video/mp4", 720, 1280, 10000, "{}"]],
@@ -4089,12 +4105,13 @@ async function verify(database, source, integrityMigration, customerOnly = false
           to_regprocedure('private.media_video_held_bytes()') is not null as held,
           to_regprocedure('public.media_video_sign_begin(uuid,text)') is not null as sign_begin,
           to_regprocedure('public.media_video_sign_finish(uuid,uuid)') is not null as sign_finish,
+          to_regprocedure('public.media_video_finalize_state(uuid,text)') is not null as finalize_state,
           to_regprocedure('public.media_video_finalize_claim(uuid,text,text,text,bigint)') is not null as finalize_claim,
           to_regprocedure('public.media_video_finalize_complete(uuid,text,uuid,text,text,bigint,text,integer,integer,integer,jsonb)') is not null as finalize_complete,
           to_regprocedure('public.media_video_finalize_terminal(uuid,uuid)') is not null as finalize_terminal,
           to_regprocedure('public.media_video_final_removed(uuid,text)') is not null as final_removed`)).rows[0];
         assert.deepEqual(installed, { slots: true, held: true, sign_begin: true, sign_finish: true,
-          finalize_claim: true, finalize_complete: true, finalize_terminal: true, final_removed: true });
+          finalize_state: true, finalize_claim: true, finalize_complete: true, finalize_terminal: true, final_removed: true });
       });
     }
     if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);

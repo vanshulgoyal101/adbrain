@@ -374,6 +374,59 @@ begin
 end;
 $$;
 
+create or replace function public.media_video_finalize_state(p_asset_id uuid, p_upload_path text)
+returns table (
+  status text,
+  attempt_id uuid,
+  final_path text,
+  expected_sha256 text,
+  expected_bytes bigint
+)
+language plpgsql security definer set search_path = '' as $$
+declare
+  asset_status text;
+  asset_upload_path text;
+  asset_path text;
+  asset_bytes bigint;
+  asset_checks jsonb;
+  asset_deleted_at timestamptz;
+  final_slot private.media_video_slots%rowtype;
+begin
+  if not private.media_video_bucket_safe() then
+    raise exception 'MEDIA_VIDEO_BUCKET_UNSAFE' using errcode = 'P0001';
+  end if;
+
+  select m.status, m.upload_path, m.path, m.bytes, m.checks, m.deleted_at
+  into asset_status, asset_upload_path, asset_path, asset_bytes, asset_checks, asset_deleted_at
+  from public.media_assets m
+  where m.id = p_asset_id and m.kind = 'video'
+  for update;
+  if not found or asset_deleted_at is not null or asset_upload_path is distinct from p_upload_path then
+    return;
+  end if;
+
+  select f.* into final_slot
+  from private.media_video_slots f
+  where f.asset_id = p_asset_id and f.slot = 'final'
+  for update;
+  if not found then
+    return;
+  end if;
+
+  if asset_status = 'ready' and final_slot.state = 'verified' and final_slot.path = asset_path then
+    return query select 'ready'::text, final_slot.attempt_id, asset_path,
+      asset_checks ->> 'storedSha256', asset_bytes;
+    return;
+  end if;
+  if asset_status <> 'pending' or final_slot.state not in ('reserved', 'writing') then
+    return;
+  end if;
+
+  return query select final_slot.state, final_slot.attempt_id, final_slot.path,
+    final_slot.expected_sha256, final_slot.expected_bytes;
+end;
+$$;
+
 drop function if exists public.media_video_finalize_claim(uuid, text, text);
 
 create or replace function public.media_video_finalize_claim(
@@ -652,12 +705,14 @@ revoke all on function private.media_assets_video_lifecycle() from public, anon,
 
 revoke all on function public.media_video_sign_begin(uuid, text) from public, anon, authenticated;
 revoke all on function public.media_video_sign_finish(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.media_video_finalize_state(uuid, text) from public, anon, authenticated;
 revoke all on function public.media_video_finalize_claim(uuid, text, text, text, bigint) from public, anon, authenticated;
 revoke all on function public.media_video_finalize_complete(uuid, text, uuid, text, text, bigint, text, integer, integer, integer, jsonb) from public, anon, authenticated;
 revoke all on function public.media_video_finalize_terminal(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.media_video_final_removed(uuid, text) from public, anon, authenticated;
 grant execute on function public.media_video_sign_begin(uuid, text) to service_role;
 grant execute on function public.media_video_sign_finish(uuid, uuid) to service_role;
+grant execute on function public.media_video_finalize_state(uuid, text) to service_role;
 grant execute on function public.media_video_finalize_claim(uuid, text, text, text, bigint) to service_role;
 grant execute on function public.media_video_finalize_complete(uuid, text, uuid, text, text, bigint, text, integer, integer, integer, jsonb) to service_role;
 grant execute on function public.media_video_finalize_terminal(uuid, uuid) to service_role;
