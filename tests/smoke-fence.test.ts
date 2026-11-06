@@ -5,7 +5,7 @@ import { alignPrintedNumbers } from "@/lib/creative/chat-number";
 import { readFileSync } from "node:fs";
 import internal from "@/lib/internal-accounts.json";
 import { freeOnlyEligibility } from "@/lib/internal-accounts";
-import { assertFenceOwnsDraft, FENCE_CAPABILITY_TTL_MS, refuseWhenFenced, SMOKE_FENCE_HEADER, SmokeFenceError, smokeFenceResponse } from "@/lib/security/smoke-fence";
+import { assertFenceOwnsDraft, FENCE_CAPABILITY_TTL_MS, refuseWhenFenced, SMOKE_FENCE_HEADER, SmokeFenceError, smokeFenceResponse, withSmokeFence } from "@/lib/security/smoke-fence";
 import { issueDraftCapability, requestIsFenced, smokeFence } from "@/lib/security/smoke-fence-server";
 
 const headerStore = vi.hoisted(() => ({ headers: null as Headers | null }));
@@ -81,6 +81,19 @@ describe("draft-only smoke fence (#2861)", () => {
     expect(response.status).toBe(409);
     const body = await response.json();
     expect(body.error).toMatchObject({ code: "SMOKE_FENCE", effect: "whatsapp_binding", retryable: false });
+  });
+
+  it("wraps a route handler so a fenced request stops before its work", async () => {
+    const handler = vi.fn(async () => Response.json({ ok: true }));
+    const protectedHandler = withSmokeFence("campaign_write", handler);
+
+    const refused = await protectedHandler(req("draft-only"));
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error).toMatchObject({ code: "SMOKE_FENCE", effect: "campaign_write" });
+    expect(handler).not.toHaveBeenCalled();
+
+    expect((await protectedHandler(req())).status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
   });
 
   it("shares one header contract with the smoke script, which reports a refusal as not a pass", async () => {

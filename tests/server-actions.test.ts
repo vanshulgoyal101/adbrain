@@ -18,6 +18,7 @@ const logEvent = vi.fn();
 let updateResult: { error: { message: string } | null } = { error: null };
 
 vi.mock("next/cache", () => ({ revalidatePath }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("@/lib/audit", () => ({ logEvent }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({

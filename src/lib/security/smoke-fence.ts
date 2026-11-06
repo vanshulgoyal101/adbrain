@@ -58,3 +58,13 @@ export function assertFenceOwnsDraft(fence: SmokeFence | null, draftId: string, 
 export function refuseWhenFenced(request: Request, effect: SmokeFenceError["effect"] = "ai_provider"): Response | null {
   return request.headers.has(SMOKE_FENCE_HEADER) ? smokeFenceResponse(crypto.randomUUID(), new SmokeFenceError(effect)) : null;
 }
+
+export function withSmokeFence<TArgs extends unknown[]>(
+  effect: SmokeFenceError["effect"],
+  handler: (request: Request, ...args: TArgs) => Promise<Response>,
+): (request: Request, ...args: TArgs) => Promise<Response> {
+  return async (request, ...args) => {
+    const refused = refuseWhenFenced(request, effect);
+    return refused ?? handler(request, ...args);
+  };
+}
