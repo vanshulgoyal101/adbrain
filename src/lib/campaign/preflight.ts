@@ -7,6 +7,7 @@ import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-con
 import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE, type ReviewDestination } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
+import { copyClaimWarnings } from "@/lib/creative/concept";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { translator, type AppLocale } from "@/i18n/locale";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
@@ -34,6 +35,8 @@ export interface PreflightCreative {
   printedPhone?: string | null;
   /** #784: its picture is the owner's own upload (`creatives.media_asset_id`), so launch needs their rights confirmation. */
   ownMedia?: boolean;
+  /** #780: the owner typed this ad's copy, so launch rechecks its claims against the current Brand. */
+  ownWords?: boolean;
 }
 
 export interface PreflightForm {
@@ -75,6 +78,8 @@ export interface PreflightInput {
   vertical?: string | null;
   /** #418 rule 5: the Brand's facts, for the proof-line warning; none means no warning. */
   brandFacts?: string[];
+  /** #780: current Brand facts and vertical for owner-written copy; unreadable context must not pass Review. */
+  ownWordsContext?: { brandFacts: string[]; vertical: string | null };
   /** Business website; undefined when the caller does not check it. */
   website?: string | null;
   /** #2599: whether a website ad's link opens the advertiser's own site; a website ad without it is blocked. */
@@ -272,7 +277,23 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", say("noWebsite"), { kind: "open_brand" }));
   }
   if (input.mediaConsent === false && input.creatives.some((creative) => creative.ownMedia)) blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_MEDIA_RIGHTS", say("mediaRights")));
-  const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
+  const ownWordsCreatives = input.creatives.filter((creative) => creative.ownWords);
+  const ownWordsContext = input.ownWordsContext
+    ?? (input.brandFacts !== undefined && input.vertical !== undefined
+      ? { brandFacts: input.brandFacts, vertical: input.vertical }
+      : undefined);
+  if (ownWordsCreatives.length && !ownWordsContext) {
+    throw new Error("Current Brand facts could not be checked for owner-written ads.");
+  }
+  const ownWordsWarning = ownWordsContext
+    ? ownWordsCreatives.flatMap((creative) => copyClaimWarnings({
+      headline: creative.headline ?? "",
+      primary_text: creative.primaryText ?? "",
+      description: creative.description ?? "",
+    }, ownWordsContext.brandFacts, ownWordsContext.vertical, { ownPicture: true }))[0]
+    : undefined;
+  if (ownWordsWarning) blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", ownWordsWarning));
+  const policyHit = adPolicyHits(input.creatives.filter((creative) => !creative.ownWords), input.vertical)[0];
   if (policyHit) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", say("adPolicy", {
       term: policyHit.term, named: policyHit.headline == null ? "no" : "yes", headline: policyHit.headline ?? "",
