@@ -18,6 +18,11 @@ function script(): string {
   return body.join("\n");
 }
 
+function guard(): string {
+  const match = file.match(/^    if: >-\n((?:      .+\n)+)/m);
+  return match?.[1] ?? "";
+}
+
 let dir: string;
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -54,5 +59,19 @@ describe("workflow shape", () => {
     expect(file).toContain("workflow_run:");
     expect(file).not.toMatch(/pull_request|checkout|actions\/download-artifact/);
     expect(file).toMatch(/permissions:\n {2}actions: write\n/);
+  });
+
+  it("rejects pull-request and fork workflow runs", () => {
+    expect(guard()).toContain(
+      "contains(fromJSON('[\"push\",\"schedule\",\"workflow_dispatch\"]'), github.event.workflow_run.event)",
+    );
+    expect(guard()).toContain("github.event.workflow_run.head_repository.full_name == github.repository");
+  });
+
+  it("allows only successful runs from trusted main or next refs", () => {
+    expect(guard()).toContain("github.event.workflow_run.conclusion == 'success'");
+    expect(guard()).toContain(
+      "contains(fromJSON('[\"main\",\"next\"]'), github.event.workflow_run.head_branch)",
+    );
   });
 });
