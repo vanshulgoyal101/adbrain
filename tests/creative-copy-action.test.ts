@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 /** updateCreativeCopy (#280): the owner's own wording, saved without the AI. */
 
 const h = vi.hoisted(() => ({
   getUser: vi.fn(),
+  requestHeaders: new Headers(),
   rows: {} as Record<string, unknown>,
   updates: [] as { table: string; payload: Record<string, unknown> }[],
   filters: [] as { table: string; op: string; args: unknown[] }[],
@@ -12,6 +14,7 @@ const h = vi.hoisted(() => ({
   instructions: vi.fn(),
 }));
 
+vi.mock("next/headers", () => ({ headers: async () => h.requestHeaders }));
 vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
 vi.mock("@/lib/audit", () => ({ logEvent: h.logEvent }));
 vi.mock("@/lib/supabase/queries", () => ({ getActiveInstructionsText: h.instructions }));
@@ -63,6 +66,7 @@ const generation = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.requestHeaders = new Headers();
   h.updates.length = 0;
   h.filters.length = 0;
   h.getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
@@ -80,6 +84,18 @@ async function save(over: Partial<typeof copy> = {}) {
 }
 
 describe("updateCreativeCopy", () => {
+  it("does not read or write creative data during a draft-only smoke", async () => {
+    h.requestHeaders = new Headers({ [SMOKE_FENCE_HEADER]: "draft-only" });
+
+    const result = await save();
+
+    expect(result.ok).toBe(false);
+    expect(h.filters).toEqual([]);
+    expect(h.updates).toEqual([]);
+    expect(h.logEvent).not.toHaveBeenCalled();
+    expect(h.revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("refuses when signed out and saves nothing", async () => {
     h.getUser.mockResolvedValue({ data: { user: null } });
     await expect(save()).resolves.toEqual({ ok: false, error: "Not authenticated." });
