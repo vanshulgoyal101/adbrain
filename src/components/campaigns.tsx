@@ -74,7 +74,9 @@ import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFacts, review
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
-import { LivePicture, type PicturePreview } from "@/components/live-picture";
+import { CampaignAdPicker } from "@/components/campaign-ad-picker";
+import { VideoPrepare, type VideoPreparationState } from "@/components/video-prepare";
+import type { PicturePreview } from "@/components/live-picture";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
@@ -96,7 +98,6 @@ import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectatio
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
-import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { preparedAudienceForm, targetingFromEditor, withPreparedAudienceForm, targetingToEditor } from "@/lib/campaign/editor-targeting";
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
@@ -110,6 +111,7 @@ import {
   spendHealth,
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget, weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
+import { campaignAdCount, campaignAdSetCount, MEDIA_PILOT_AD_LIMIT } from "@/lib/campaign/ad-count";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, reviewableCampaign, runningNow } from "@/lib/campaign/activation";
 import { WHATSAPP_LINK_URL } from "@/lib/meta/setup-checklist";
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
@@ -151,9 +153,6 @@ function serviceAreaLine(area: NonNullable<ReviewDTO["serviceArea"]>, tc: Return
 
 const LEAD_FORMS_FRESH_MS = 60_000;
 const CAMPAIGNS_FRESH_MS = 15 * 60_000;
-/** Two rows of three on a phone, so Campaign name and budget are one scroll away (#305). */
-const PHONE_PICKER_ADS = 6;
-
 function readCampaignSyncTime(key: string): number {
   try { return Number(localStorage.getItem(key)); } catch { return 0; }
 }
@@ -212,6 +211,10 @@ type CampaignsProps = {
   /** #847: drafts read on the server, so the Saved drafts line is in the first paint (no layout shift); the client still refreshes them. */
   initialDrafts?: DraftDTO[];
   initialResults: Record<string, CampaignResult>;
+  /** #781: owner-scoped IDs classified as videos on the server when video uploads are enabled. */
+  videoAssetIds?: string[];
+  /** The server authorized this business for the media pilot; Review and launch recheck it. */
+  mediaPilotEnabled?: boolean;
   /** #1003: one id per server render, so a replayed page (browser back) refetches its list. */
   renderId?: string;
   leadForms: LeadForm[];
@@ -295,6 +298,8 @@ function BusinessCampaigns({
   initialNextCursor = null,
   initialDrafts,
   initialResults,
+  videoAssetIds = [],
+  mediaPilotEnabled = false,
   renderId,
   leadForms,
   leadFormError,
@@ -361,6 +366,11 @@ function BusinessCampaigns({
   const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
   const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
   const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
+  const pilotCountIsExact = !abTest || targeting.ageMode === "manual";
+  const pilotAdCount = campaignAdCount(selected.size, pilotCountIsExact && abTest, targeting.ageMin, targeting.ageMax);
+  const pilotLimitError = mediaPilotEnabled && pilotAdCount > MEDIA_PILOT_AD_LIMIT
+    ? tc(pilotCountIsExact ? "picker.pilotLimitExceeded" : "picker.pilotLimitAtLeast", { max: MEDIA_PILOT_AD_LIMIT, count: pilotAdCount })
+    : null;
   const [noFacebookReels, setNoFacebookReels] = useState(false);
   // #1155: who sees the ads folds under one line; it starts open only for a setup that already changed it.
   const [whoOpen, setWhoOpen] = useState(() => abTest || targeting.locationMode === "manual" || targeting.ageMode === "manual"
@@ -378,7 +388,7 @@ function BusinessCampaigns({
     const fieldId = placedError?.at === "leadform" || placedError?.at === "budget" ? placedError.at : placedError?.at === "ads" ? "campaign-ad-picker" : null;
     if (fieldId) {
       const target = document.getElementById(fieldId);
-      const field = fieldId === "campaign-ad-picker" ? target?.querySelector<HTMLElement>("button") : target;
+      const field = fieldId === "campaign-ad-picker" ? target?.querySelector<HTMLElement>('button[aria-pressed]') : target;
       field?.scrollIntoView?.({ block: "center" });
       field?.focus();
     } else if (placedError) placedErrorRef.current?.scrollIntoView?.({ block: "center" });
@@ -392,7 +402,9 @@ function BusinessCampaigns({
     flushSync(() => setShowComposer(true));
     const target = targets.map((id) => document.getElementById(id)).find((element) => element !== null);
     if (target?.closest("details#who-sees-it") && !whoOpen) flushSync(() => setWhoOpen(true));
-    const control = target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
+    const control = target?.id === "campaign-ad-picker"
+      ? target.querySelector<HTMLElement>('button[aria-pressed]')
+      : target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
     control?.scrollIntoView?.({ block: "center" });
     control?.focus();
   }
@@ -460,7 +472,6 @@ function BusinessCampaigns({
   const [rewritingAsks, setRewritingAsks] = useState(false);
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
-  const [showAllAds, setShowAllAds] = useState(false);
   const [adDraft, setAdDraft] = useState<AdText | null>(null);
   const [adPicture, setAdPicture] = useState<PicturePreview | null>(null);
   const savedPickerAds = approved.map((c) => editedAds[c.id] ?? c);
@@ -468,6 +479,16 @@ function BusinessCampaigns({
   const adDraftUnsaved = editingAd !== null && ((adDraft !== null && !sameAdText(adDraft, savedAdText(editingAd))) || adPicture !== null);
   // While editing, the tile previews the unsaved headline (#387).
   const pickerAds = savedPickerAds.map((c) => (c.id === editingAdId && adDraft ? { ...c, headline: adDraft.headline } : c));
+  const selectedVideoItems = showComposer && creationMode === "manual" && connectedForDraft
+    ? pickerAds.flatMap((ad) => selected.has(ad.id) && ad.media_asset_id && videoAssetIds.includes(ad.media_asset_id)
+      ? [{ id: ad.media_asset_id, label: ad.headline?.trim() || tc("picker.thisAd") }] : [])
+    : [];
+  const selectedVideos = selectedVideoItems.map((item) => item.id);
+  const videoKey = [...new Set(selectedVideos)].sort().join(",");
+  const [videoProgress, setVideoProgress] = useState<{ key: string; state: VideoPreparationState } | null>(null);
+  if (videoProgress && videoProgress.key !== videoKey) setVideoProgress(null);
+  const onVideoProgress = useCallback((state: VideoPreparationState) => setVideoProgress({ key: videoKey, state }), [videoKey]);
+  const videosReady = selectedVideos.length === 0 || (videoProgress?.key === videoKey && videoProgress.state === "ready");
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
     setPrepareReview(null);
     const message = "Your inputs are preserved. A draft save already sent may still finish; check Saved drafts before retrying. No campaign was created.";
@@ -512,7 +533,9 @@ function BusinessCampaigns({
   // #1926: deleted campaigns and saved drafts aren't running; with any of them the header keeps its New campaign.
   const liveCount = campaigns.filter(campaign => !goneInMeta(campaign)).length;
   const hasHistory = campaigns.length > 0 || savedDrafts.length > 0;
-  const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
+  const composerAdSetCount = abTest && targeting.ageMode === "manual"
+    ? campaignAdSetCount(true, targeting.ageMin, targeting.ageMax) : abTest ? 2 : 1;
+  const totalDailyBudget = effectiveDailyBudget(budget, composerAdSetCount);
   // #1342: live campaigns other than `exceptId`, the server's list updated by what this page has since turned on or off.
   function otherLiveBudgets(exceptId?: string): CampaignSpend[] {
     const byId = new Map((weeklyCap?.active ?? []).map((item) => [item.id, item]));
@@ -958,15 +981,10 @@ function BusinessCampaigns({
     return () => window.clearTimeout(timer);
   }, [metaReady, syncStorageKey]);
 
-  function toggle(id: string) {
+  function useSelectedAds(ids: string[]) {
     if (!unresolvedRecovery()) setPrepareReview(null);
     if (placedError?.at === "ads") setPlacedError(null);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected(new Set(ids));
   }
 
   function manualDraftInput(requireComplete = true): DraftInput {
@@ -997,7 +1015,7 @@ function BusinessCampaigns({
     return audiencePlanKey({ ...input, goal: draftGoal });
   }
   const backgroundPlanKey = (() => {
-    if (!showComposer || creationMode !== "manual" || selected.size === 0) return null;
+    if (!showComposer || creationMode !== "manual" || selected.size === 0 || pilotLimitError) return null;
     try {
       const planned = { goal: draftGoal, creativeIds: [...selected], targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions), destination };
       return needsAudiencePlan(planned) ? audiencePlanKey(planned) : null;
@@ -1027,6 +1045,11 @@ function BusinessCampaigns({
     const timer = window.setTimeout(startBackgroundPlan, BACKGROUND_PLAN_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [backgroundPlanKey]);
+  useEffect(() => {
+    if (!pilotLimitError) return;
+    backgroundPlanRef.current?.controller.abort();
+    backgroundPlanRef.current = null;
+  }, [pilotLimitError]);
   useEffect(() => () => backgroundPlanRef.current?.controller.abort(), []);
 
   /** The background reply for exactly this input, used once; null if there is none or it failed. */
@@ -1117,6 +1140,12 @@ function BusinessCampaigns({
       failAt("ads", "Choose at least one ad to send to Meta.");
       return;
     }
+    if (reviewAfterSave && pilotLimitError) {
+      const field = document.getElementById("campaign-ad-picker")?.querySelector<HTMLElement>('button[aria-pressed]');
+      field?.scrollIntoView?.({ block: "center" });
+      field?.focus();
+      return;
+    }
     if (reviewAfterSave && budget <= 0) {
       failAt("budget", "Set a daily budget above ₹0.");
       return;
@@ -1184,7 +1213,7 @@ function BusinessCampaigns({
   const autoReviewRef = useRef(Boolean(newCampaign?.review) && !initialSetup);
   const [autoReviewPending, setAutoReviewPending] = useState(Boolean(newCampaign?.review) && !initialSetup);
   const autoReview = useEffectEvent(() => {
-    if (!autoReviewRef.current || recoveryPending || unresolvedRecovery() || isPreparing()) return;
+    if (!autoReviewRef.current || recoveryPending || unresolvedRecovery() || isPreparing() || !videosReady) return;
     if (selected.size === 0 || (destination === "instant_form" && !leadFormId && !formsError)) return;
     if (destination === "whatsapp" && whatsappStatus?.state !== "ready") return;
     autoReviewRef.current = false;
@@ -1195,7 +1224,7 @@ function BusinessCampaigns({
     if (!showComposer || !connectedForDraft || whatsappStatus === null) return;
     const timer = window.setTimeout(autoReview, 0);
     return () => window.clearTimeout(timer);
-  }, [showComposer, connectedForDraft, whatsappStatus, recoveryPending, selected, destination, leadFormId, formsError]);
+  }, [showComposer, connectedForDraft, whatsappStatus, recoveryPending, selected, destination, leadFormId, formsError, videosReady]);
 
   function stableIdempotencyKey(review: ReviewDTO): string {
     const next = stableOperationKey(operationRef.current, review, () => crypto.randomUUID());
@@ -1959,79 +1988,30 @@ function BusinessCampaigns({
             ) : (
               <>
                 <div>
-                  <Label>Choose ads</Label>
+                  {mediaPilotEnabled && <p className="mt-1 text-sm text-slate-600">{tc("picker.pilotLimit", { max: MEDIA_PILOT_AD_LIMIT })}</p>}
+                  {pilotLimitError && <p id="pilot-limit-error" role="alert" className="mt-1 text-sm font-medium text-red-800">{pilotLimitError}</p>}
                   {/* #724: above the grid, so it shows where focus lands on the first ad. */}
                   {placedError?.at === "ads" && <p id="ads-error" role="alert" className="mt-1 text-sm font-medium text-red-800">{placedError.message}</p>}
-                  <div id="campaign-ad-picker" className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
-                    {pickerAds.map((c, index) => {
-                      const isSel = selected.has(c.id);
-                      return (
-                        // #305: on a phone, ads after the first two rows wait behind "Show all" unless selected.
-                        <div key={c.id} className={cn("relative flex min-w-0 flex-col gap-1.5", !showAllAds && index >= PHONE_PICKER_ADS && !isSel && "max-sm:hidden")}>
-                        <button
-                          type="button"
-                          onClick={() => toggle(c.id)}
-                          aria-pressed={isSel}
-                          aria-describedby={placedError?.at === "ads" ? "ads-error" : undefined}
-                          aria-label={c.headline || "Select ad"}
-                          className={cn(
-                            "group relative min-w-0 overflow-hidden rounded-md border-2 text-left transition-colors",
-                            isSel
-                              ? "border-slate-950 shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
-                              : "border-slate-200 hover:border-slate-300",
-                          )}
-                        >
-                          <div className="relative aspect-square bg-slate-100">
-                            {c.id === editingAdId && adPicture && (
-                              <div className="absolute inset-0 z-[1] bg-slate-100">
-                                <LivePicture preview={adPicture} />
-                              </div>
-                            )}
-                            {c.image_url && (
-                              <img
-                                src={creativeThumbnailUrl(c.image_url)}
-                                alt={c.headline || "Ad preview"}
-                                className="h-full w-full object-contain"
-                                loading="lazy"
-                                onError={(event) => {
-                                  if (c.image_url && event.currentTarget.src !== c.image_url) event.currentTarget.src = c.image_url;
-                                }}
-                              />
-                            )}
-                          </div>
-                          {isSel && (
-                            <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950 text-white">
-                              <CheckCircle2 className="h-4 w-4" />
-                            </span>
-                          )}
-                          <p className="truncate px-2 py-1.5 text-xs font-medium text-slate-700 max-sm:hidden">
-                            {c.headline}
-                          </p>
-                        </button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          aria-label={`Edit ${c.headline || "ad"}`}
-                          aria-expanded={editingAdId === c.id}
-                          onClick={() => {
-                            setAdEditNotes(null);
-                            setEditingAdId(c.id);
-                          }}
-                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:min-h-0 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0 max-sm:after:absolute max-sm:after:-inset-1 max-sm:after:content-['']"
-                        >
-                          {/* #847 T6: on a phone, Edit is a corner icon so a row of ads isn't followed by a row of buttons. */}
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" /><span className="max-sm:sr-only">Edit</span>
-                        </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {!showAllAds && pickerAds.some((c, index) => index >= PHONE_PICKER_ADS && !selected.has(c.id)) && (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 h-11 w-full sm:hidden">
-                      Show all {pickerAds.length} ads
-                    </Button>
-                  )}
+                  <CampaignAdPicker
+                    ads={pickerAds}
+                    selected={[...selected]}
+                    dailyBudgetInr={totalDailyBudget}
+                    videoAssetIds={videoAssetIds}
+                    words={campaignWords}
+                    editingAdId={editingAdId}
+                    adPicture={adPicture}
+                    hasPlacedError={placedError?.at === "ads"}
+                    hasPilotLimitError={Boolean(pilotLimitError)}
+                    onSelectionChange={useSelectedAds}
+                    onEditAd={(id) => { setAdEditNotes(null); setEditingAdId(id); }}
+                  />
+                  {selectedVideos.length > 0 && <VideoPrepare
+                    assetIds={selectedVideos}
+                    labels={Object.fromEntries(selectedVideoItems.map((item) => [item.id, item.label]))}
+                    onProgress={onVideoProgress}
+                    words={{ working: tc("picker.preparing"), delayed: tc("picker.prepareLong"), waiting: tc("picker.prepareWaiting"),
+                      ready: tc("picker.prepared"), error: tc("picker.prepareFailed"), retry: tc("targeting.retry") }}
+                  />}
                   {editingAd && (
                     <section aria-label="Edit ad" className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                       <p className="mb-1 truncate text-sm font-medium text-slate-800">Editing: {adDraft?.headline ?? editingAd.headline}</p>
@@ -2244,6 +2224,7 @@ function BusinessCampaigns({
                 </div>
 
                 <CampaignTestOptions abTest={abTest} onAbTest={setAbTest} totalDailyBudget={totalDailyBudget}
+                  adSetCount={composerAdSetCount} agePending={abTest && targeting.ageMode === "ai"}
                   {...(internal ? { noFacebookReels, onNoFacebookReels: setNoFacebookReels } : {})} />
                 </div>
                 </details>
@@ -2267,7 +2248,7 @@ function BusinessCampaigns({
                     <Save className="h-4 w-4" aria-hidden="true" /> Save draft
                   </Button>
                   {/* #772: incomplete stays tappable (aria-disabled, so telemetry skips it) and says what's missing beside the control. */}
-                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing} aria-disabled={selected.size === 0 || budget <= 0 || composerCap?.exceeds || undefined}>
+                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing} aria-disabled={selected.size === 0 || budget <= 0 || composerCap?.exceeds || Boolean(pilotLimitError) || undefined}>
                     {preparing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (

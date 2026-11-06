@@ -60,6 +60,14 @@ describe("durable campaign worker", () => {
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.checkpoint).toHaveBeenCalledWith(expect.objectContaining({ state: "failed" }));
   });
+  it("rejects a queued request when a fresh Review has a changed pilot eligibility hash", async () => {
+    mocks.review.mockResolvedValue({ kind: "review", review: {
+      canCreatePaused: true, selected: {}, resolvedLocation: {}, planHash: "b".repeat(64), connectionGeneration: 1,
+    } });
+    expect((await runCampaignJob(database, row, new AbortController().signal)).kind).toBe("failed");
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.checkpoint).toHaveBeenCalledWith(expect.objectContaining({ state: "failed" }));
+  });
   it("leaves an unexpected post-transmission failure for reconciliation instead of overwriting IDs", async () => {
     mocks.execute.mockRejectedValue(new Error("transport disappeared"));
     await expect(runCampaignJob(database, row, new AbortController().signal)).rejects.toThrow("transport disappeared");

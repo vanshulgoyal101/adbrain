@@ -66,6 +66,8 @@ describe("splitAgeRange", () => {
 
   it("keeps a single band when the range is too narrow", () => {
     expect(splitAgeRange(30, 34)).toHaveLength(1);
+    expect(splitAgeRange(25, 30)).toHaveLength(1);
+    expect(splitAgeRange(25, 31)).toHaveLength(2);
   });
 
   it("labels each band", () => {

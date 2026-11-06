@@ -11,6 +11,9 @@ import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
 import { SetupGoLive } from "@/components/setup-go-live";
 import { setupWelcome } from "@/lib/campaign/setup-welcome";
+import { findVideoAssetIds } from "@/lib/campaign/creative-video";
+import { mediaPilotEnabled } from "@/lib/media/pilot";
+import { mediaUploadsEnabled } from "@/lib/media/store";
 import { BUDGET_PRESETS } from "@/lib/campaign/budget";
 import { setupPhone } from "@/lib/brand/setup-fields";
 import { brandDestination } from "@/lib/brand/usable";
@@ -123,6 +126,14 @@ export default async function CampaignsPage({
     ledgerTotals(),
   ]);
   const approved = approvedRows.map(clientCreative);
+  const pilotEligible = async () => {
+    if (!mediaUploadsEnabled()) return false;
+    const actor = await requireOwnedBusiness(business.id);
+    return mediaPilotEnabled(actor.businessId);
+  };
+  const videoAssetIds = () => createClient().then((supabase) => findVideoAssetIds(
+    supabase, business.id, approved.flatMap((creative) => creative.media_asset_id ? [creative.media_asset_id] : []),
+  ));
   const metaReady = connection.ready;
   const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
   const campaigns = page.campaigns;
@@ -155,8 +166,12 @@ export default async function CampaignsPage({
     const lastDaily = again && last?.daily_budget != null ? Number(last.daily_budget) : null;
     const initialDaily = lastDaily === null ? undefined
       : BUDGET_PRESETS.reduce((best, amount) => Math.abs(amount - lastDaily) < Math.abs(best - lastDaily) ? amount : best);
+    const prepare = campaignsTranslator(await campaignWordsRead);
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding} returning={again} initialDaily={initialDaily}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWordsRead} appReviewPending={metaAppReviewPending()} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWordsRead}
+      videoAssetIds={await videoAssetIds()} prepareWords={{ working: prepare("picker.preparing"), delayed: prepare("picker.prepareLong"),
+        waiting: prepare("picker.prepareWaiting"), ready: prepare("picker.prepared"), error: prepare("picker.prepareFailed"), retry: prepare("targeting.retry") }}
+      appReviewPending={metaAppReviewPending()} />;
   }
 
   const campaignWords = await campaignWordsRead;
@@ -178,6 +193,8 @@ export default async function CampaignsPage({
         ) : <Campaigns
           business={business}
           approved={approved}
+          videoAssetIds={await videoAssetIds()}
+          mediaPilotEnabled={await pilotEligible()}
           initialCampaigns={campaigns}
           initialNextCursor={page.nextCursor}
           initialDrafts={drafts}

@@ -31,6 +31,7 @@ const draft: DraftRecord = {
 function loaders(overrides: Partial<PreflightLoaders> = {}): PreflightLoaders {
   return {
     findDraft: async () => draft,
+    isMediaPilot: () => false,
     findCreatives: async () => [{
       id: draft.input.creativeIds[0],
       businessId: actor.businessId,

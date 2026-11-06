@@ -41,6 +41,8 @@ export type PreflightLoaders = {
   redrawPictureNumber?: (actor: PreflightActor, creativeId: string, phone: string) => Promise<string | null>;
   /** #784: the owner confirmed the current rights terms for their own photos; read only when an ad uses one. */
   findMediaConsent?: (actor: PreflightActor) => Promise<boolean>;
+  /** Server-only eligibility, evaluated for the authorized Review actor. */
+  isMediaPilot: (actor: PreflightActor) => boolean;
   /** #2714: the Brand's chosen tracking and Meta's read of it for a signup or sales goal; absent or failing blocks Review. */
   findTracking?: (actor: PreflightActor, goal: ConversionGoal) => Promise<ReviewTracking>;
   getConnection: (actor: PreflightActor) => Promise<PreflightConnection | null>;
@@ -82,6 +84,7 @@ export async function prepareCampaignReview(
   const destination: ReviewDestination = draft.input.destination ?? "instant_form";
   // #2710/#2714: a signup or sales goal stays closed to every account until the CEO opens it (websiteGoalOpen).
   if (destination === "website" && !(websiteGoalOpen(draft.input.websiteGoal) && await input.websiteOpen?.())) return { kind: "website_closed" };
+  const mediaPilotEnabled = loaders.isMediaPilot(input.actor);
   const goal = conversionGoal(draft.input.destination, draft.input.websiteGoal);
   const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts, tracking] = await Promise.all([
     loaders.getConnection(input.actor),
@@ -137,6 +140,7 @@ export async function prepareCampaignReview(
       costPerResultRupees,
       locale: input.locale,
       mediaConsent,
+      mediaPilotEnabled,
     }),
   };
 }

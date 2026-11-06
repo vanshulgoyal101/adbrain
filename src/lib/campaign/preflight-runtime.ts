@@ -4,9 +4,11 @@ import { hasStoryDesign, savedBackground, storedPictureDesign } from "@/lib/crea
 import { renderAndPersistDesign } from "@/lib/creative/persist";
 import { logEvent } from "@/lib/audit";
 import { hasCurrentMediaConsent } from "@/lib/media/consent";
+import { mediaPilotEnabled } from "@/lib/media/pilot";
 import { getEnv } from "@/lib/env";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
 import type { Json } from "@/lib/types";
+import { loadCreativeVideos } from "@/lib/campaign/creative-video";
 import { getCostPerResult } from "@/lib/campaign/result-evidence-store";
 import { checkWebsiteReach } from "@/lib/campaign/website-reach";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
@@ -29,6 +31,12 @@ export function buildCampaignPreflightLoaders(
   let connectionStatus: ReturnType<typeof getConnectionStatus> | undefined;
   const status = () => (connectionStatus ??= getConnectionStatus(authorizedBusiness));
   return {
+    isMediaPilot: (actor) => {
+      if (actor.businessId !== authorizedBusiness.businessId || actor.userId !== authorizedBusiness.userId) {
+        throw new Error("Campaign review actor does not match the authorized business.");
+      }
+      return mediaPilotEnabled(authorizedBusiness.businessId);
+    },
     findDraft: async (actor, draftId) => {
       const { data } = await supabase
         .from("campaign_drafts")
@@ -45,7 +53,10 @@ export function buildCampaignPreflightLoaders(
         .select("id, business_id, status, image_url, headline, primary_text, cta, generation, media_asset_id")
         .in("id", creativeIds)
         .eq("business_id", businessId);
-      return (data ?? []).map((creative) => ({
+      const rows = data ?? [];
+      const videos = await loadCreativeVideos(supabase, businessId, rows.map((creative) => creative.id), async () => (await status()).selected?.adAccountId);
+      return rows.map((creative) => ({
+        video: videos.get(creative.id),
         id: creative.id,
         businessId: creative.business_id,
         approved: creative.status === "approved",

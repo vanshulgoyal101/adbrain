@@ -765,6 +765,52 @@
     "closeNav": "Close navigation",
     "continueFirstAd": "Continue your first ad"
   },
+  "websiteTracking": {
+    "card": {
+      "title": "Website tracking",
+      "intro": "Only needed for website leads or sales.",
+      "legend": "Which tracking source should AdBrain use?",
+      "noSource": "No website tracking source is available to this ad account.",
+      "noSourceHelp": "Check Meta access or open Events Manager.",
+      "unreadable": "We couldn't check tracking for this ad account.",
+      "unreadableHelp": "Check Meta access, then try again.",
+      "choose": "Choose which tracking source to use.",
+      "quiet": "Meta hasn't seen any recent events.",
+      "missing": "Meta hasn't seen one or more events for website goals.",
+      "selectionUnavailable": "Choosing a tracking source is not available yet.",
+      "pixelUnavailable": "Unavailable",
+      "unnamed": "Tracking source {n}",
+      "leadCount": "Website leads (Lead): {n}",
+      "purchaseCount": "Sales (Purchase): {n}",
+      "window": "Checked from {since} to {until}",
+      "countsNote": "These are Meta events, not orders verified by AdBrain.",
+      "checkAgain": "Check again",
+      "checking": "Checking…",
+      "checkAccess": "Check Meta access",
+      "eventsManager": "Open Events Manager"
+    },
+    "goals": {
+      "legend": "What do you want from your website?",
+      "visits": "Visits",
+      "leads": "Website leads",
+      "sales": "Sales",
+      "needsTracking": "Needs tracking",
+      "unavailable": "Not available yet",
+      "missing": "Meta hasn't seen the event for this goal.",
+      "finish": "Finish tracking setup"
+    },
+    "review": {
+      "visitsHint": "Meta counts people who open your page.",
+      "leadsHint": "Meta reports Lead events, not customers verified by AdBrain.",
+      "salesHint": "Meta reports Purchase events, not orders verified by AdBrain.",
+      "attributionLabel": "Results counted within",
+      "attributionHelp": "Meta counts results after clicks or views in this period.",
+      "attributionUnavailable": "Not confirmed"
+    },
+    "chat": {
+      "draftMismatch": "We couldn't confirm the website goal on the saved draft. Check Saved drafts before retrying."
+    }
+  },
   "campaigns": {
     "header": {
       "running": "{n} running",
@@ -821,6 +867,41 @@
       "none": "No campaigns yet",
       "drafts": "{n, plural, one {Your # saved draft is below.} other {Your # saved drafts are below.}}",
       "start": "Pick your approved ads and a daily budget. Nothing spends until you go live."
+    },
+    "picker": {
+      "yourPhoto": "Your photo",
+      "yourVideo": "Your video",
+      "selectAd": "Select ad",
+      "adPreview": "Ad preview",
+      "edit": "Edit",
+      "editAd": "Edit {headline}",
+      "thisAd": "ad",
+      "choose": {
+        "title": "Choose ads",
+        "description": "Pick any mix. Each one runs as its own ad, and Meta spends more on the one that works.",
+        "filter": "Show",
+        "tabs": {
+          "all": "All",
+          "yours": "Yours",
+          "adbrain": "By AdBrain"
+        },
+        "adbrain": "AdBrain",
+        "videoWithDuration": "Your video · {duration}",
+        "emptyAdbrain": "No ads made yet.",
+        "emptyYours": "No photos or videos yet.",
+        "budgetAdvice": "At {money} a day, Meta tests about 3–4 ads well; more ads share the budget thinly.",
+        "pickOne": "Pick at least 1 ad",
+        "use": "{n, plural, one {Use # ad} other {Use # ads}}",
+        "maxAds": "Up to {n} ads per campaign."
+      },
+      "preparing": "Facebook is preparing this video…",
+      "prepareLong": "Facebook is still preparing this video. You can wait here or check again later.",
+      "prepareWaiting": "Facebook is busy. We'll check this video again shortly.",
+      "prepared": "This video is ready at Facebook.",
+      "prepareFailed": "Facebook couldn't prepare this video. Try again or remove this ad.",
+      "pilotLimit": "This pilot can run up to {max} ads across all ad sets.",
+      "pilotLimitExceeded": "This pilot can run up to {max} ads, but this selection makes {count} ads across all ad sets. Remove an ad or change the audience test.",
+      "pilotLimitAtLeast": "This pilot can run up to {max} ads, but this selection will make at least {count} ads across all ad sets. Remove an ad or change the audience test."
     },
     "list": {
       "deleted": "Deleted ({n})",
@@ -1566,6 +1647,22 @@
     "adNoHeadline": "An ad you chose has no headline. Take it out of this campaign and choose another ad.",
     "adNotApproved": "The ad {named, select, yes {{name}} other {you chose}} isn't approved yet. Approve it on the Review page, or take it out of this campaign.",
     "adNoPicture": "The ad {named, select, yes {{name}} other {you chose}} has no picture yet. Take it out of this campaign and choose another ad.",
+    "adMediaGone": "The file {named, select, yes {in the ad {name}} other {in an ad you chose}} was removed or isn't ready. Take the ad out of this campaign, or replace it.",
+    "adVideoProcessing": "Your video is still being prepared by Facebook. Try again in a few minutes.",
+    "adVideoError": "The video {named, select, yes {in the ad {name}} other {you chose}} can't be used: {reason} Take it out of this campaign, or replace it.",
+    "adVideoWebsite": "Videos can't go to a website yet{named, select, yes { (ad {name})} other {}}. Take the video out of this campaign, or choose WhatsApp or an instant form.",
+    "videoProblem": {
+      "unreachable": "Couldn't send your video to Meta. Try again.",
+      "format": "Meta can't read this kind of video. Use an MP4 or MOV from your phone.",
+      "file": "Meta couldn't use this video file. Try another video.",
+      "too_small": "This video is too small for Meta. Use a longer or larger video.",
+      "invalid": "Meta couldn't accept this video. Try another video.",
+      "reconnect": "Reconnect Facebook to send videos to Meta.",
+      "throttled": "Meta is busy. Try again in a minute.",
+      "unknown": "Meta couldn't take this video right now. Try again.",
+      "disabled": "Videos are switched off for now."
+    },
+    "pilotLimitExceeded": "This pilot can run up to {max} ads, but this selection makes {count} ads across all ad sets. Remove an ad or change the audience test.",
     "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
     "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
     "whatsappMessage": "Your WhatsApp message: {problem}",

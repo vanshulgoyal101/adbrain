@@ -7,8 +7,9 @@ import {
   type NewMetaUpload,
 } from "./meta-media";
 
-/** #749: `media_meta_uploads` (20261104_media_meta_uploads.sql) and the `media_assets` it points at, service role only. */
+/** #749: the service role writes uploads; owners can read their own media and upload rows under RLS. */
 type Admin = Pick<SupabaseClient, "from" | "storage">;
+type Reader = Pick<SupabaseClient, "from">;
 
 const UPLOAD_COLUMNS = "id, business_id, media_asset_id, ad_account_id, kind, attempt, upload_name, image_hash, video_id, status, problem, width, height, length_ms, instagram_eligible, claimed_at, checked_at";
 /** Meta fetches the file within seconds of the POST; one hour also covers its single 389 retry. */
@@ -22,10 +23,10 @@ type UploadDbRow = {
   instagram_eligible: boolean | null; claimed_at: string; checked_at: string | null;
 };
 
-export function supabaseMetaMediaStore(admin: Admin): MetaMediaStore {
+export function supabaseMetaMediaReader(database: Reader): Pick<MetaMediaStore, "asset" | "upload"> {
   return {
     async asset(businessId, assetId) {
-      const { data, error } = await admin.from("media_assets").select("id, business_id, kind, status, deleted_at, path")
+      const { data, error } = await database.from("media_assets").select("id, business_id, kind, status, deleted_at, path")
         .eq("id", assetId).eq("business_id", businessId).maybeSingle();
       if (error) throw new Error("Couldn't read the media file.");
       if (!data) return null;
@@ -33,11 +34,17 @@ export function supabaseMetaMediaStore(admin: Admin): MetaMediaStore {
       return { id: row.id, businessId: row.business_id, kind: row.kind, status: row.status, deletedAt: row.deleted_at, path: row.path } satisfies MediaAsset;
     },
     async upload(assetId, adAccountId) {
-      const { data, error } = await admin.from("media_meta_uploads").select(UPLOAD_COLUMNS)
+      const { data, error } = await database.from("media_meta_uploads").select(UPLOAD_COLUMNS)
         .eq("media_asset_id", assetId).eq("ad_account_id", adAccountId).maybeSingle();
       if (error) throw new Error("Couldn't read the Meta upload.");
       return data ? fromDb(data as UploadDbRow) : null;
     },
+  };
+}
+
+export function supabaseMetaMediaStore(admin: Admin): MetaMediaStore {
+  return {
+    ...supabaseMetaMediaReader(admin),
     async insert(row) {
       const { data, error } = await admin.from("media_meta_uploads").insert(toDb(row)).select(UPLOAD_COLUMNS).single();
       if (error?.code === UNIQUE_VIOLATION) return null;

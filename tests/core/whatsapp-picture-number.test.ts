@@ -58,6 +58,7 @@ async function prepare(destination: "whatsapp" | "instant_form", printed: string
   });
   const loaders: PreflightLoaders = {
     findDraft: async () => draft(destination),
+    isMediaPilot: () => false,
     findCreatives: async () => [creative(printed)],
     findForm: async () => ({ id: "form-1", businessId: actor.businessId, active: true }),
     findWhatsAppNumber: async () => chatNumber,
