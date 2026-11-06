@@ -176,9 +176,10 @@ Each tick:
 and a resume pointer per role), starts a new CEO, has that CEO start one new chat per role, verifies each first
 turn, then deletes the old chats. The "AdBrain: hourly team health check" only checks that the team is running
 and on track: it unholds, assigns, wakes waiters (`wait-for-work.mjs --wake <role>`) and reports on #580/#364.
-It never creates, replaces or deletes a role chat, except for the duplicate sweep (extra copies of one role), a
-CEO that is missing entirely, and one early run of the daily refresh when the whole team is down (host restart),
-at most once a day (`~/.adbrain-supervisor/last-team-refresh`). Between refreshes, an ended-turn, stalled or
+It never creates, replaces, archives or deletes a chat and never starts another automation, with no exceptions.
+Duplicates get a keeper and a stand-down message; a missing CEO's routine duties are covered by the check; a
+whole-team outage is written to `~/.adbrain-supervisor/team-down` and reported. The daily refresh fixes all three,
+and the owner may start it by hand once after an outage. Between refreshes, an ended-turn, stalled or
 wrong-model chat waits for the next refresh; its urgent work moves to a live role in the same lane.
 
 **CEO handover and restarts (#2476).** The daily refresh closes the old CEO chat, and a
