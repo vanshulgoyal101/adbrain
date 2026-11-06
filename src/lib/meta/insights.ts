@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { outcomeDefinition, WEBSITE_CONVERSIONS, type CampaignDestination } from "@/lib/campaign/outcomes";
+import { BEST_AD_MARGIN, BEST_AD_MIN_RESULTS } from "@/lib/campaign/ad-results";
 import type { ConversionGoal } from "@/lib/campaign/website-tracking";
 import { websiteConversionEvent } from "@/lib/meta/destinations";
+export { BEST_AD_MARGIN, BEST_AD_MIN_RESULTS } from "@/lib/campaign/ad-results";
 
 export interface CampaignInsights {
   destination?: CampaignDestination;
@@ -258,10 +260,6 @@ export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, d
     };
   });
 }
-
-/** #783 (CPO): "Best so far" needs at least this many results, and a cost at least this much lower than the next ad. */
-export const BEST_AD_MIN_RESULTS = 5;
-export const BEST_AD_MARGIN = 0.3;
 
 /**
  * The ad to call "Best so far", or null while it's too early. The runner-up's cost is its cost per result,

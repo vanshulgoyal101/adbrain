@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdResultView } from "@/lib/campaign/ad-results-store";
-import { BEST_AD_MIN_RESULTS } from "@/lib/meta/insights";
+import { BEST_AD_MIN_RESULTS } from "@/lib/campaign/ad-results";
 
 /**
  * #1045 (#799's smallest slice): when one running ad costs far more per enquiry than the others, the
