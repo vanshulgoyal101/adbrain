@@ -90,7 +90,16 @@ describe("core: Review checks the saved ad wording (#739)", () => {
     primaryText: "Long hours seated can wear on posture over time. At Cedar Ridge Chiropractic in Austin, new patients start with a digital posture scan, then a board-certified chiropractor reviews the results with you and talks through your options. The $49 new-patient exam and consultation is a set price, and same-day appointments are available. Book an appointment or call the clinic.",
     description: null as string | null,
   };
-  function reviewCopy(copy: Partial<typeof savedAd>, vertical: string | null = "chiropractic clinic") {
+  function reviewCopy(
+    copy: Partial<typeof savedAd>,
+    vertical: string | null = "chiropractic clinic",
+    extra: { ownWords?: boolean; brandFacts?: string[] } = {},
+  ) {
+    const creative = {
+      id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png",
+      ...savedAd, ...copy,
+      ...(extra.ownWords ? { ownWords: true } : {}),
+    };
     return runPreflight({
       draft: { ...draft, destination: "instant_form" },
       draftId: "90d1d2bb-466c-4889-9af2-edb533e82531",
@@ -99,10 +108,12 @@ describe("core: Review checks the saved ad wording (#739)", () => {
         metaBusinessId: null, adAccountId: "act_9000000000000001", accountName: "Solaride 101",
         pageId: "900000000000002", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
       } },
-      creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", ...savedAd, ...copy }],
+      creatives: [creative],
       form: { id: "1732372914636573", businessId, active: true },
       website: "https://cedarridgechiro.com",
       vertical,
+      brandFacts: extra.brandFacts,
+      ...(extra.ownWords ? { ownWordsContext: { brandFacts: extra.brandFacts ?? [], vertical } } : {}),
       geo: { resolvedAreaLabel: "Austin, Texas", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "6840321905207", name: "Wellness" }] },
       hash: () => "a".repeat(64),
     });
@@ -139,5 +150,50 @@ describe("core: Review checks the saved ad wording (#739)", () => {
     const result = reviewCopy({ headline: "Guaranteed savings on your power bill" }, "solar energy");
     expect(result.blockers.map((item) => item.reason)).toEqual(["REVIEW_AD_POLICY"]);
     expect(result.blockers[0].message).toBe('"guaranteed saving" in the ad "Guaranteed savings on your power bill" is a promise Meta rejects. Edit the ad to describe the service instead.');
+  });
+
+  it("blocks an own-words price that the current Brand no longer states", () => {
+    const result = reviewCopy(
+      { headline: "₹4,999 bridal package", primaryText: "Book a consultation.", description: null },
+      "bridal salon",
+      { ownWords: true, brandFacts: ["₹499 bridal package"] },
+    );
+
+    expect(result.canCreatePaused).toBe(false);
+    expect(result.blockers.map((item) => item.reason)).toContain("REVIEW_AD_POLICY");
+    expect(result.blockers.find((item) => item.reason === "REVIEW_AD_POLICY")?.message).toContain("₹4,999");
+  });
+
+  it("uses the current vertical for an own-words personal-attribute check", () => {
+    const result = reviewCopy(
+      { headline: "Do you have back pain?", primaryText: "Book a consultation.", description: "" },
+      "chiropractic clinic",
+      { ownWords: true, brandFacts: ["Chiropractic consultations in Austin."] },
+    );
+
+    expect(result.blockers.map((item) => item.reason)).toContain("REVIEW_AD_POLICY");
+    expect(result.blockers.find((item) => item.reason === "REVIEW_AD_POLICY")?.message).toMatch(/don't ask/i);
+  });
+
+  it("allows an own-words price when the current Brand states it", () => {
+    const result = reviewCopy(
+      { headline: "₹4,999 bridal package", primaryText: "Book a consultation.", description: "" },
+      "bridal salon",
+      { ownWords: true, brandFacts: ["₹4,999 bridal package"] },
+    );
+
+    expect(result.blockers).toEqual([]);
+    expect(result.canCreatePaused).toBe(true);
+  });
+
+  it("does not apply owner-typed claim checks to generated ads", () => {
+    const result = reviewCopy(
+      { headline: "₹4,999 bridal package", primaryText: "Book a consultation.", description: "" },
+      "bridal salon",
+      { brandFacts: ["₹499 bridal package"] },
+    );
+
+    expect(result.blockers).toEqual([]);
+    expect(result.canCreatePaused).toBe(true);
   });
 });

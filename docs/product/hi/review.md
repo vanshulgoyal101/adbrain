@@ -1,5 +1,5 @@
 # जाँचें और लाइव करें
-<!-- mirrors ../review.md 2c2c260da399 -->
+<!-- mirrors ../review.md c2c0f186234d -->
 
 यह [Review and Go Live](../review.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -55,7 +55,9 @@ Preflight ownership, approved creative content, active lead form, connection cap
 currency, resolved targeting और budget जाँचता है। Health, education और solar/interiors businesses के
 लिए यह हर ad की saved wording को Create के banned-claim rule से भी पढ़ता है (सिर्फ़ पूरे शब्द), ताकि
 मालिक का बदला हुआ "Cures back pain" या "Guaranteed savings" Meta तक पहुँचने से पहले रुक जाए
-(`REVIEW_AD_POLICY`, #739, #2423)। Launch जो WhatsApp welcome, pre-typed message और quick questions
+(`REVIEW_AD_POLICY`, #739, #2423)। Owner-written ads के commercial claims और policy violations को
+मौजूदा Brand facts और vertical से भी जाँचा जाता है; Brand facts पढ़े न जा सकें तो Review उन्हें pass
+नहीं करता (#780)। Launch जो WhatsApp welcome, pre-typed message और quick questions
 भेजेगा (suggested, saved या edited), उन पर भी यही rule और #738 के policy rules लगते हैं, और blocker
 field का नाम बताता है (`REVIEW_WHATSAPP_MESSAGE`, #2422)। इसका hash
 review किए गए inputs, चुने हुए assets, resolved IDs और creative content को बाँधता है। Creation
@@ -102,7 +104,7 @@ Button दबाएँ, वह एक चीज़ ठीक करें, फ�
 | `REVIEW_WEBSITE_UNREACHABLE` | सिर्फ़ website ads (#2599): "AdBrain couldn't open your website {site}", "answered with an error ({code})", "isn't a public website address" या "sends visitors on to {other site}" | "Fix link in Your business" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | Address ठीक करें ताकि आपकी अपनी site खुले, site फिर से चालू करें, या WhatsApp chat ads पर जाएँ। |
 | `REVIEW_TRACKING` | सिर्फ़ website leads या sales लक्ष्य (#2714): "No website tracking source is available to this ad account" (देखें कि ad account आपका Meta pixel इस्तेमाल कर सकता है, नहीं तो Events Manager में एक सेट करें), "Choose which website tracking counts", "couldn't read your website tracking", "reported nothing from {since} to {until}" या "reported no {website lead (Lead)/sale (Purchase)} from {since} to {until}" | "Check tracking in Your business" (Brand खुलता है) | इस ad account को pixel की access दें, ऐसी tracking जोड़ें या चुनें जो लक्ष्य का event भेजे, Facebook फिर से जोड़ें, या visits का लक्ष्य चुनें। |
 | `REVIEW_GOAL_WORDS` | सिर्फ़ website leads या sales लक्ष्य (#2714): website leads लक्ष्य पर ad में Shop now बटन है, या sales लक्ष्य पर Sign up बटन | "Choose your ads" (ads पर ले जाता है) | ऐसा ad चुनें जिसका button लक्ष्य से मेल खाए, या लक्ष्य बदलें। |
-| `REVIEW_AD_POLICY` | ad में "{word}" is a health promise (clinics) या a promise (बाकी) "Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | लिखें कि सेवा क्या है, यह नहीं कि वह क्या ठीक करती है या किसकी गारंटी देती है। |
+| `REVIEW_AD_POLICY` | मौजूदा Brand facts में न होने वाला owner-written commercial claim, reader की personal attributes वाली wording, या ad में "{word}" health promise (clinics) या promise (बाकी) है जिसे Meta reject करता है | "Edit the ad's wording" | commercial claims के लिए मौजूदा Brand fact दें, सेवा के बारे में लिखें, और reader की personal attributes या गारंटी वाले दावों से बचें। |
 | `REVIEW_MEDIA_RIGHTS` | "आपके विज्ञापनों में आपकी अपनी तस्वीरें हैं। Meta पर भेजने से पहले पुष्टि करें कि ये तस्वीरें आपकी हैं या आपको इन्हें इस्तेमाल करने की अनुमति है।" | "तस्वीरों के अधिकार की पुष्टि करें" (Assets खुलता है) | Assets पर अपनी photos के साथ rights वाला box tick करें (हैंडओवर के बाद सिर्फ़ मौजूदा मालिक की पुष्टि मान्य है), या AdBrain की pictures चुनें। |
 | `REVIEW_BUDGET` | "Set a daily budget above ₹0." या "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | रोज़ ₹300, ₹500 या ₹1,000 चुनें। |
 | `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | उम्र चुनें, या **Recommend audience** दबाएँ। |
