@@ -24,7 +24,7 @@ const byKind = {}; for (const p of prs) { const k = /worker table|docs:/i.test(p
 console.log(`PRs merged (${hours}h, excl. trains): ${prs.length}; lead time median ${min(med(lead))} min, p90 ${min(p90(lead))} min`);
 for (const [k, v] of Object.entries(byKind)) console.log(`  ${k}: n=${v.length} median ${min(med(v))} p90 ${min(p90(v))}`);
 // comments
-const cs = api(`repos/${R}/issues/comments?since=${since}&per_page=100`).filter(c => c.created_at <= until);
+const cs = api(`repos/${R}/issues/comments?since=${since}&per_page=100`).filter(c => inWindow(c.created_at));
 const roles = rolesFromOwnerLabels(api(`repos/${R}/labels?per_page=100`).map(label => label.name));
 const who = (b) => roleForPost(b, roles);
 const sorted = cs.map(c => ({ t: Date.parse(c.created_at), who: who(c.body), body: c.body ?? "", issue: c.issue_url.split("/").pop() })).sort((a, b) => a.t - b.t);
