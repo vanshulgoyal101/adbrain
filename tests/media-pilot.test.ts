@@ -53,7 +53,7 @@ describe("media pilot business eligibility (#781)", () => {
     const request = { businessId: first, draftId: second, draftVersion: 1 };
     expect(preflightRequestSchema.safeParse({ ...request, mediaPilotEnabled: true }).success).toBe(false);
     const create = createCampaignRequestSchema.parse({
-      ...request, connectionGeneration: 1, planHash: "a".repeat(64), idempotencyKey: "test-idempotency-key", mediaPilot: true,
+      ...request, connectionGeneration: 1, planHash: "a".repeat(64), idempotencyKey: "idem-1234", mediaPilot: true,
     });
     expect(create).not.toHaveProperty("mediaPilot");
   });
