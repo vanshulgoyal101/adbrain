@@ -933,7 +933,7 @@ export class MetaClient {
     };
   }
 
-  async whatsappNumbers(): Promise<{ page: string | null; business: string[]; businessUnavailable?: true; pageUnavailable?: true }> {
+  async whatsappNumbers(): Promise<{ page: string | null; business: string[]; businessUnavailable?: true; pageUnavailable?: true; pageReadError?: unknown }> {
     const [pageResult, businessResult] = await Promise.allSettled([
       this.pageWhatsAppNumber(), this.businessWhatsAppNumbers(),
     ]);
@@ -946,7 +946,7 @@ export class MetaClient {
     }
     if (pageResult.status === "rejected") {
       if (!business.length) throw pageResult.reason;
-      return { page: null, business, pageUnavailable: true };
+      return { page: null, business, pageUnavailable: true, pageReadError: pageResult.reason };
     }
     return { page, business: business.filter((number) => number !== page) };
   }

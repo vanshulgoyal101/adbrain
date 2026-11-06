@@ -17,8 +17,8 @@ export async function readWhatsAppStatus(businessId: string): Promise<WhatsAppSt
   const context = await requireOwnedBusiness(businessId);
   const connection = await getConnectionStatus(context);
   if (!connection.selected || connection.capabilities.canCreatePaused.state !== "available") return { state: "unavailable" };
-  const { page, business, businessUnavailable, pageUnavailable } = await withMetaConnection(context, { purpose: "create_paused", event: "whatsapp_numbers" }, (meta) => meta.whatsappNumbers());
-  if (pageUnavailable) throw new MetaError("WhatsApp Page number could not be read.");
+  const { page, business, businessUnavailable, pageUnavailable, pageReadError } = await withMetaConnection(context, { purpose: "create_paused", event: "whatsapp_numbers" }, (meta) => meta.whatsappNumbers());
+  if (pageUnavailable) throw pageReadError ?? new MetaError("WhatsApp Page number could not be read.");
   const businessMasks = business.map(maskWhatsAppNumber);
   const counts = new Map<string, number>();
   for (const mask of businessMasks) counts.set(mask, (counts.get(mask) ?? 0) + 1);

@@ -91,8 +91,8 @@ const both = ["+919999994842", "+919999990874"];
 describe("core: WhatsApp button number against recorded Graph reads (#157)", () => {
   it("#2841: preserves confirmed WABA numbers when the recorded Page link state is unreadable", async () => {
     replay(recorded.tape);
-    await expect(new MetaClient(creds).whatsappNumbers()).resolves.toEqual({
-      page: null, business: both, pageUnavailable: true,
+    await expect(new MetaClient(creds).whatsappNumbers()).resolves.toMatchObject({
+      page: null, business: both, pageUnavailable: true, pageReadError: expect.any(Error),
     });
   });
 
@@ -411,8 +411,18 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
       message: "Meta is busy. Nothing was spent. Try again in a minute.",
     },
     {
+      name: "the Page-edge Meta 80008 throttle with confirmed WABA numbers",
+      target: PAGE, reply: rateLimited, expectedStatus: 429,
+      message: "Meta is busy. Nothing was spent. Try again in a minute.",
+    },
+    {
       name: "a provider HTTP 429 without a Graph error code",
       target: WABA, reply: { status: 429, body: { error: { message: "Rate limited" } } }, expectedStatus: 429,
+      message: "Meta is busy. Nothing was spent. Try again in a minute.",
+    },
+    {
+      name: "a Page-edge HTTP 429 with confirmed WABA numbers",
+      target: PAGE, reply: { status: 429, body: { error: { message: "Rate limited" } } }, expectedStatus: 429,
       message: "Meta is busy. Nothing was spent. Try again in a minute.",
     },
     {
