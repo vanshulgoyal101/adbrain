@@ -15,11 +15,12 @@ import {
   getPrimaryBusiness,
   hasLaunchedCampaign,
 } from "@/lib/supabase/queries";
-import { getMetaConnection, readTrackingStatusForBusiness } from "@/lib/meta/credentials";
+import { getMetaConnection } from "@/lib/meta/credentials";
 import { isInternalUser } from "@/lib/internal-accounts";
 import { createClient } from "@/lib/supabase/server";
 import { readWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status";
 import type { ReviewTracking } from "@/lib/campaign/website-tracking";
+import { readBrandTrackingStatus } from "@/services/brand-tracking";
 
 export const metadata = { title: OWNER_WORDS.business };
 
@@ -58,7 +59,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
     console.error("[brand.trackingWords]", error instanceof Error ? error.message : typeof error));
   const trackingStatusPromise = showTrackingPromise.then((showTracking) =>
     showTracking && business
-      ? readTrackingStatusForBusiness(business.id).catch((error: unknown) => {
+      ? readBrandTrackingStatus(business.id).catch((error: unknown) => {
           console.error("[brand.tracking]", error instanceof Error ? error.message : typeof error);
           return null;
         })
@@ -67,10 +68,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
   const [showTracking, trackingStatus, trackingWords] = await Promise.all([
     showTrackingPromise, trackingStatusPromise, trackingWordsPromise,
   ]);
-  const tracking: ReviewTracking = {
-    pixelId: trackingStatus?.pixelId ?? null,
-    status: trackingStatus,
-  };
+  const tracking: ReviewTracking = trackingStatus ?? { pixelId: null, status: null };
   // The Call now note reads WhatsApp status; it never blocks the page.
   const whatsappStatus: Promise<WhatsAppStatus> | null = business && connection?.ready
     ? readWhatsAppStatus(business.id).catch((): WhatsAppStatus => ({ state: "unavailable" }))

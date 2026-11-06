@@ -13,7 +13,7 @@ import { BRAND_LANGUAGE_NAME, CREATE_LANGUAGES } from "@/lib/languages";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { isInternalUser } from "@/lib/internal-accounts";
-import { readTrackingStatusForBusiness } from "@/lib/meta/credentials";
+import { readBrandTrackingStatus } from "@/services/brand-tracking";
 import type { ReviewTracking } from "@/lib/campaign/website-tracking";
 import type { BusinessInsert } from "@/lib/types";
 
@@ -29,8 +29,7 @@ export async function refreshBrandTracking(pixelId: string | null): Promise<Revi
     if (!business?.website?.trim()) return null;
     if (pixelId !== null && (typeof pixelId !== "string" || !/^\d+$/.test(pixelId))) return null;
 
-    const status = await readTrackingStatusForBusiness(business.id, pixelId ?? undefined);
-    return status ? { pixelId: status.pixelId, status } : null;
+    return readBrandTrackingStatus(business.id, pixelId ?? undefined);
   });
 }
 
