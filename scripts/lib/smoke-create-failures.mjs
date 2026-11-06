@@ -56,9 +56,10 @@ export function createFailureLines({ expected, saved, failures, usage }) {
   for (const failure of listed) {
     const angle = String(failure.angle ?? "unnamed").slice(0, 60);
     const attempts = failure.angleId ? rows.filter((row) => row.metadata?.angle === failure.angleId) : [];
+    const error = String(failure.error ?? "").split("\n")[0].slice(0, 160);
     const reason = failure.angleId
-      ? formatAttempts(attempts) || failure.code || "no per-ad cause recorded"
-      : String(failure.error ?? "no reason given").split("\n")[0].slice(0, 160);
+      ? formatAttempts(attempts) || failure.code || error || "no per-ad cause recorded"
+      : error || "no reason given";
     lines.push(`NOTE missing ad "${angle}": ${reason}`);
   }
   if (missing && listed.length < missing) {

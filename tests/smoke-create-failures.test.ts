@@ -82,6 +82,20 @@ describe("createFailureLines (#2504)", () => {
     ]);
   });
 
+  it("uses a bounded per-ad error when no provider attempt rows or code exist", () => {
+    const error = `${"provider failure ".repeat(12)}\nstack trace`;
+    const expectedReason = `${"provider failure ".repeat(9)}provide`;
+    expect(createFailureLines({
+      expected: 1,
+      saved: 0,
+      failures: [{ angle: "Problem", angleId: "problem", error }],
+      usage: [],
+    })).toEqual([
+      `NOTE missing ad "Problem": ${expectedReason}`,
+      "NOTE failed attempts: none recorded for this run",
+    ]);
+  });
+
   it("says when the result or the attempts were not read", () => {
     expect(createFailureLines({ expected: 3, saved: 1, failures: null, usage: null })).toEqual([
       "NOTE 2 missing ads not named by Create (the run's result was not read)",

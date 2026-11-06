@@ -49,3 +49,20 @@ describe("creativeFailureStage (#2515)", () => {
     expect(creativeFailureStage("?")).toBe("other");
   });
 });
+
+describe("creativeFailureDetails (#2504)", () => {
+  it("keeps each failed angle's identity and only adds a code for missing provider keys", async () => {
+    const module = await import("@/lib/creative/failure-message");
+    const details = Reflect.get(module, "creativeFailureDetails");
+    expect(typeof details).toBe("function");
+    if (typeof details !== "function") return;
+
+    expect(details([
+      { angle: { id: "value", name: "Value" }, message: "No AI keys", error: new NoLLMKeysError() },
+      { angle: { id: "price", name: "Price" }, message: "This creative could not be generated.", error: new Error("failed") },
+    ])).toEqual([
+      { angle: "Value", angleId: "value", error: "No AI keys", stage: "provider", code: "NO_LLM_KEYS" },
+      { angle: "Price", angleId: "price", error: "This creative could not be generated.", stage: "other" },
+    ]);
+  });
+});

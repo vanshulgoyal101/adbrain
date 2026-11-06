@@ -1,5 +1,5 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
-import { creativeFailureMessage, creativeFailureStage, type CreativeFailureStage } from "@/lib/creative/failure-message";
+import { creativeFailureMessage, creativeFailureResult, type CreativeFailureResult } from "@/lib/creative/failure-message";
 import { saveCreative } from "@/lib/creative/save";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -227,7 +227,7 @@ async function generate(req: Request, live?: LiveCreate) {
   const failed = new Map<string, { angle: AdAngle; error: unknown; message: string; savedUpTo?: string }>();
   // #2444: the step a finished ad (words and picture passed) reached when its save failed; it used to vanish unlogged.
   const saving = new Map<string, string>();
-  let failures: { angle: string; angleId: string; error: string; stage: CreativeFailureStage; code?: string }[] = [];
+  let failures: CreativeFailureResult[] = [];
   let topUp = 0;
   let pictureRetry = 0;
   const cost = { text: 0, image: 0 };
@@ -383,13 +383,7 @@ async function generate(req: Request, live?: LiveCreate) {
       live?.onTopUp(pictureRetry, "picture");
       await generateVariants({ ...run, angleIds: Object.keys(concepts), count: pictureRetry, concepts, ownerPhotos: undefined, recentCopy, signal: AbortSignal.timeout(retryBudget) });
     }
-    failures = [...failed.values()].map(({ angle, message, error }) => ({
-      angle: angle.name,
-      angleId: angle.id,
-      error: message,
-      stage: creativeFailureStage(error),
-      ...(error instanceof NoLLMKeysError ? { code: "NO_LLM_KEYS" } : {}),
-    }));
+    failures = [...failed.values()].map(creativeFailureResult);
     const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
     await progress(0, true, usageUnknown || inserted.length + failures.length < count, !inserted.length);
     if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS", failures }, { status: 400 });
