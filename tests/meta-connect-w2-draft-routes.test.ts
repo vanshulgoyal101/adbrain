@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fenceHeaderValue } from "../scripts/lib/smoke-fence.mjs";
 import { issueDraftCapability } from "@/lib/security/smoke-fence-server";
 
-vi.mock("@/lib/env", () => ({ getEnv: () => ({ TEST_SESSION_SECRET: "s".repeat(40) }) }));
+vi.mock("@/lib/env", () => ({ getEnv: () => ({ TEST_SESSION_SECRET: "s".repeat(40), SUPABASE_SERVICE_ROLE_KEY: "p".repeat(40) }) }));
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   requireOwnedBusiness: vi.fn(),
