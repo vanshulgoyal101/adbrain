@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
 import { finalizeUpload, signUpload, type MediaRow } from "@/lib/media/store";
 import { fakeSupabase } from "./helpers/media-fake";
@@ -262,14 +263,17 @@ describe("video metadata sanitation", () => {
   it("rejects an unsafe original at finalize without promoting it", async () => {
     const bytes = compact();
     const db = fakeSupabase();
-    const signed = await signUpload(db.client, {
+    const admin = Object.assign({}, db.client, {
+      rpc: async () => ({ data: { status: "reserved" }, error: null }),
+    }) as unknown as SupabaseClient;
+    const signed = await signUpload(admin, {
       businessId, userId: "u", mime: "video/mp4", bytes: bytes.length,
       sha256: createHash("sha256").update(bytes).digest("hex"), width: 720, height: 1280, durationMs: 2000, rightsConfirmedAt: "x",
     });
     if (signed.duplicate) throw new Error("Unexpected duplicate");
     db.objects.set(signed.path, bytes);
     const row = db.tables.media_assets.find((entry) => entry.id === signed.id) as MediaRow;
-    await expect(finalizeUpload(db.client, row)).rejects.toMatchObject({ status: 415, code: "MEDIA_TYPE" });
+    await expect(finalizeUpload(admin, row)).rejects.toMatchObject({ status: 415, code: "MEDIA_TYPE" });
     expect(db.objects.has(signed.path)).toBe(false);
     expect(db.storageCalls.filter((call) => call.op === "upload")).toHaveLength(0);
     expect(db.tables.media_assets[0]).toMatchObject({ status: "pending", deleted_at: expect.any(String) });
