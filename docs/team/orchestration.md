@@ -175,15 +175,26 @@ Each tick:
 VS Code restart ends every chat. Either way, GitHub and git are the memory. Start a new CEO with the text
 from `npm run team-supervisor -- --restart-prompt ceo`. It reads the board and its `decision` queue, adopts
 live worker chats (`list_sessions`, `get_session_context`) and starts each missing role with `create_session`
-(relationship `independent`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
+(relationship `independent`, model `Copilot Fusion`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
+Always pass the model: `create_session` otherwise copies the caller's model, and the automations run on Opus.
+The hourly supervisor and every CEO start team chats on Copilot Fusion and replace a non-Fusion chat at its next idle point.
 Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
-session. The outgoing CEO writes no handover: every decision and promise is already on its issue, and
+session. Before each `create_session`, re-list and verify the role is still missing; after each create, re-list
+and confirm exactly one chat exists. Preserve the restart prompt's `spawn-id` for the create request; if duplicates
+appear, stop creating for that role and report it to the CTO.
+`team-supervisor` detects multiple active chats for a role and will not wake that role's headless worker.
+The outgoing CEO writes no handover: every decision and promise is already on its issue, and
 scheduled reads are `Next read <time>` comments. If workers still sit inside an earlier CEO's session, the
 owner closes it first and the new CEO then starts their independent replacements (worktrees survive). A
-running chat reads no chat messages (steers stay "processing"; queued ones land when the turn ends), so
-reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580) and use `send_message` (queue) only to
-start a chat whose status is idle. `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
-or `error`.
+running chat reads no chat messages (steers stay "processing"; queued ones wait for the turn to end), so
+reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580). Use `send_message` (queue) only to wake
+a reachable idle chat with work. An ended-turn chat can reject a queued message with `Unknown chat owner`,
+even from its creator. If it has actionable work, confirm there is no active writer and replace the
+unreachable chat, preserving its branch and worktree; do not assume a failed message woke it.
+Restart prompts spell out the sync waiter loop, kept alive with `read_bash`.
+Restarted workers decide routine questions themselves or post `→ CEO:` on the issue for a CEO decision and
+continue other actionable work; required owner approvals, mandatory confirmations and prompts still apply.
+`npm run team-status` lists each role as `waiting`, `has-work`, `no-work` or `error`.
 
 ### Ready pool (pull, don't wait)
 

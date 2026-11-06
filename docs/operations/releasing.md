@@ -99,8 +99,11 @@ exclude entire test directories or suppress uninvestigated findings.
    additionally require `--target 'host:port/database@user'` matching exactly.
    Remote TLS certificate verification is mandatory; use `PGSSLROOTCERT` when needed.
 - The runner serializes migrations under a transaction advisory lock and records
-   filename/checksum in `private.schema_migrations`. An identical applied file is
-   skipped; checksum drift fails. Failed SQL rolls back with no ledger entry.
+   filename/checksum in `private.schema_migrations`. The CLI and Management API
+   remove the same standalone `begin;`/`commit;` wrapper and reject transaction
+   controls within a migration; the checksum is always of the original file.
+   An identical applied file is skipped; checksum drift fails. A failed migration
+   or ledger insert rolls back both changes.
    Historical migrations predate this ledger: never replay the directory or assume
    an absent ledger entry means a historical migration has not run. Inspect deployed
    state and apply only the individually reviewed incremental migration.

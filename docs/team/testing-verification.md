@@ -19,6 +19,11 @@ idempotent claim/lease behavior, draft fences, concurrent rate limiting, usage
 aggregate integrity, and product-event retention. It is not a hosted Supabase
 Auth, PostgREST schema-cache, Storage delivery, or real Meta consent test.
 
+For the focused migration-runner checks, run
+`LC_ALL=C LANG=C npm run test:meta-db -- --migration-runner-only`. The temporary
+database exercises wrapped migrations, ledger failures, lock contention,
+checksum drift and the SQL generated for Management API releases.
+
 For an integrated local environment, inspect
 [scripts/local-meta-qa.mjs](../../scripts/local-meta-qa.mjs) and the existing `adbrain-qa`
 Colima profile documented in [Releasing](../operations/releasing.md). The launcher asserts
@@ -41,6 +46,51 @@ keyboard scrolling, vertical resizing, and reader position during delayed
 responses. Network requests are fulfilled with fixtures or blocked; server
 actions throw. Screenshots go to ignored `test-results/scroll-layout/`.
 This does not replace authenticated workflow tests or real-device Safari testing.
+
+For Settings streaming and layout shifts without credentials or network access:
+
+```sh
+npm run test:settings-cls
+```
+
+[The Settings check](../../scripts/check-settings-cls.mjs) renders the actual
+Settings layout and loading components with application CSS. It checks full and
+shorter states at 360, 390, 1279, 1280 and 1440 px in Chromium and WebKit.
+It also streams real React Suspense responses at 360, 390 and 1440 px. Chromium
+checks Spend, Meta, the optional checklist and WhatsApp resolving in order,
+including an unavailable state and access to the Spend action. Headless WebKit
+checks the final streamed state; its intermediate frame-scheduled updates did
+not run before the fixture response ended. WebKit also does not expose
+layout-shift entries. The panels are synthetic, so this is not an authenticated
+Settings journey or real-device Safari evidence.
+
+For Review's phone-width heading, actions and status filters without credentials:
+
+```sh
+npm run test:review-controls
+```
+
+[The Review check](../../scripts/check-review-controls.mjs) renders the actual
+Studio with 40 synthetic ads and application CSS in Chromium and WebKit. It
+checks the 360/390px header row, reachable 44px phone targets, pointer and
+keyboard filter selection, painted focus and overflow at 320, 360, 390 and
+1440px. Server actions and network requests are blocked; it does not replace an
+authenticated production walk or real-device testing.
+
+For upload error rows without credentials or Storage writes:
+
+```sh
+npm run test:media-upload-layout
+```
+
+[The upload check](../../scripts/check-media-upload-layout.mjs) renders the
+real sheet and application CSS at 320, 360, 390, 480 and 1440px in Chromium and
+WebKit, in English and Hindi. Synthetic failed photo and video uploads exercise
+readable messages, 44px actions, keyboard focus, retry and removal. The transport
+is mocked; this does not verify live Storage or real-device Safari.
+Set `MEDIA_LAYOUT_SCREENSHOT_DIR` to a temporary directory to capture the
+320px Hindi failure state for manual inspection; screenshots are evidence, not
+goldens.
 
 ### Enquiry Checks
 

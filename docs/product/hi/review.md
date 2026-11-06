@@ -1,6 +1,5 @@
 # जाँचें और लाइव करें
-<!-- mirrors ../review.md bb5b6c326d6e -->
-
+<!-- mirrors ../review.md cb337e0fdb7a -->
 यह [Review and Go Live](../review.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
 [Prepare a Campaign](../launch.md#prepare-a-campaign) का एक step।
@@ -101,8 +100,8 @@ Button दबाएँ, वह एक चीज़ ठीक करें, फ�
 | `REVIEW_NO_LEAD_FORM` | "Choose an active lead form from your Facebook Page in the Lead form field." | "Choose a lead form" | Active form चुनें, या पहले Facebook Page पर एक बनाएँ। |
 | `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add website in Your business" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | अपनी website डालें, या WhatsApp chat ads पर जाएँ। |
 | `REVIEW_WEBSITE_UNREACHABLE` | सिर्फ़ website ads (#2599): "AdBrain couldn't open your website {site}", "answered with an error ({code})", "isn't a public website address" या "sends visitors on to {other site}" | "Fix link in Your business" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | Address ठीक करें ताकि आपकी अपनी site खुले, site फिर से चालू करें, या WhatsApp chat ads पर जाएँ। |
-| `REVIEW_TRACKING` | सिर्फ़ website के signup या sales लक्ष्य (#2714): "Your ad account has no website tracking (Meta pixel) yet", "Choose which website tracking counts", "couldn't read your website tracking", "reported nothing from {date} to {date}" या "reported no {signup (Lead)/sale (Purchase)} from {date} to {date}" | "Check tracking in Your business" (Brand खुलता है) | ऐसी tracking जोड़ें या चुनें जो लक्ष्य का event भेजे, Facebook फिर से जोड़ें, या visits का लक्ष्य चुनें। |
-| `REVIEW_GOAL_WORDS` | सिर्फ़ website के signup या sales लक्ष्य (#2714): ad का बटन signup लक्ष्य पर ख़रीदने को कहता है, या sales लक्ष्य पर sign up करने को | "Choose your ads" (ads पर ले जाता है) | ऐसा ad चुनें जिसका button लक्ष्य से मेल खाए, या लक्ष्य बदलें। |
+| `REVIEW_TRACKING` | सिर्फ़ website leads या sales लक्ष्य (#2714): "No website tracking source is available to this ad account" (देखें कि ad account आपका Meta pixel इस्तेमाल कर सकता है, नहीं तो Events Manager में एक सेट करें), "Choose which website tracking counts", "couldn't read your website tracking", "reported nothing from {since} to {until}" या "reported no {website lead (Lead)/sale (Purchase)} from {since} to {until}" | "Check tracking in Your business" (Brand खुलता है) | इस ad account को pixel की access दें, ऐसी tracking जोड़ें या चुनें जो लक्ष्य का event भेजे, Facebook फिर से जोड़ें, या visits का लक्ष्य चुनें। |
+| `REVIEW_GOAL_WORDS` | सिर्फ़ website leads या sales लक्ष्य (#2714): website leads लक्ष्य पर ad में Shop now बटन है, या sales लक्ष्य पर Sign up बटन | "Choose your ads" (ads पर ले जाता है) | ऐसा ad चुनें जिसका button लक्ष्य से मेल खाए, या लक्ष्य बदलें। |
 | `REVIEW_AD_POLICY` | ad में "{word}" is a health promise (clinics) या a promise (बाकी) "Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | लिखें कि सेवा क्या है, यह नहीं कि वह क्या ठीक करती है या किसकी गारंटी देती है। |
 | `REVIEW_MEDIA_RIGHTS` | "आपके विज्ञापनों में आपकी अपनी तस्वीरें हैं। Meta पर भेजने से पहले पुष्टि करें कि ये तस्वीरें आपकी हैं या आपको इन्हें इस्तेमाल करने की अनुमति है।" | "तस्वीरों के अधिकार की पुष्टि करें" (Assets खुलता है) | Assets पर अपनी photos के साथ rights वाला box tick करें (हैंडओवर के बाद सिर्फ़ मौजूदा मालिक की पुष्टि मान्य है), या AdBrain की pictures चुनें। |
 | `REVIEW_BUDGET` | "Set a daily budget above ₹0." या "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | रोज़ ₹300, ₹500 या ₹1,000 चुनें। |
@@ -113,3 +112,5 @@ Button दबाएँ, वह एक चीज़ ठीक करें, फ�
 | `REVIEW_NO_AUDIENCE` | "Let AdBrain recommend the audience (Recommend audience) before reviewing." | "Go to Recommend audience" | **Recommend audience** दबाएँ और सुझाव रखें या बदलें। |
 | `REVIEW_INTERESTS_UNRESOLVED` | "Meta didn't recognise some audience interests. Edit or remove them." (या उनके नाम) | "Edit the interests" | Interest हटाएँ, या Meta का सुझाया कोई चुनें। |
 | `REVIEW_CHANGED` | रुकावट नहीं: Review के बाद campaign बदला, तो **Send to Meta** कहता है "This campaign changed after you checked it. Tap Check my campaign again, then Send to Meta." | कोई नहीं | **Check my campaign** फिर से दबाएँ, फिर **Send to Meta**। |
+
+Website sales लक्ष्य पर Review एक नोट भी दिखाता है, blocker नहीं (#2714): "With few recent purchases, results and spending can vary. We won't increase your budget or change your goal."

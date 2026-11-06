@@ -1,0 +1,37 @@
+name: Scheduled jobs kick
+on:
+  # GitHub drops the Scheduled jobs cron and the Mac dispatcher sleeps (#766). Any finished CI or
+  # Deploy train run is a free wake-up: if the last Scheduled jobs run is stale, dispatch one.
+  # Runs the default branch's file, checks out nothing and reads no artifacts or PR content.
+  workflow_run:
+    workflows: [CI, Deploy train]
+    types: [completed]
+
+permissions:
+  actions: write
+
+concurrency:
+  group: scheduled-jobs-kick
+  cancel-in-progress: false
+
+jobs:
+  kick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Dispatch Scheduled jobs when stale
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          STALE_MINUTES: "14"
+        run: |
+          set -euo pipefail
+          runs=$(gh run list --workflow scheduled-jobs.yml --limit 5 --json status,createdAt)
+          active=$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")
+          age_min=$(jq 'if length == 0 then 999999 else ((now - ([.[].createdAt | fromdateiso8601] | max)) / 60 | floor) end' <<<"$runs")
+          if [ "$active" -gt 0 ] || [ "$age_min" -lt "$STALE_MINUTES" ]; then
+            echo "skip: active=$active newest_age_min=$age_min"
+            exit 0
+          fi
+          gh workflow run scheduled-jobs.yml --ref main
+          echo "dispatched: newest_age_min=$age_min"

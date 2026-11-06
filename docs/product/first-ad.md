@@ -14,9 +14,9 @@ you before it's due."
 Do this on your phone, signed in to Facebook as yourself (the owner), a day before
 if you can. Meta's own screens; nothing here spends money.
 
-Facebook is still reviewing AdBrain (Meta App Review, #156). Until Meta approves it, a
-new Facebook account can't connect; you can still make, approve and download ads.
-Getting the steps below done now means Go live is quick once Meta approves.
+Connecting a new Facebook account requires Meta approval for AdBrain (#156). You can
+still make, approve and download ads. Getting the steps below done now means Go live
+is quick once Meta approves.
 
 1. **A business portfolio:** open business.facebook.com. If it asks you to create a
    business portfolio, use your business's name, your own name and your business
@@ -130,10 +130,10 @@ ads were made from older details or in Studio, Home takes you back to Your ads i
     on Meta.
   - "Stops at ₹708": the most this run can ever cost.
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
-- **Tap:** while Facebook is still reviewing AdBrain, the Facebook Page row says
-  "Facebook is still reviewing AdBrain. You can make, approve and download ads now.
-  Connecting a new Facebook account must wait for Meta to approve access." Once Meta
-  has approved AdBrain, tap "Connect Facebook Page". A Meta window opens: tap "Connect
+- **Tap:** when the access notice is shown, the Facebook Page row says "Connecting a
+  new Facebook account requires Meta approval for AdBrain. You can make, approve and
+  download ads now." Once Meta has approved AdBrain, tap "Connect Facebook Page".
+  A Meta window opens: tap "Connect
   Business", sign in to Facebook, choose your Page and ad account, tap "Use
   selected business", then "Continue to review". The row now says "Connected"
   and the button becomes "Go live · ₹300 a day". Tap it.
@@ -145,10 +145,10 @@ ads were made from older details or in Studio, Home takes you back to Your ads i
 - **If it fails:** nothing is spent when something fails. What the screen says:
   - Meta connect: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Finish in the Meta window, then tap "Check again".
-    After a try that didn't connect: "Request received. Sending a request does not
-    switch on Facebook access; Meta approval is still pending." AdBrain recorded that
-    you're waiting (#2538); it isn't a connection, and there is no date yet. Tap "Try
-    again" once Meta has approved AdBrain. "Your request did not send. Check your
+    After a try that didn't connect: "Your request is recorded. You can connect Facebook
+    once Meta approves AdBrain. Until then, your approved ads stay here for you to
+    download and share." AdBrain recorded that you're waiting (#2538); it isn't a
+    connection. Tap "Try again" once Meta has approved AdBrain. "Your request did not send. Check your
     connection and try again.": check your connection and tap "Try again".
   - No ad account or Page shared: "Meta shared no ad account with AdBrain…" (or
     "no Facebook Page"). Tap "Reconnect Meta" and tick the ad account and Page in

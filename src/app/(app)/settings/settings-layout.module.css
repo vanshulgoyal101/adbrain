@@ -1,0 +1,9 @@
+.primary > [data-settings-primary-loading] ~ * {
+  display: none;
+}
+
+@media (width < 80rem) {
+  .columns:has(.primary [data-settings-primary-loading]) > .secondary {
+    display: none;
+  }
+}

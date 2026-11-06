@@ -529,7 +529,7 @@ export function Studio({
           {approvedCount > 0 ? (
             <Link
               href={`/campaigns?new=1&creatives=${items.filter((i) => i.status === "approved").map((i) => i.id).join(",")}`}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm sm:min-h-10 font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm sm:min-h-10 sm:px-4 font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Megaphone className="h-4 w-4" aria-hidden="true" />
               Create campaign ({approvedCount})
@@ -548,7 +548,7 @@ export function Studio({
 
       {items.length > 0 && (
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <fieldset className="flex min-w-0 gap-1 overflow-x-auto">
+          <fieldset className="flex min-w-0 flex-wrap gap-1">
             <legend className="sr-only">Ad status</legend>
             {(
               [
@@ -560,7 +560,7 @@ export function Studio({
               <label
                 key={value}
                 className={cn(
-                  "flex min-h-11 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
+                  "flex min-h-11 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-1.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
                   filter === value
                     ? "bg-slate-100 font-medium text-slate-900"
                     : "text-slate-600 hover:bg-slate-50",
