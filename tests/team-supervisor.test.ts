@@ -165,10 +165,11 @@ describe("team-supervisor (#573 A1)", () => {
     }
   });
 
-  it("replaces an unreachable ended-turn chat only after checking for an active writer", () => {
+  it("never replaces an unreachable chat between daily refreshes; moves its urgent work instead", () => {
     const text = restartPrompt("ceo");
     expect(text).toContain("Unknown chat owner");
-    expect(text).toContain("replace the unreachable chat");
+    expect(text).toContain("never replace it between daily refreshes");
+    expect(text).not.toContain("replace the unreachable chat");
     expect(text).toContain("after confirming no active writer");
     expect(text).not.toContain("a queued one lands only when the turn ends");
   });

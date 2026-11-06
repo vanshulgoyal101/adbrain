@@ -171,13 +171,23 @@ Each tick:
 3. Log: `~/.adbrain-supervisor/supervisor.log`; stop role runs with `touch ~/.adbrain-supervisor/OFF` (scheduled-job dispatch, the nightly backup and smoke-storage prune, and the daily quota check keep running, #1525, #884);
    `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
 
-**CEO handover and restarts (#2476).** The owner rotates CEO chats often and closes the old one, and a
+**Daily refresh, hourly check (owner, Nov 6).** Team chats are renewed **once a day** and nowhere else: the
+"AdBrain: daily team refresh" automation (08:30 IST) preserves every worktree (`wip/rotate-<date>/*` snapshots
+and a resume pointer per role), starts a new CEO, has that CEO start one new chat per role, verifies each first
+turn, then deletes the old chats. The "AdBrain: hourly team health check" only checks that the team is running
+and on track: it unholds, assigns, wakes waiters (`wait-for-work.mjs --wake <role>`) and reports on #580/#364.
+It never creates, replaces or deletes a role chat, except for the duplicate sweep (extra copies of one role), a
+CEO that is missing entirely, and one early run of the daily refresh when the whole team is down (host restart),
+at most once a day (`~/.adbrain-supervisor/last-team-refresh`). Between refreshes, an ended-turn, stalled or
+wrong-model chat waits for the next refresh; its urgent work moves to a live role in the same lane.
+
+**CEO handover and restarts (#2476).** The daily refresh closes the old CEO chat, and a
 VS Code restart ends every chat. Either way, GitHub and git are the memory. Start a new CEO with the text
 from `npm run team-supervisor -- --restart-prompt ceo`. It reads the board and its `decision` queue, adopts
 live worker chats (`list_sessions`, `get_session_context`) and starts each missing role with `create_session`
 (relationship `independent`, model `Copilot Fusion`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
 Always pass the model: `create_session` otherwise copies the caller's model, and the automations run on Opus.
-The hourly supervisor and every CEO start team chats on Copilot Fusion and replace a non-Fusion chat at its next idle point.
+The daily refresh and every CEO start team chats on Copilot Fusion; a non-Fusion chat is replaced at the next daily refresh.
 Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
 session. Before each `create_session`, re-list and verify the role is still missing; after each create, re-list
 and confirm exactly one chat exists. Preserve the restart prompt's `spawn-id` for the create request; if duplicates
@@ -189,8 +199,8 @@ owner closes it first and the new CEO then starts their independent replacements
 running chat reads no chat messages (steers stay "processing"; queued ones wait for the turn to end), so
 reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580). Use `send_message` (queue) only to wake
 a reachable idle chat with work. An ended-turn chat can reject a queued message with `Unknown chat owner`,
-even from its creator. If it has actionable work, confirm there is no active writer and replace the
-unreachable chat, preserving its branch and worktree; do not assume a failed message woke it.
+even from its creator. Do not replace it between daily refreshes: move its urgent work to a live role in the
+same lane after confirming there is no active writer; do not assume a failed message woke it.
 Restart prompts spell out the sync waiter loop, kept alive with `read_bash`.
 Restarted workers decide routine questions themselves or post `→ CEO:` on the issue for a CEO decision and
 continue other actionable work; required owner approvals, mandatory confirmations and prompts still apply.
