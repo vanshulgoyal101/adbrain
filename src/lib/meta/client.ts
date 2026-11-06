@@ -963,12 +963,11 @@ export class MetaClient {
     );
     const number = typeof page?.whatsapp_number === "string" ? normalizeWhatsAppNumber(page.whatsapp_number) : null;
     if (!page || page.id !== this.creds.pageId
-      || (page.has_whatsapp_business_number !== undefined && typeof page.has_whatsapp_business_number !== "boolean")
-      || (page.has_whatsapp_business_number === true && !number)
-      || (page.has_whatsapp_business_number === undefined && page.whatsapp_number != null)) {
+      || typeof page.has_whatsapp_business_number !== "boolean"
+      || (page.has_whatsapp_business_number && !number)) {
       throw new MetaError("WhatsApp Page number could not be read.");
     }
-    return page.id === this.creds.pageId && page.has_whatsapp_business_number === true ? number : null;
+    return page.has_whatsapp_business_number ? number : null;
   }
 
   private async businessWhatsAppNumbers(): Promise<string[] | MetaError> {
@@ -976,7 +975,8 @@ export class MetaClient {
     if (!account || (account.id !== this.creds.adAccountId && `act_${account.id}` !== this.creds.adAccountId)) {
       throw new MetaError("WhatsApp ad account could not be read.");
     }
-    if (account.business === undefined || account.business === null) return [];
+    if (account.business === undefined) throw new MetaError("WhatsApp business could not be read.");
+    if (account.business === null) return [];
     const businessId = account.business?.id;
     if (typeof businessId !== "string" || !/^\d{1,64}$/.test(businessId)) throw new MetaError("WhatsApp business could not be read.");
     return readBusinessWhatsAppNumbers(businessId, (path) => this.graph<unknown>(path)).catch((error: unknown) => {

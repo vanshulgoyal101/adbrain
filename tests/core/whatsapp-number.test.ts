@@ -25,7 +25,13 @@ const PAGE = `${creds.pageId}?fields=id,has_whatsapp_business_number`;
 const ACCOUNT = `${creds.adAccountId}?fields=id,business`;
 const SECRET = "test-meta-app-secret-for-choices";
 
-function replay(tape: { path: string; status: number; body: unknown }[] = recorded.tape) {
+function withUnlinkedPage(tape: { path: string; status: number; body: unknown }[] = recorded.tape) {
+  return tape.map((entry) => entry.path.includes(PAGE)
+    ? { ...entry, body: { id: creds.pageId, has_whatsapp_business_number: false } }
+    : entry);
+}
+
+function replay(tape: { path: string; status: number; body: unknown }[] = withUnlinkedPage()) {
   const calls: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -217,7 +223,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     const tape: { path: string; status: number; body: unknown }[] = structuredClone(recorded.tape);
     const wabas = tape.find((entry) => entry.path.includes("owned_whatsapp_business_accounts"))!.body as { data: { phone_numbers: { data: { display_phone_number: string }[] } }[] };
     wabas.data[1].phone_numbers.data[0].display_phone_number = "+91 88888 84842";
-    replay(tape);
+    replay(withUnlinkedPage(tape));
     expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842", [...both, "+918888884842"])).toBeNull();
   });
 
@@ -327,7 +333,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
       { path: `${first.id}/phone_numbers?fields=display_phone_number&limit=100&after=phone2`, status: 200,
         body: { data: [{ display_phone_number: "+91 99999 92222" }] } },
     );
-    const calls = replay(tape);
+    const calls = replay(withUnlinkedPage(tape));
     expect(await new MetaClient(creds).whatsappNumbers()).toEqual({
       page: null, business: ["+919999994842", "+919999992222", "+919999990874"],
     });
@@ -349,7 +355,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
       waba.body = { data: [{ ...first, phone_numbers: { data: first.phone_numbers.data, paging } }] };
       tape.push({ path: `${first.id}/phone_numbers?fields=display_phone_number&limit=100&after=repeat`, status: 200, body: { data: [], paging } });
     }
-    const calls = replay(tape);
+    const calls = replay(withUnlinkedPage(tape));
     await expect(new MetaClient(creds).whatsappNumbers()).rejects.toThrow("cursor");
     expect(calls.length).toBeLessThanOrEqual(5);
   });
@@ -364,20 +370,20 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
   });
 
   it("does not treat an empty next link as a complete WABA response", async () => {
-    replay(recorded.tape.map((entry) => entry.path.includes(WABA)
+    replay(withUnlinkedPage().map((entry) => entry.path.includes(WABA)
       ? { ...entry, body: { data: [], paging: { next: "" } } } : entry));
     await expect(new MetaClient(creds).whatsappNumbers()).rejects.toThrow();
   });
 
   it("still fails the read on any other Meta error, such as an expired token (#615)", async () => {
-    const tape = recorded.tape.map((entry) => entry.path.includes("owned_whatsapp_business_accounts")
+    const tape = withUnlinkedPage().map((entry) => entry.path.includes("owned_whatsapp_business_accounts")
       ? { ...entry, status: 400, body: { error: { message: "Error validating access token", type: "OAuthException", code: 190 } } } : entry);
     replay(tape);
     await expect(new MetaClient(creds).whatsappNumbers()).rejects.toMatchObject({ code: 190 });
   });
 
   it("#2841: a Meta rate limit (80008, HTTP 400, as seen Nov 3) is 'busy' (429) through the route, never a zero-number answer", async () => {
-    const tape = recorded.tape.map((entry) => entry.path.includes(WABA) ? { ...entry, status: rateLimited.status, body: rateLimited.body } : entry);
+    const tape = withUnlinkedPage().map((entry) => entry.path.includes(WABA) ? { ...entry, status: rateLimited.status, body: rateLimited.body } : entry);
     allowWhatsAppRead();
     const { GET } = await import("@/app/api/meta/whatsapp/route");
     const ask = () => GET(new Request(`http://localhost/api/meta/whatsapp?businessId=${BUSINESS}`));
@@ -386,7 +392,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     expect({ status: answer.status, body: await answer.json() }).toEqual({ status: 429, body: { state: "busy" } });
     vi.restoreAllMocks();
     // A real "no number linked" answer stays a distinct, successful not_linked.
-    replay(recorded.tape.map((entry) => entry.path.includes(WABA) ? { ...entry, body: { data: [] } } : entry));
+    replay(withUnlinkedPage().map((entry) => entry.path.includes(WABA) ? { ...entry, body: { data: [] } } : entry));
     const empty = await ask();
     expect({ status: empty.status, body: await empty.json() }).toEqual({ status: 200, body: { state: "not_linked" } });
   });
@@ -478,7 +484,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
       message: "Couldn't check your WhatsApp number with Meta. Nothing was spent. Try again.",
     },
   ])("#2841: $name stops Go live through the real route without saving", async ({ target, reply, emptyWaba, expectedStatus, message }) => {
-    const tape = recorded.tape.map((entry) => {
+    const tape = withUnlinkedPage().map((entry) => {
       if (entry.path.includes(target)) return { ...entry, status: reply.status, body: reply.body };
       return emptyWaba && entry.path.includes(WABA) ? { ...entry, status: 200, body: { data: [] } } : entry;
     });
@@ -489,6 +495,18 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     expect(result).toEqual({ kind: "failed", message });
     expect(fetchRoute).toHaveBeenCalledTimes(1);
     if (expectedStatus === 429) expect(calls.filter((path) => path.includes(WABA))).toHaveLength(1);
+    expect(client.saveDraft).not.toHaveBeenCalled();
+    expect(client.preflight).not.toHaveBeenCalled();
+    expect(client.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("#2841: the recorded Page response without an explicit link state stops Go live without saving", async () => {
+    allowWhatsAppRead();
+    replay(recorded.tape.map((entry) => entry.path.includes(WABA)
+      ? { ...entry, body: { data: [] } } : entry));
+    const { result, statuses, client } = await goLiveThroughWhatsAppRoute();
+    expect(statuses).toEqual([503]);
+    expect(result).toEqual({ kind: "failed", message: "Couldn't check your WhatsApp number with Meta. Nothing was spent. Try again." });
     expect(client.saveDraft).not.toHaveBeenCalled();
     expect(client.preflight).not.toHaveBeenCalled();
     expect(client.createCampaign).not.toHaveBeenCalled();
@@ -509,21 +527,24 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     expect(client.preflight).not.toHaveBeenCalled();
   });
 
-  it("#2841: an ad account without a business is a genuine unlinked result", async () => {
+  it("#2841: an ad-account response omitting business stops Go live without saving", async () => {
     allowWhatsAppRead();
-    replay(recorded.tape.map((entry) => entry.path.includes(ACCOUNT)
-      ? { ...entry, body: { id: creds.adAccountId } } : entry));
-    const { GET } = await import("@/app/api/meta/whatsapp/route");
-    const answer = await GET(new Request(`http://localhost/api/meta/whatsapp?businessId=${BUSINESS}`));
-    expect({ status: answer.status, body: await answer.json() }).toEqual({ status: 200, body: { state: "not_linked" } });
+    replay(recorded.tape.map((entry) => {
+      if (entry.path.includes(PAGE)) return { ...entry, body: { id: creds.pageId, has_whatsapp_business_number: false } };
+      if (entry.path.includes(ACCOUNT)) return { ...entry, body: { id: creds.adAccountId } };
+      return entry;
+    }));
+    const { result, statuses, client } = await goLiveThroughWhatsAppRoute();
+    expect(statuses).toEqual([503]);
+    expect(result).toEqual({ kind: "failed", message: "Couldn't check your WhatsApp number with Meta. Nothing was spent. Try again." });
+    expect(client.saveDraft).not.toHaveBeenCalled();
+    expect(client.preflight).not.toHaveBeenCalled();
+    expect(client.createCampaign).not.toHaveBeenCalled();
   });
 
   it("#2841: a genuinely empty WABA list proceeds with the WhatsApp destination and no number", async () => {
     allowWhatsAppRead();
-    replay(recorded.tape.map((entry) => {
-      if (entry.path.includes(WABA)) return { ...entry, body: { data: [] } };
-      return entry;
-    }));
+    replay(withUnlinkedPage().map((entry) => entry.path.includes(WABA) ? { ...entry, body: { data: [] } } : entry));
     const { result, statuses, client } = await goLiveThroughWhatsAppRoute(true);
     expect(statuses).toEqual([200]);
     expect(result).toEqual({ kind: "blocked", messages: ["Review stopped"] });
@@ -536,12 +557,27 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     expect(client.createCampaign).not.toHaveBeenCalled();
   });
 
+  it("#2841: an explicit null business remains a genuine unlinked result", async () => {
+    allowWhatsAppRead();
+    replay(withUnlinkedPage().map((entry) => {
+      if (entry.path.includes(ACCOUNT)) return { ...entry, body: { id: creds.adAccountId, business: null } };
+      return entry;
+    }));
+    const { result, statuses, client } = await goLiveThroughWhatsAppRoute(true);
+    expect(statuses).toEqual([200]);
+    expect(result).toEqual({ kind: "blocked", messages: ["Review stopped"] });
+    expect(client.saveDraft).toHaveBeenCalledOnce();
+    const draft = vi.mocked(client.saveDraft).mock.calls[0][0];
+    expect(draft.destination).toBe("whatsapp");
+    expect(draft.whatsappNumber ?? "").toBe("");
+  });
+
   it.each([
     refused,
     { status: 403, body: { error: { code: 10 } } },
   ])("#2841: partial status never treats a verified Page as an explicit one-tap selection", async (waba) => {
     allowWhatsAppRead();
-    replay(recorded.tape.map((entry) => {
+    replay(withUnlinkedPage().map((entry) => {
       if (entry.path.includes(WABA)) return { ...entry, status: waba.status, body: waba.body };
       if (entry.path.includes(PAGE)) return { ...entry, body: { id: creds.pageId, has_whatsapp_business_number: true, whatsapp_number: "+91 99999 91111" } };
       return entry;
@@ -581,7 +617,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
   });
 
   it("#1199: retries a GET once on a Meta 5xx, and only once", async () => {
-    replay(recorded.tape.map((entry) => entry.path.includes(WABA) ? { ...entry, status: 500, body: { error: { message: "An unknown error has occurred.", type: "OAuthException", code: 1, is_transient: true } } } : entry));
+    replay(withUnlinkedPage().map((entry) => entry.path.includes(WABA) ? { ...entry, status: 500, body: { error: { message: "An unknown error has occurred.", type: "OAuthException", code: 1, is_transient: true } } } : entry));
     await expect(new MetaClient(creds).whatsappNumbers()).rejects.toMatchObject({ status: 500 });
     expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => String(url).includes(WABA))).toHaveLength(2);
   });
