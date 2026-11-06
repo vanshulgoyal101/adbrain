@@ -15,6 +15,8 @@ import { isAdvertiserWebsite, websiteAdLink, websiteBlocker } from "@/lib/campai
 import type { PreflightVideo } from "@/lib/campaign/creative-video";
 import { creativesBlockerMessage, named, trackingBlockerWords, websiteBlockerWords } from "@/lib/campaign/review-blocker-words";
 import { conversionGoal, goalWordsMismatch, trackingBlocker, type ReviewTracking } from "@/lib/campaign/website-tracking";
+import { canonicalJson, reviewedMessage } from "./review-canonicalization";
+export { isReviewedWhatsAppMessage } from "./review-canonicalization";
 
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
@@ -145,39 +147,9 @@ function blocker(code: ReviewBlocker["code"], reason: ReviewBlockerReason, messa
   return { code, reason, message, action };
 }
 
-function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage): NonNullable<ReviewDTO["whatsappMessage"]> {
-  return {
-    source, language, greeting: opening.greeting, autofill: opening.autofill,
-    ...(opening.callButton ? { callButton: true } : {}),
-    ...(opening.iceBreakers?.length ? { iceBreakers: opening.iceBreakers } : {}),
-  };
-}
-
-/** #2452: whether the message launch rebuilt from fresh reads is the one this review checked; launch refuses otherwise. */
-export function isReviewedWhatsAppMessage(message: ResolvedWhatsAppMessage, review: Pick<ReviewDTO, "whatsappMessage">): boolean {
-  return Boolean(review.whatsappMessage)
-    && JSON.stringify(canonicalize(reviewedMessage(message))) === JSON.stringify(canonicalize(review.whatsappMessage));
-}
-
 /** The destination Review checks; a draft saved before destinations existed is a form campaign. */
 function reviewDestination(draft: DraftInput): ReviewDestination {
   return draft.destination ?? "instant_form";
-}
-
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, canonicalize(entry)]),
-    );
-  }
-  return value;
-}
-
-function canonicalJson(payload: CanonicalReviewPayload): string {
-  return JSON.stringify(canonicalize(payload));
 }
 
 export function buildCanonicalReviewPayload(
@@ -218,6 +190,25 @@ export function buildCanonicalReviewPayload(
     ...(input.geo.excludedLocation ? { resolvedExcludedLocation: input.geo.excludedLocation } : {}),
     ...(input.geo.audienceInterests ? { audienceInterests: [...input.geo.audienceInterests].sort((left, right) => left.id.localeCompare(right.id)) } : {}),
   };
+}
+
+export function checkReviewFreshness(
+  review: ReviewDTO,
+  expected: ReviewFreshnessInput,
+): ReviewFreshnessResult {
+  if (!review.canCreatePaused || !review.planHash) {
+    return { fresh: false, reason: "PREFLIGHT_BLOCKED" };
+  }
+  if (review.draftVersion !== expected.draftVersion) {
+    return { fresh: false, reason: "DRAFT_CHANGED" };
+  }
+  if (review.connectionGeneration !== expected.connectionGeneration) {
+    return { fresh: false, reason: "CONNECTION_CHANGED" };
+  }
+  if (review.planHash !== expected.planHash) {
+    return { fresh: false, reason: "REVIEW_CHANGED" };
+  }
+  return { fresh: true };
 }
 
 export function buildCreativeReviewPayload(creatives: PreflightCreative[]) {
@@ -388,23 +379,4 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     ...(draft.destination === "whatsapp" && input.whatsappMessage ? { whatsappMessage: reviewedMessage(input.whatsappMessage) } : {}),
     ...(input.geo.areaExclusions ? { serviceArea: describeServiceArea(input.geo.areaExclusions) } : {}),
   };
-}
-
-export function checkReviewFreshness(
-  review: ReviewDTO,
-  expected: ReviewFreshnessInput,
-): ReviewFreshnessResult {
-  if (!review.canCreatePaused || !review.planHash) {
-    return { fresh: false, reason: "PREFLIGHT_BLOCKED" };
-  }
-  if (review.draftVersion !== expected.draftVersion) {
-    return { fresh: false, reason: "DRAFT_CHANGED" };
-  }
-  if (review.connectionGeneration !== expected.connectionGeneration) {
-    return { fresh: false, reason: "CONNECTION_CHANGED" };
-  }
-  if (review.planHash !== expected.planHash) {
-    return { fresh: false, reason: "REVIEW_CHANGED" };
-  }
-  return { fresh: true };
 }
