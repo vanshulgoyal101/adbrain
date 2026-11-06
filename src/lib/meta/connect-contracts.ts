@@ -23,6 +23,7 @@ const errorCodes = [
   "SETUP_REQUIRED",
   "PREFLIGHT_BLOCKED",
   "RECONCILIATION_REQUIRED",
+  "SMOKE_FENCE",
 ] as const;
 
 export const errorCodeSchema = z.enum(errorCodes);

@@ -3,6 +3,7 @@
 import { observeAction } from "@/lib/observability/logger";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { logEvent } from "@/lib/audit";
 import { fieldList, fieldStr } from "@/lib/brand/fields";
 import { BRAND_FACTS, type BrandFact } from "@/lib/brand/meter";
@@ -10,6 +11,7 @@ import { brandUsable } from "@/lib/brand/usable";
 import { SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom, setupLocations, setupPhone, type SetupBusinessFields } from "@/lib/brand/setup-fields";
 import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
 import { BRAND_LANGUAGE_NAME, CREATE_LANGUAGES } from "@/lib/languages";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 import { createClient } from "@/lib/supabase/server";
 import type { BusinessInsert } from "@/lib/types";
 
@@ -29,6 +31,9 @@ export async function saveBusiness(
   formData: FormData,
 ): Promise<SaveState> {
   return observeAction("server.saveBusiness", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "Business details are read-only during this smoke." };
+    }
     const supabase = await createClient();
     const {
       data: { user },
@@ -105,6 +110,7 @@ const USABLE_COLUMNS = "id, name, vertical, phone, locations, offers, website, d
  */
 export async function saveSetupBusiness(id: string | null, input: SetupBusinessFields): Promise<SetupSaveResult> {
   return observeAction("server.saveSetupBusiness", async () => {
+    const fenced = (await headers()).has(SMOKE_FENCE_HEADER);
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { ok: false, error: "Not authenticated." };
@@ -120,10 +126,36 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
     const website = typedWebsite === undefined ? undefined : typedWebsite ? normalizeWebsite(typedWebsite) ?? undefined : null;
     const reach = { ...(destination ? { default_destination: destination } : {}), ...(website !== undefined ? { website } : {}) };
     const columns = USABLE_COLUMNS;
+    const offer = fields.offer.trim();
+
+    if (fenced) {
+      if (!id) return { ok: false, error: "Business details are read-only during this smoke." };
+      const { data: current, error } = await supabase.from("businesses").select(`${columns}, usps`).eq("id", id).single();
+      if (error || !current) return { ok: false, error: "We couldn't find your business details. Reload the page." };
+      const next = {
+        name: name || current.name,
+        vertical: fields.vertical.trim() || current.vertical,
+        phone: phone !== undefined || !fields.phone.trim() ? phone ?? null : current.phone,
+        locations: setupLocations(fields.locations),
+        offers: offer ? [offer, ...(current.offers ?? []).slice(1)] : current.offers ?? [],
+        usps: usp ? [usp, ...(current.usps ?? []).slice(1)] : current.usps ?? [],
+        website: website !== undefined ? website : current.website,
+        default_destination: destination ?? current.default_destination,
+      };
+      const unchanged = current.name === next.name
+        && current.vertical === next.vertical
+        && current.phone === next.phone
+        && JSON.stringify(current.locations ?? []) === JSON.stringify(next.locations)
+        && JSON.stringify(current.offers ?? []) === JSON.stringify(next.offers)
+        && JSON.stringify(current.usps ?? []) === JSON.stringify(next.usps)
+        && (current.website ?? null) === (next.website ?? null)
+        && (current.default_destination ?? null) === (next.default_destination ?? null);
+      if (!unchanged) return { ok: false, error: "Business details are read-only during this smoke." };
+      return { ok: true, id: current.id, usable: brandUsable({ ...current, vertical: setupFieldsFrom(current).vertical }) };
+    }
 
     if (!id) {
       if (!name) return { ok: false, error: "Add your business name." };
-      const offer = fields.offer.trim();
       const { data, error } = await supabase.from("businesses").insert({
         owner_id: user.id, name, vertical: fields.vertical.trim() || undefined, phone: phone ?? null,
         locations: setupLocations(fields.locations), offers: offer ? [offer] : [],
@@ -137,7 +169,6 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
       return finish(data, "business.create");
     }
 
-    const offer = fields.offer.trim();
     // #1401: a blank box (mid-retype) never touches saved offers; a typed one replaces only the first.
     let offers: string[] | undefined;
     let usps: string[] | undefined;
@@ -177,6 +208,9 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
 /** #2032: Home's Brand meter saves one fact to its existing column; the owner's own session and RLS scope the write. */
 export async function saveBrandFact(id: string, fact: BrandFact, input: string): Promise<SaveState> {
   return observeAction("server.saveBrandFact", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "Business details are read-only during this smoke." };
+    }
     const value = String(input ?? "").trim().slice(0, 200);
     if (!(BRAND_FACTS as readonly string[]).includes(fact)) return { ok: false, error: "That can't be saved here." };
     if (!value) return { ok: false, error: "Type something first." };
@@ -214,6 +248,9 @@ export async function saveBrandFact(id: string, fact: BrandFact, input: string):
 /** #1681: the ad language picked before a first batch goes first in the Brand's languages, so later batches use it. */
 export async function saveAdLanguage(id: string, language: string): Promise<{ ok: true } | { ok: false; error: string }> {
   return observeAction("server.saveAdLanguage", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "Business details are read-only during this smoke." };
+    }
     const choice = CREATE_LANGUAGES.find((item) => item.id === language)?.id;
     if (!choice) return { ok: false, error: "Pick a language." };
     const supabase = await createClient();

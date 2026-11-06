@@ -6,6 +6,7 @@ import { ownerError } from "@/i18n/request-locale";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional();
 // #798: `customer: true` logs a chat that became a customer in one tap (no details needed).
@@ -28,6 +29,8 @@ async function counts(database: Awaited<ReturnType<typeof createClient>>, campai
 export const POST = observeRoute("/api/campaigns/[id]/enquiries", "POST", async (
   request: Request, context: { params: Promise<{ id: string }> },
 ) => {
+  const fenced = refuseWhenFenced(request, "campaign_write");
+  if (fenced) return fenced;
   const database = await createClient();
   const { data: { user } } = await database.auth.getUser();
   if (!user) return NextResponse.json({ error: await ownerError("signInRequired") }, { status: 401 });
@@ -69,6 +72,8 @@ export const POST = observeRoute("/api/campaigns/[id]/enquiries", "POST", async 
 export const DELETE = observeRoute("/api/campaigns/[id]/enquiries", "DELETE", async (
   request: Request, context: { params: Promise<{ id: string }> },
 ) => {
+  const fenced = refuseWhenFenced(request, "campaign_write");
+  if (fenced) return fenced;
   const database = await createClient();
   const { data: { user } } = await database.auth.getUser();
   if (!user) return NextResponse.json({ error: await ownerError("signInRequired") }, { status: 401 });

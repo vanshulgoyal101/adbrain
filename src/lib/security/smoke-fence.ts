@@ -34,7 +34,7 @@ export function parseSmokeFence(request: Request): { claims: { id: string; expir
 
 /** A forbidden side effect was reached under the fence: the request stops, never passes. */
 export class SmokeFenceError extends Error {
-  constructor(readonly effect: "picture_redraw" | "whatsapp_binding" | "planner_provider" | "existing_draft" | "ai_provider") {
+  constructor(readonly effect: "picture_redraw" | "whatsapp_binding" | "planner_provider" | "existing_draft" | "ai_provider" | "campaign_write") {
     super(`The draft-only smoke fence stopped a side effect: ${effect}.`);
     this.name = "SmokeFenceError";
   }
@@ -54,7 +54,7 @@ export function assertFenceOwnsDraft(fence: SmokeFence | null, draftId: string, 
   if (createdAt !== undefined && fence.capabilityExpiry.get(draftId) !== Date.parse(createdAt) + FENCE_CAPABILITY_TTL_MS) throw new SmokeFenceError("existing_draft");
 }
 
-/** Routes that call an AI provider or spend money refuse every fenced request, before any limit, usage or write. */
-export function refuseWhenFenced(request: Request): Response | null {
-  return request.headers.has(SMOKE_FENCE_HEADER) ? smokeFenceResponse(crypto.randomUUID(), new SmokeFenceError("ai_provider")) : null;
+/** A fenced request cannot reach the side effect named by the route, before any read or write. */
+export function refuseWhenFenced(request: Request, effect: SmokeFenceError["effect"] = "ai_provider"): Response | null {
+  return request.headers.has(SMOKE_FENCE_HEADER) ? smokeFenceResponse(crypto.randomUUID(), new SmokeFenceError(effect)) : null;
 }

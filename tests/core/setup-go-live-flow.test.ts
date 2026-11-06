@@ -238,6 +238,14 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(storage.items.size).toBe(0);
   });
 
+  it("a fenced create refusal never reaches the activation route", async () => {
+    const message = "The draft-only smoke fence stopped a side effect: campaign_write.";
+    const { deps, calls } = await api({ createError: { status: 409, code: "SMOKE_FENCE", message, retryable: false } });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message });
+    expect(calls).toContain("POST /api/campaigns/create");
+    expect(calls.some((call) => call.startsWith("PATCH "))).toBe(false);
+  });
+
   it("the weekly cap refuses the PATCH: 'refused' with the campaign and the server's words; the request is kept", async () => {
     const { deps, storage } = await api({ patch: { status: 422, body: { error: weeklyCapRefusal } } });
     await expect(goLive(deps, input)).resolves.toEqual({ kind: "refused", campaignId: ROW, message: weeklyCapRefusal });

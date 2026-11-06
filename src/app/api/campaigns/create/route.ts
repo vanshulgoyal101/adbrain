@@ -20,6 +20,7 @@ import { BUSINESS_ACCESS_ERRORS } from "@/i18n/locale";
 import { ownerWords } from "@/i18n/request-locale";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -56,6 +57,8 @@ export const POST = observeRoute("/api/campaigns/create", "POST", handlePOST);
 
 async function handlePOST(request: Request) {
   const requestId = currentRequestId();
+  const fenced = refuseWhenFenced(request, "campaign_write");
+  if (fenced) return fenced;
   const say = await ownerWords();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -10,6 +10,7 @@ import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connecti
 import { observeRoute } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
 import { ownerRefusal } from "@/lib/campaign/campaign-owner";
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -24,6 +25,8 @@ export const POST = observeRoute("/api/campaigns/[id]/ads/[adId]/status", "POST"
   req: Request,
   { params }: { params: Promise<{ id: string; adId: string }> },
 ) => {
+  const fenced = refuseWhenFenced(req, "campaign_write");
+  if (fenced) return fenced;
   if (!adResultsEnabled()) return apiError("Not found", 404);
   const { id, adId } = await params;
   if (!/^\d{1,30}$/.test(adId)) return apiError("Ad not found", 404);

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { fenceHeaderValue, fenceStop, policyParity, SMOKE_FENCE_HEADER as scriptHeader, ws1WalkOutcome } from "../scripts/lib/smoke-fence.mjs";
 import { alignPrintedNumbers } from "@/lib/creative/chat-number";
@@ -9,8 +10,9 @@ import { issueDraftCapability, requestIsFenced, smokeFence } from "@/lib/securit
 
 const headerStore = vi.hoisted(() => ({ headers: null as Headers | null }));
 vi.mock("next/headers", () => ({ headers: async () => { if (!headerStore.headers) throw new Error("outside a request"); return headerStore.headers; } }));
-const SECRET = "s".repeat(40);
-vi.mock("@/lib/env", () => ({ getEnv: () => ({ TEST_SESSION_SECRET: SECRET }) }));
+const TEST_SESSION_SECRET = "s".repeat(40);
+const SERVER_SECRET = "p".repeat(40);
+vi.mock("@/lib/env", () => ({ getEnv: () => ({ TEST_SESSION_SECRET, SUPABASE_SERVICE_ROLE_KEY: SERVER_SECRET }) }));
 const req = (value?: string) => new Request("http://localhost/api/x", { headers: value === undefined ? {} : { [SMOKE_FENCE_HEADER]: value } });
 const USER = "u-1";
 const created = new Date().toISOString();
@@ -32,6 +34,15 @@ describe("draft-only smoke fence (#2861)", () => {
   it("issues a capability only to a fenced request", () => {
     expect(issueDraftCapability(req(), USER, id, created)).toBeNull();
     expect(issueDraftCapability(req("draft-only"), USER, id, "not a date")).toBeNull();
+  });
+
+  it("does not accept a capability signed with the test-session secret", () => {
+    const expiresAt = Date.parse(created) + FENCE_CAPABILITY_TTL_MS;
+    const signature = createHmac("sha256", TEST_SESSION_SECRET)
+      .update(`fence-draft|${USER}|${id}|${expiresAt}`)
+      .digest("hex");
+    const fence = smokeFence(req(`draft-only; drafts=${id}.${expiresAt}.${signature}`), USER);
+    expect([...fence!.ownedDraftIds]).toEqual([]);
   });
 
   it("fences, owning nothing, on any malformed value (fail closed)", () => {

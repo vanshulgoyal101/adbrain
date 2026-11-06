@@ -6,8 +6,10 @@ const sign = (secret: string, userId: string, draftId: string, expiresAt: number
   createHmac("sha256", secret).update(`fence-draft|${userId}|${draftId}|${expiresAt}`).digest("hex");
 
 const usableSecret = () => {
-  const secret = getEnv().TEST_SESSION_SECRET;
-  return secret.length >= 32 ? secret : null;
+  const key = getEnv().SUPABASE_SERVICE_ROLE_KEY;
+  return key && key.length >= 32
+    ? createHmac("sha256", key).update("adbrain:smoke-fence-capability:v1").digest("base64url")
+    : null;
 };
 
 /** The capability for a draft a fenced request just created, or null when the request is not fenced or no secret is set. */

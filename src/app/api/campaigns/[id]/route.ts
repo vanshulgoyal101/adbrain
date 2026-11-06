@@ -29,6 +29,7 @@ import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { CampaignEditError, refuseWhileSwitchPending } from "@/lib/campaign/edit-service";
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 import { ownerWords } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
@@ -84,6 +85,8 @@ async function handlePATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const fenced = refuseWhenFenced(req, "campaign_write");
+  if (fenced) return fenced;
   const { id } = await params;
   const say = await ownerWords();
   const supabase = await createClient();
@@ -374,9 +377,11 @@ async function handlePATCH(
 export const DELETE = observeRoute("/api/campaigns/[id]", "DELETE", handleDELETE);
 
 async function handleDELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const fenced = refuseWhenFenced(req, "campaign_write");
+  if (fenced) return fenced;
   const { id } = await params;
   const supabase = await createClient();
   const {

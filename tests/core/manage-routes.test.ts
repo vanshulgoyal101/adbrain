@@ -11,6 +11,7 @@ import deletedTape from "./fixtures/meta/campaign-deleted.json";
 import goneFixture from "./fixtures/meta/campaigns-gone.json";
 import whatsappValidateTape from "./fixtures/meta/whatsapp-adset-validate.json";
 import cleanupRefusals from "./fixtures/meta/create-cleanup-refusals.json";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 // #649: the manage loop (pause, sync, refresh, activation review and refusals) through the real route
 // handlers, connection access, MetaClient, trusted writes, spend enforcement and audit, on an OAuth
@@ -225,9 +226,9 @@ async function review(id = STORED) {
   const { GET } = await import("@/app/api/campaigns/[id]/route");
   return GET(new Request(`http://localhost/api/campaigns/${id}`), params(id));
 }
-async function activate(body: Row, id = STORED) {
+async function activate(body: Row, id = STORED, headers: Record<string, string> = {}) {
   const { PATCH } = await import("@/app/api/campaigns/[id]/route");
-  return PATCH(new Request(`http://localhost/api/campaigns/${id}`, { method: "PATCH", body: JSON.stringify({ status: "active", ...body }) }), params(id));
+  return PATCH(new Request(`http://localhost/api/campaigns/${id}`, { method: "PATCH", headers, body: JSON.stringify({ status: "active", ...body }) }), params(id));
 }
 /** The digest the Campaigns card confirms (src/components/campaigns.tsx), over the reviewed delivery. */
 async function digest(campaign: Row, delivery: unknown, capDays?: number) {
@@ -238,13 +239,13 @@ async function digest(campaign: Row, delivery: unknown, capDays?: number) {
   } };
   return createHash("sha256").update(activationConfirmationPayload(campaign as never, connection as never, delivery as never, capDays)).digest("hex");
 }
-async function sync() {
+async function sync(headers: Record<string, string> = {}) {
   const { POST } = await import("@/app/api/campaigns/sync/route");
-  return POST(new Request("http://localhost/api/campaigns/sync", { method: "POST" }));
+  return POST(new Request("http://localhost/api/campaigns/sync", { method: "POST", headers }));
 }
-async function remove(id = STORED) {
+async function remove(id = STORED, headers: Record<string, string> = {}) {
   const { DELETE } = await import("@/app/api/campaigns/[id]/route");
-  return DELETE(new Request(`http://localhost/api/campaigns/${id}`, { method: "DELETE" }), params(id));
+  return DELETE(new Request(`http://localhost/api/campaigns/${id}`, { method: "DELETE", headers }), params(id));
 }
 async function refresh(id = STORED, query = "") {
   const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
@@ -367,7 +368,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     replay(tapes.pause);
     const response = await pause();
     expect(response.status).toBe(status);
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(graph.sent).toEqual([]);
     expect(store.state.tables.campaigns).toEqual([before]);
   });
 
@@ -484,6 +485,35 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
 
   const writes = () => graph.sent.filter(call => call.method !== "GET");
   const deliveryReads = tapes.delivery.map(exchange => `GET ${exchange.path}`);
+
+  it("refuses a fenced Go-live activation before campaign reads or Meta writes", async () => {
+    const previousLog = [...store.state.log];
+    const response = await activate({}, STORED, { [SMOKE_FENCE_HEADER]: "draft-only" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "SMOKE_FENCE", effect: "campaign_write" } });
+    expect(store.state.log).toEqual(previousLog);
+    expect(graph.sent).toEqual([]);
+    expect(capabilities.verify).not.toHaveBeenCalled();
+  });
+
+  it("refuses a fenced campaign sync before Meta reads or campaign writes", async () => {
+    const previousLog = [...store.state.log];
+    const response = await sync({ [SMOKE_FENCE_HEADER]: "draft-only" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "SMOKE_FENCE", effect: "campaign_write" } });
+    expect(store.state.log).toEqual(previousLog);
+    expect(graph.sent).toEqual([]);
+  });
+
+  it("refuses a fenced campaign delete before campaign reads or Meta writes", async () => {
+    treeCampaign();
+    const previousLog = [...store.state.log];
+    const response = await remove(STORED, { [SMOKE_FENCE_HEADER]: "draft-only" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "SMOKE_FENCE", effect: "campaign_write" } });
+    expect(store.state.log).toEqual(previousLog);
+    expect(graph.sent).toEqual([]);
+  });
 
   it("activation review: returns the recorded delivery and account funding with reads only", async () => {
     reviewedCampaign();
