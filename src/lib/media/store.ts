@@ -391,9 +391,7 @@ export async function deleteMedia(admin: SupabaseClient, row: MediaRow): Promise
   }
   if (row.kind === "video") {
     const { data, error: confirmError } = await admin.rpc("media_video_final_removed", { p_asset_id: row.id, p_final_path: row.path });
-    if (confirmError || (row.status === "ready" && data !== true)) {
-      throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't confirm the video was removed. Try again.");
-    }
+    if (confirmError || (row.status === "ready" && data !== true)) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't confirm the video was removed. Try again.");
     if (data === true) return;
   }
   const { error: saveError } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id);
