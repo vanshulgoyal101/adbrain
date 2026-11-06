@@ -1806,7 +1806,7 @@ async function verifyMediaVideoBudget(db, database) {
     const id = randomUUID(), upload = path(business, "upload");
     assetIds.add(id);
     return {
-      id, business, upload,
+      id, business, upload, expectedFinalSha256: sha(),
       sql: `insert into public.media_assets(id,business_id,path,sha256,kind,mime,bytes,duration_ms,source)
         values ($1,$2,$3,$4,'video','video/mp4',$5,10000,'ai') returning id`,
       values: [id, business, upload, sha(), bytes],
@@ -1826,29 +1826,47 @@ async function verifyMediaVideoBudget(db, database) {
   );
   const remove = name => db.query("delete from storage.objects where bucket_id='media-video' and name=$1", [name]);
   const held = async () => Number((await service.query("select private.media_video_held_bytes() as bytes")).rows[0].bytes);
-  const slots = async id => (await db.query(`select slot,path,reserved_bytes::text as reserved_bytes,state,signing_intent,token_expires_at
+  const slots = async id => (await db.query(`select slot,path,reserved_bytes::text as reserved_bytes,state,signing_intent,token_expires_at,
+      attempt_id,expected_sha256,expected_bytes::text as expected_bytes
     from private.media_video_slots where asset_id=$1 order by slot`, [id])).rows;
   const begin = async asset => (await service.query("select public.media_video_sign_begin($1,$2) as intent", [asset.id, asset.upload])).rows[0].intent;
   const finish = async (asset, intent) => (await service.query("select public.media_video_sign_finish($1,$2) as finished", [asset.id, intent])).rows[0].finished;
-  const claim = async (asset, final) => (await service.query("select public.media_video_finalize_claim($1,$2,$3) as claimed", [asset.id, asset.upload, final])).rows[0].claimed;
+  const claimAttempt = async (asset, final, expectedBytes = 1234, expectedSha256 = asset.expectedFinalSha256) => {
+    const result = await service.query(
+      "select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)",
+      [asset.id, asset.upload, final, expectedSha256, expectedBytes],
+    );
+    const attempt = result.rows[0] ?? null;
+    if (attempt) asset.finalAttempt = attempt;
+    return attempt;
+  };
+  const claim = async (asset, final, expectedBytes = 1234, expectedSha256 = asset.expectedFinalSha256) =>
+    Boolean((await claimAttempt(asset, final, expectedBytes, expectedSha256))?.newly_claimed);
+  const terminal = async (asset, attempt = asset.finalAttempt) => (await service.query(
+    "select public.media_video_finalize_terminal($1,$2) as terminal", [asset.id, attempt.attempt_id],
+  )).rows[0].terminal;
   const finalRemoved = async (asset, final) => (await service.query("select public.media_video_final_removed($1,$2) as removed", [asset.id, final])).rows[0].removed;
+  const complete = async (asset, final, expectedBytes, attempt = asset.finalAttempt) => (await service.query(
+    `select public.media_video_finalize_complete(
+      $1,$2,$3,$4,$5,$6,'video/mp4',720,1280,10000,$7::jsonb
+    ) as completed`,
+    [asset.id, asset.upload, attempt.attempt_id, final, attempt.expected_sha256, expectedBytes,
+      JSON.stringify({ storedSha256: attempt.expected_sha256 })],
+  )).rows[0].completed;
   const sign = async asset => {
     const intent = await begin(asset);
     assert.match(intent, /^[0-9a-f-]{36}$/);
     assert.equal(await finish(asset, intent), true);
   };
-  const ready = (asset, final, bytes) => service.query(
-    "update public.media_assets set path=$2,status='ready',bytes=$3,updated_at=now() where id=$1 returning id",
-    [asset.id, final, bytes],
-  );
+  const ready = async (asset, final, bytes) => ({ completed: await complete(asset, final, bytes) });
   const makeReady = async (finalBytes = 20971520) => {
     const asset = await insert();
     const final = path(asset.business, "final");
     await sign(asset);
     await put(asset.upload, { size: 31457280 });
-    assert.equal(await claim(asset, final), true);
+    assert.equal(await claim(asset, final, finalBytes), true);
     await put(final, { size: finalBytes });
-    assert.equal((await ready(asset, final, finalBytes)).rowCount, 1);
+    assert.equal((await ready(asset, final, finalBytes)).completed, true);
     return { ...asset, final };
   };
   const refused = promise => assert.rejects(promise, { code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
@@ -1886,6 +1904,121 @@ async function verifyMediaVideoBudget(db, database) {
       assert.equal(await held(), 104857600);
       await mustNotUpdate("update public.media_assets set upload_path=$2 where id=$1 returning id", [asset.id, path(asset.business, "changed")]);
       assert.equal((await db.query("select upload_path from public.media_assets where id=$1", [asset.id])).rows[0].upload_path, asset.upload);
+    });
+
+    await check(`${database}: ambiguous final writes reconcile the pinned object and atomically complete the row (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      const firstPath = path(asset.business, "attempt-first");
+      const retryPath = path(asset.business, "attempt-retry");
+      await sign(asset);
+
+      const first = await claimAttempt(asset, firstPath, 1234);
+      assert.equal(first.newly_claimed, true);
+      assert.equal(first.final_path, firstPath);
+      assert.equal(first.expected_sha256, asset.expectedFinalSha256);
+      assert.equal(Number(first.expected_bytes), 1234);
+      assert.equal(first.state, "writing");
+
+      await put(asset.upload, { size: 31457280 });
+      await put(firstPath, { size: 1234 });
+      const retry = await claimAttempt(asset, retryPath, 1234);
+      assert.deepEqual(
+        { attempt_id: retry.attempt_id, final_path: retry.final_path, expected_sha256: retry.expected_sha256,
+          expected_bytes: Number(retry.expected_bytes), state: retry.state, newly_claimed: retry.newly_claimed },
+        { attempt_id: first.attempt_id, final_path: firstPath, expected_sha256: asset.expectedFinalSha256,
+          expected_bytes: 1234, state: "writing", newly_claimed: false },
+      );
+      assert.equal(await held(), 104857600);
+      assert.equal(await complete(asset, firstPath, 1234, retry), true);
+      assert.deepEqual((await db.query("select status,path,bytes from public.media_assets where id=$1", [asset.id])).rows[0],
+        { status: "ready", path: firstPath, bytes: "1234" });
+      assert.deepEqual((await slots(asset.id)).find(slot => slot.slot === "final"),
+        { slot: "final", path: firstPath, reserved_bytes: "1234", state: "verified", signing_intent: null,
+          token_expires_at: null, attempt_id: first.attempt_id, expected_sha256: asset.expectedFinalSha256, expected_bytes: "1234" });
+      assert.equal(await complete(asset, firstPath, 1234, first), true, "a lost completion response is idempotent");
+      assert.equal((await db.query("select path from public.media_assets where id=$1", [asset.id])).rows[0].path, firstPath);
+      assert.equal(await held(), 52430034);
+      assert.equal((await db.query("select count(*)::int as n from storage.objects where bucket_id='media-video' and name=$1", [retryPath])).rows[0].n, 0,
+        "retry must not create another final path");
+    });
+
+    await check(`${database}: missing or mismatched final bytes stay unresolved until terminal proof and stale attempts are fenced (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      await sign(asset);
+      const firstPath = path(asset.business, "terminal-first");
+      const first = await claimAttempt(asset, firstPath, 1234);
+      assert.equal(await complete(asset, firstPath, 1234, first), false, "missing bytes cannot complete");
+      assert.equal(await held(), 104857600, "missing bytes keep both reservations");
+      await put(firstPath, { size: 1235 });
+      assert.equal(await complete(asset, firstPath, 1234, first), false, "mismatched bytes cannot complete");
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "writing");
+
+      await remove(firstPath);
+      assert.equal(await terminal(asset, first), true, "a definitive terminal failure may release only an absent object");
+      assert.deepEqual(
+        (({ path: name, state, attempt_id, expected_sha256, expected_bytes }) => ({
+          path: name, state, attempt_id, expected_sha256, expected_bytes,
+        }))((await slots(asset.id)).find(slot => slot.slot === "final")),
+        { path: null, state: "reserved", attempt_id: null, expected_sha256: null, expected_bytes: null },
+      );
+
+      const secondPath = path(asset.business, "terminal-second");
+      const second = await claimAttempt(asset, secondPath, 1234);
+      assert.equal(second.newly_claimed, true);
+      assert.notEqual(second.attempt_id, first.attempt_id);
+      await put(secondPath, { size: 1234 });
+      assert.equal(await complete(asset, secondPath, 1234, first), false, "a stale attempt cannot complete the replacement");
+      assert.equal(await complete(asset, secondPath, 1234, second), true);
+      assert.equal((await db.query("select path from public.media_assets where id=$1", [asset.id])).rows[0].path, secondPath);
+    });
+
+    await check(`${database}: concurrent finalization retries share one persisted attempt (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      const candidates = Array.from({ length: 4 }, (_, i) => path(asset.business, `retry-${i}`));
+      await sign(asset);
+      const results = await raceServiceTransactions(db, database, candidates.map(candidate => c => c.query(
+        "select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)",
+        [asset.id, asset.upload, candidate, asset.expectedFinalSha256, 1234],
+      )));
+      assert.ok(results.every(result => result.status === "fulfilled"));
+      const attempts = results.map(result => result.value.rows[0]);
+      assert.equal(attempts.filter(attempt => attempt.newly_claimed).length, 1);
+      assert.equal(new Set(attempts.map(attempt => attempt.attempt_id)).size, 1);
+      assert.equal(new Set(attempts.map(attempt => attempt.final_path)).size, 1);
+      assert.ok(attempts.every(attempt => attempt.state === "writing" && attempt.matches_request));
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").path, attempts[0].final_path);
+      assert.equal(await held(), 104857600);
+    });
+
+    await check(`${database}: failed ready-row transaction preserves the attempt for idempotent recovery (#2653)`, async () => {
+      await reset();
+      const asset = await insert();
+      const final = path(asset.business, "save-retry");
+      await sign(asset);
+      const attempt = await claimAttempt(asset, final, 1234);
+      await put(final, { size: 1234 });
+      await asPostgres(db, () => db.query(`create function public.reject_video_finalize_save() returns trigger
+        language plpgsql set search_path = '' as $$
+        begin raise exception 'intentional media finalize save failure'; end $$;
+        create trigger reject_video_finalize_save before update on public.media_assets
+        for each row when (new.id = '${asset.id}'::uuid and new.status = 'ready')
+        execute function public.reject_video_finalize_save()`));
+      try {
+        await assert.rejects(complete(asset, final, 1234, attempt), { message: "intentional media finalize save failure" });
+      } finally {
+        await asPostgres(db, () => db.query("drop trigger if exists reject_video_finalize_save on public.media_assets; drop function if exists public.reject_video_finalize_save()"));
+      }
+      assert.deepEqual((await db.query("select status,path from public.media_assets where id=$1", [asset.id])).rows[0],
+        { status: "pending", path: asset.upload });
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "writing");
+      assert.equal(await held(), 104857600);
+      assert.equal(await complete(asset, final, 1234, attempt), true);
+      assert.deepEqual((await db.query("select status,path from public.media_assets where id=$1", [asset.id])).rows[0],
+        { status: "ready", path: final });
+      assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").state, "verified");
     });
 
     await check(`${database}: 150 MiB is admitted exactly, but one additional byte is not (#2653)`, async () => {
@@ -1950,10 +2083,10 @@ async function verifyMediaVideoBudget(db, database) {
       const asset = await insert(), final = path(asset.business, "final");
       await sign(asset);
       await put(asset.upload, { size: 31457280 });
-      assert.equal(await claim(asset, final), true);
+      assert.equal(await claim(asset, final, 20971520), true);
       await put(final, { size: 20971520 });
       assert.equal(await held(), 104857600, "two existing objects must not also be counted as orphans");
-      assert.equal((await ready(asset, final, 20971520)).rowCount, 1);
+      assert.equal((await ready(asset, final, 20971520)).completed, true);
       assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").reserved_bytes, "20971520");
       assert.equal(await held(), 73400320);
       await db.query("update storage.objects set metadata=jsonb_build_object('size',41943040) where bucket_id='media-video' and name=$1", [final]);
@@ -2027,7 +2160,7 @@ async function verifyMediaVideoBudget(db, database) {
       await put(final, { size: 1234 });
       await mustNotUpdate("update public.media_assets set path=$2,status='ready',bytes=1235 where id=$1 returning id", [asset.id, final]);
       assert.equal((await db.query("select status from public.media_assets where id=$1", [asset.id])).rows[0].status, "pending");
-      assert.equal((await ready(asset, final, 1234)).rowCount, 1);
+      assert.equal((await ready(asset, final, 1234)).completed, true);
       assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").reserved_bytes, "1234");
       assert.equal(await held(), 52431268);
     });
@@ -2078,19 +2211,22 @@ async function verifyMediaVideoBudget(db, database) {
       await reset();
       const asset = await insert(), finals = [path(asset.business, "first"), path(asset.business, "second")];
       await sign(asset);
+      const expectedSha256 = asset.expectedFinalSha256;
       const results = await raceServiceTransactions(db, database, finals.map(final => c => c.query(
-        "select public.media_video_finalize_claim($1,$2,$3) as claimed", [asset.id, asset.upload, final],
+        "select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)",
+        [asset.id, asset.upload, final, expectedSha256, 1000],
       )));
       assert.ok(results.every(result => result.status === "fulfilled"));
-      const accepted = results.map(result => result.value.rows[0].claimed);
+      const accepted = results.map(result => result.value.rows[0]?.newly_claimed ?? false);
       assert.deepEqual([...accepted].sort(), [false, true]);
-      const winner = finals[accepted.indexOf(true)], loser = finals[accepted.indexOf(false)];
+      const winner = results[accepted.indexOf(true)].value.rows[0].final_path;
+      const loser = finals.find(final => final !== winner);
       assert.equal((await slots(asset.id)).find(slot => slot.slot === "final").path, winner);
-      assert.equal(await claim(asset, loser), false);
+      assert.equal(await claim(asset, loser, 1000), false);
       await put(winner, { size: 1000 });
       await put(loser, { size: 1000 });
       await mustNotUpdate("update public.media_assets set path=$2,status='ready',bytes=1000 where id=$1 returning id", [asset.id, loser]);
-      assert.equal((await ready(asset, winner, 1000)).rowCount, 1);
+      assert.equal((await ready(asset, winner, 1000)).completed, true);
       assert.equal(await held(), 52430800);
     });
 
@@ -2100,10 +2236,11 @@ async function verifyMediaVideoBudget(db, database) {
       await sign(asset);
       const [signing, finalizing] = await raceServiceTransactions(db, database, [
         c => c.query("select public.media_video_sign_begin($1,$2) as intent", [asset.id, asset.upload]),
-        c => c.query("select public.media_video_finalize_claim($1,$2,$3) as claimed", [asset.id, asset.upload, final]),
+        c => c.query("select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)",
+          [asset.id, asset.upload, final, asset.expectedFinalSha256, 1234]),
       ]);
       assert.equal(finalizing.status, "fulfilled");
-      const claimed = finalizing.value.rows[0].claimed;
+      const claimed = finalizing.value.rows[0]?.newly_claimed ?? false;
       assert.equal(typeof claimed, "boolean");
       if (signing.status === "fulfilled") {
         const intent = signing.value.rows[0].intent;
@@ -2255,7 +2392,10 @@ async function verifyMediaVideoBudget(db, database) {
             ["select * from private.media_video_slots", []],
             ["select public.media_video_sign_begin($1,$2)", [asset.id, asset.upload]],
             ["select public.media_video_sign_finish($1,$2)", [asset.id, randomUUID()]],
-            ["select public.media_video_finalize_claim($1,$2,$3)", [asset.id, asset.upload, final]],
+            ["select * from public.media_video_finalize_claim($1,$2,$3,$4,$5)", [asset.id, asset.upload, final, asset.expectedFinalSha256, 1234]],
+            ["select public.media_video_finalize_complete($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+              [asset.id, asset.upload, randomUUID(), final, asset.expectedFinalSha256, 1234, "video/mp4", 720, 1280, 10000, "{}"]],
+            ["select public.media_video_finalize_terminal($1,$2)", [asset.id, randomUUID()]],
             ["select public.media_video_final_removed($1,$2)", [asset.id, final]],
           ]) {
             await session.query("savepoint denied");
@@ -3949,9 +4089,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
           to_regprocedure('private.media_video_held_bytes()') is not null as held,
           to_regprocedure('public.media_video_sign_begin(uuid,text)') is not null as sign_begin,
           to_regprocedure('public.media_video_sign_finish(uuid,uuid)') is not null as sign_finish,
-          to_regprocedure('public.media_video_finalize_claim(uuid,text,text)') is not null as finalize_claim,
+          to_regprocedure('public.media_video_finalize_claim(uuid,text,text,text,bigint)') is not null as finalize_claim,
+          to_regprocedure('public.media_video_finalize_complete(uuid,text,uuid,text,text,bigint,text,integer,integer,integer,jsonb)') is not null as finalize_complete,
+          to_regprocedure('public.media_video_finalize_terminal(uuid,uuid)') is not null as finalize_terminal,
           to_regprocedure('public.media_video_final_removed(uuid,text)') is not null as final_removed`)).rows[0];
-        assert.deepEqual(installed, { slots: true, held: true, sign_begin: true, sign_finish: true, finalize_claim: true, final_removed: true });
+        assert.deepEqual(installed, { slots: true, held: true, sign_begin: true, sign_finish: true,
+          finalize_claim: true, finalize_complete: true, finalize_terminal: true, final_removed: true });
       });
     }
     if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);

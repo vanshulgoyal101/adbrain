@@ -32,10 +32,45 @@ create table if not exists private.media_video_slots (
   state text not null check (state in ('reserved', 'writing', 'verified', 'removed')),
   signing_intent uuid,
   token_expires_at timestamptz,
+  attempt_id uuid,
+  expected_sha256 text,
+  expected_bytes bigint,
   primary key (asset_id, slot),
   check ((slot = 'upload' and path is not null and state = 'reserved') or slot = 'final'),
   check (slot = 'upload' or (signing_intent is null and token_expires_at is null))
 );
+
+alter table private.media_video_slots add column if not exists attempt_id uuid;
+alter table private.media_video_slots add column if not exists expected_sha256 text;
+alter table private.media_video_slots add column if not exists expected_bytes bigint;
+
+do $$
+begin
+  if exists (
+    select 1 from private.media_video_slots
+    where slot = 'final' and state in ('writing', 'verified', 'removed')
+      and (path is null or attempt_id is null or expected_sha256 is null
+        or expected_sha256 !~ '^[0-9a-f]{64}$' or expected_bytes not between 1 and 52428800)
+  ) then
+    raise exception 'MEDIA_VIDEO_RECONCILIATION_REQUIRED' using errcode = 'P0001';
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'private.media_video_slots'::regclass
+      and conname = 'media_video_slots_attempt_contract'
+  ) then
+    alter table private.media_video_slots add constraint media_video_slots_attempt_contract check (
+      (slot = 'upload' and attempt_id is null and expected_sha256 is null and expected_bytes is null)
+      or (slot = 'final' and (
+        (state = 'reserved' and path is null and attempt_id is null and expected_sha256 is null and expected_bytes is null)
+        or (state in ('writing', 'verified', 'removed') and path is not null and attempt_id is not null
+          and expected_sha256 is not null and expected_sha256 ~ '^[0-9a-f]{64}$'
+          and expected_bytes is not null and expected_bytes between 1 and 52428800)
+      ))
+    );
+  end if;
+end;
+$$;
 
 create unique index if not exists media_video_slots_path_idx
   on private.media_video_slots (path) where path is not null;
@@ -100,6 +135,9 @@ begin
       max(s.path) filter (where s.slot = 'final') as final_path,
       max(s.state) filter (where s.slot = 'final') as final_state,
       max(s.reserved_bytes) filter (where s.slot = 'final') as final_reserved_bytes,
+      max(s.attempt_id::text) filter (where s.slot = 'final') as final_attempt_id,
+      max(s.expected_sha256) filter (where s.slot = 'final') as final_expected_sha256,
+      max(s.expected_bytes) filter (where s.slot = 'final') as final_expected_bytes,
       max(s.token_expires_at) filter (where s.slot = 'upload') as token_expires_at,
       bool_or(s.signing_intent is not null) filter (where s.slot = 'upload') as upload_signing,
       coalesce(sum(o.bytes), 0::numeric) as actual_bytes,
@@ -111,14 +149,16 @@ begin
   video_rows as (
     select m.id as asset_id, m.status, m.upload_path as asset_upload_path,
       greatest(m.upload_expires_at, b.token_expires_at) as upload_expires_at,
-      b.upload_slots, b.final_slots, b.upload_path, b.final_state, b.final_reserved_bytes, b.upload_signing,
+      b.upload_slots, b.final_slots, b.upload_path, b.final_path, b.final_state, b.final_reserved_bytes, b.upload_signing,
+      b.final_attempt_id, b.final_expected_sha256, b.final_expected_bytes,
       b.actual_bytes, b.final_object_bytes
     from public.media_assets m
     left join slot_bytes b on b.asset_id = m.id
     where m.kind = 'video'
     union all
     select b.asset_id, null::text, null::text, b.token_expires_at,
-      b.upload_slots, b.final_slots, b.upload_path, b.final_state, b.final_reserved_bytes, b.upload_signing,
+      b.upload_slots, b.final_slots, b.upload_path, b.final_path, b.final_state, b.final_reserved_bytes, b.upload_signing,
+      b.final_attempt_id, b.final_expected_sha256, b.final_expected_bytes,
       b.actual_bytes, b.final_object_bytes
     from slot_bytes b
     where not exists (
@@ -142,6 +182,11 @@ begin
     (upload_slots is distinct from 1 or final_slots is distinct from 1
       or upload_path is null
       or (status is not null and upload_path is distinct from asset_upload_path)
+      or (final_state = 'reserved' and (final_path is not null or final_attempt_id is not null
+        or final_expected_sha256 is not null or final_expected_bytes is not null))
+      or (final_state in ('writing', 'verified', 'removed') and (final_path is null or final_attempt_id is null
+        or coalesce(final_expected_sha256 !~ '^[0-9a-f]{64}$', true)
+        or final_expected_bytes not between 1 and 52428800))
       or (status = 'ready' and (final_state is null or final_state not in ('verified', 'removed')))) as invalid
     from video_rows
   ),
@@ -173,6 +218,9 @@ declare
   actual_bytes bigint;
   final_state text;
   final_path text;
+  final_attempt_id uuid;
+  final_expected_sha256 text;
+  final_expected_bytes bigint;
 begin
   if tg_op = 'INSERT' then
     if new.kind <> 'video' then
@@ -211,12 +259,15 @@ begin
   end if;
 
   if new.status = 'ready' and old.status is distinct from 'ready' then
-    select s.state, s.path into final_state, final_path
+    select s.state, s.path, s.attempt_id, s.expected_sha256, s.expected_bytes
+    into final_state, final_path, final_attempt_id, final_expected_sha256, final_expected_bytes
     from private.media_video_slots s
     where s.asset_id = old.id and s.slot = 'final'
     for update;
 
     if final_state is distinct from 'writing' or final_path is distinct from new.path
+      or final_attempt_id is null or final_expected_sha256 is distinct from new.checks ->> 'storedSha256'
+      or final_expected_bytes is distinct from new.bytes
       or new.bytes is null or new.bytes > 52428800 then
       raise exception 'MEDIA_VIDEO_STATE' using errcode = '23514';
     end if;
@@ -323,19 +374,40 @@ begin
 end;
 $$;
 
-create or replace function public.media_video_finalize_claim(p_asset_id uuid, p_upload_path text, p_final_path text)
-returns boolean language plpgsql security definer set search_path = '' as $$
+drop function if exists public.media_video_finalize_claim(uuid, text, text);
+
+create or replace function public.media_video_finalize_claim(
+  p_asset_id uuid,
+  p_upload_path text,
+  p_candidate_final_path text,
+  p_expected_sha256 text,
+  p_expected_bytes bigint
+)
+returns table (
+  attempt_id uuid,
+  final_path text,
+  expected_sha256 text,
+  expected_bytes bigint,
+  state text,
+  newly_claimed boolean,
+  matches_request boolean
+)
+language plpgsql security definer set search_path = '' as $$
 declare
   asset_status text;
   asset_upload_path text;
   asset_deleted_at timestamptz;
   asset_business_id uuid;
   upload_intent uuid;
-  final_state text;
-  final_path text;
+  final_slot private.media_video_slots%rowtype;
+  new_attempt_id uuid;
 begin
   if not private.media_video_bucket_safe() then
     raise exception 'MEDIA_VIDEO_BUCKET_UNSAFE' using errcode = 'P0001';
+  end if;
+  if p_expected_sha256 is null or p_expected_sha256 !~ '^[0-9a-f]{64}$'
+    or p_expected_bytes not between 1 and 52428800 then
+    return;
   end if;
 
   select m.status, m.upload_path, m.deleted_at, m.business_id
@@ -344,33 +416,188 @@ begin
   where m.id = p_asset_id and m.kind = 'video'
   for update;
   if not found or asset_status <> 'pending' or asset_deleted_at is not null
-    or asset_upload_path is distinct from p_upload_path
-    or p_final_path is null or p_final_path = p_upload_path
-    or split_part(p_final_path, '/', 1) <> asset_business_id::text
-    or char_length(p_final_path) not between 3 and 300 then
-    return false;
+    or asset_upload_path is distinct from p_upload_path then
+    return;
   end if;
 
   select u.signing_intent into upload_intent
   from private.media_video_slots u
   where u.asset_id = p_asset_id and u.slot = 'upload' and u.path = p_upload_path
   for update;
-  if not found or upload_intent is not null then
-    return false;
+  if not found then
+    return;
   end if;
 
-  select f.state, f.path into final_state, final_path
+  select f.* into final_slot
   from private.media_video_slots f
   where f.asset_id = p_asset_id and f.slot = 'final'
   for update;
-  if final_state is distinct from 'reserved' or final_path is not null
-    or exists (select 1 from storage.objects o where o.bucket_id = 'media-video' and o.name = p_final_path) then
+  if not found then
+    return;
+  end if;
+
+  if final_slot.state in ('writing', 'verified') then
+    return query
+      select final_slot.attempt_id, final_slot.path, final_slot.expected_sha256, final_slot.expected_bytes,
+        final_slot.state, false,
+        final_slot.expected_sha256 = p_expected_sha256 and final_slot.expected_bytes = p_expected_bytes;
+    return;
+  end if;
+
+  if upload_intent is not null
+    or final_slot.state <> 'reserved'
+    or final_slot.path is not null
+    or final_slot.attempt_id is not null
+    or final_slot.expected_sha256 is not null
+    or final_slot.expected_bytes is not null
+    or p_candidate_final_path is null
+    or p_candidate_final_path = p_upload_path
+    or split_part(p_candidate_final_path, '/', 1) <> asset_business_id::text
+    or char_length(p_candidate_final_path) not between 3 and 300
+    or exists (select 1 from storage.objects o where o.bucket_id = 'media-video' and o.name = p_candidate_final_path) then
+    return;
+  end if;
+
+  new_attempt_id := gen_random_uuid();
+  update private.media_video_slots as s
+  set path = p_candidate_final_path,
+    state = 'writing',
+    attempt_id = new_attempt_id,
+    expected_sha256 = p_expected_sha256,
+    expected_bytes = p_expected_bytes
+  where s.asset_id = p_asset_id and s.slot = 'final'
+    and s.state = 'reserved' and s.path is null;
+  if not found then
+    return;
+  end if;
+
+  return query select new_attempt_id, p_candidate_final_path, p_expected_sha256, p_expected_bytes, 'writing'::text, true, true;
+end;
+$$;
+
+create or replace function public.media_video_finalize_complete(
+  p_asset_id uuid,
+  p_upload_path text,
+  p_attempt_id uuid,
+  p_final_path text,
+  p_expected_sha256 text,
+  p_expected_bytes bigint,
+  p_mime text,
+  p_width integer,
+  p_height integer,
+  p_duration_ms integer,
+  p_checks jsonb
+)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare
+  asset_status text;
+  asset_upload_path text;
+  asset_path text;
+  asset_bytes bigint;
+  asset_checks jsonb;
+  asset_deleted_at timestamptz;
+  final_slot private.media_video_slots%rowtype;
+  object_bytes bigint;
+begin
+  if not private.media_video_bucket_safe() then
+    raise exception 'MEDIA_VIDEO_BUCKET_UNSAFE' using errcode = 'P0001';
+  end if;
+  if p_expected_sha256 is null or p_expected_sha256 !~ '^[0-9a-f]{64}$'
+    or p_expected_bytes not between 1 and 52428800
+    or p_mime not in ('video/mp4', 'video/quicktime')
+    or p_width not between 1 and 4320 or p_height not between 1 and 4320
+    or p_duration_ms is not null and p_duration_ms not between 1 and 120000
+    or jsonb_typeof(p_checks) <> 'object'
+    or p_checks ->> 'storedSha256' is distinct from p_expected_sha256 then
+    return false;
+  end if;
+
+  select m.status, m.upload_path, m.path, m.bytes, m.checks, m.deleted_at
+  into asset_status, asset_upload_path, asset_path, asset_bytes, asset_checks, asset_deleted_at
+  from public.media_assets m
+  where m.id = p_asset_id and m.kind = 'video'
+  for update;
+  if not found or asset_deleted_at is not null or asset_upload_path is distinct from p_upload_path then
+    return false;
+  end if;
+
+  select f.* into final_slot
+  from private.media_video_slots f
+  where f.asset_id = p_asset_id and f.slot = 'final'
+  for update;
+  if not found
+    or final_slot.path is distinct from p_final_path
+    or final_slot.attempt_id is distinct from p_attempt_id
+    or final_slot.expected_sha256 is distinct from p_expected_sha256
+    or final_slot.expected_bytes is distinct from p_expected_bytes then
+    return false;
+  end if;
+
+  if asset_status = 'ready' then
+    return asset_path = p_final_path
+      and asset_bytes = p_expected_bytes
+      and asset_checks ->> 'storedSha256' = p_expected_sha256
+      and final_slot.state = 'verified';
+  end if;
+  if asset_status <> 'pending' or final_slot.state <> 'writing' then
+    return false;
+  end if;
+
+  select private.media_video_object_bytes(o.metadata) into object_bytes
+  from storage.objects o
+  where o.bucket_id = 'media-video' and o.name = p_final_path;
+  if not found or object_bytes is distinct from p_expected_bytes then
+    return false;
+  end if;
+
+  update public.media_assets
+  set path = p_final_path,
+    status = 'ready',
+    bytes = p_expected_bytes,
+    mime = p_mime,
+    width = p_width,
+    height = p_height,
+    duration_ms = p_duration_ms,
+    checks = p_checks,
+    updated_at = clock_timestamp()
+  where id = p_asset_id and kind = 'video' and status = 'pending' and deleted_at is null;
+  return found;
+end;
+$$;
+
+-- Only call after a definitive pre-accept rejection; never use timeout/transport errors as proof of terminality.
+create or replace function public.media_video_finalize_terminal(p_asset_id uuid, p_attempt_id uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare
+  asset_status text;
+  asset_deleted_at timestamptz;
+  final_slot private.media_video_slots%rowtype;
+begin
+  if not private.media_video_bucket_safe() then
+    raise exception 'MEDIA_VIDEO_BUCKET_UNSAFE' using errcode = 'P0001';
+  end if;
+
+  select m.status, m.deleted_at into asset_status, asset_deleted_at
+  from public.media_assets m
+  where m.id = p_asset_id and m.kind = 'video'
+  for update;
+  if not found or asset_status <> 'pending' or asset_deleted_at is not null then
+    return false;
+  end if;
+
+  select f.* into final_slot
+  from private.media_video_slots f
+  where f.asset_id = p_asset_id and f.slot = 'final'
+  for update;
+  if not found or final_slot.state <> 'writing' or final_slot.attempt_id is distinct from p_attempt_id
+    or final_slot.path is null
+    or exists (select 1 from storage.objects o where o.bucket_id = 'media-video' and o.name = final_slot.path) then
     return false;
   end if;
 
   update private.media_video_slots
-  set path = p_final_path, state = 'writing'
-  where asset_id = p_asset_id and slot = 'final' and state = 'reserved' and path is null;
+  set state = 'reserved', path = null, attempt_id = null, expected_sha256 = null, expected_bytes = null
+  where asset_id = p_asset_id and slot = 'final' and state = 'writing' and attempt_id = p_attempt_id;
   return found;
 end;
 $$;
@@ -425,11 +652,15 @@ revoke all on function private.media_assets_video_lifecycle() from public, anon,
 
 revoke all on function public.media_video_sign_begin(uuid, text) from public, anon, authenticated;
 revoke all on function public.media_video_sign_finish(uuid, uuid) from public, anon, authenticated;
-revoke all on function public.media_video_finalize_claim(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.media_video_finalize_claim(uuid, text, text, text, bigint) from public, anon, authenticated;
+revoke all on function public.media_video_finalize_complete(uuid, text, uuid, text, text, bigint, text, integer, integer, integer, jsonb) from public, anon, authenticated;
+revoke all on function public.media_video_finalize_terminal(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.media_video_final_removed(uuid, text) from public, anon, authenticated;
 grant execute on function public.media_video_sign_begin(uuid, text) to service_role;
 grant execute on function public.media_video_sign_finish(uuid, uuid) to service_role;
-grant execute on function public.media_video_finalize_claim(uuid, text, text) to service_role;
+grant execute on function public.media_video_finalize_claim(uuid, text, text, text, bigint) to service_role;
+grant execute on function public.media_video_finalize_complete(uuid, text, uuid, text, text, bigint, text, integer, integer, integer, jsonb) to service_role;
+grant execute on function public.media_video_finalize_terminal(uuid, uuid) to service_role;
 grant execute on function public.media_video_final_removed(uuid, text) to service_role;
 
 commit;
