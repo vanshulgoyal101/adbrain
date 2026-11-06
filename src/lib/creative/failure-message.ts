@@ -35,3 +35,31 @@ export function creativeFailureStage(error: unknown): CreativeFailureStage {
   if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) return "timeout";
   return "other";
 }
+
+export type CreativeFailureResult = {
+  angle: string;
+  angleId: string;
+  error: string;
+  stage: CreativeFailureStage;
+  code?: string;
+};
+
+type CreativeFailureInput = {
+  angle: { id: string; name: string };
+  message: string;
+  error: unknown;
+};
+
+function creativeFailureResult(input: CreativeFailureInput): CreativeFailureResult {
+  return {
+    angle: input.angle.name,
+    angleId: input.angle.id,
+    error: input.message,
+    stage: creativeFailureStage(input.error),
+    ...(input.error instanceof NoLLMKeysError ? { code: "NO_LLM_KEYS" } : {}),
+  };
+}
+
+export function creativeFailureDetails(inputs: CreativeFailureInput[]): CreativeFailureResult[] {
+  return inputs.map(creativeFailureResult);
+}
