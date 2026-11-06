@@ -28,6 +28,8 @@ export type RerunPrefill = {
   destination?: Exclude<LeadDestination, "call" | "website">;
   leadFormId: string | null;
   whatsappNumber?: string;
+  whatsappNumberSource?: DraftInput["whatsappNumberSource"];
+  whatsappNumberChoiceId?: DraftInput["whatsappNumberChoiceId"];
   whatsappLanguage?: DraftInput["whatsappLanguage"];
   whatsappMessage?: DraftInput["whatsappMessage"];
   /** Absent for a campaign without its launch draft: the composer keeps its defaults. */
@@ -81,6 +83,8 @@ export function rerunPrefill(input: {
       ...shared, source: "draft", goal: draft.goal, dailyBudgetRupees: draft.dailyBudgetRupees,
       // #1216: a draft saved before destinations existed is a form campaign, as preflight and launch read it.
       destination: draft.destination === "website" ? undefined : draft.destination ?? "instant_form", leadFormId: draft.leadFormId, whatsappNumber: draft.whatsappNumber,
+      ...(draft.whatsappNumberSource ? { whatsappNumberSource: draft.whatsappNumberSource } : {}),
+      ...(draft.whatsappNumberChoiceId ? { whatsappNumberChoiceId: draft.whatsappNumberChoiceId } : {}),
       whatsappLanguage: draft.whatsappLanguage, whatsappMessage: draft.destination === "whatsapp" ? nextRunMessage(draft.whatsappMessage, input.savedMessage) : draft.whatsappMessage,
       targeting: withPreparedAudience(draft.targeting, campaign.prepared), abTest: draft.abTest,
     };

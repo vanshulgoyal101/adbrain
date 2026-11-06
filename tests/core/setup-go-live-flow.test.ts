@@ -8,7 +8,7 @@ import { activationConfirmationPayload } from "@/lib/campaign/activation";
 import type { DraftInput, OperationDTO, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 import { runPreflight } from "@/lib/campaign/preflight";
-import { GO_LIVE_STALE, goLive, goLiveStorageKey, type GoLiveDeps, type GoLiveInput, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
+import { GO_LIVE_META_BUSY, GO_LIVE_STALE, GO_LIVE_WHATSAPP_UNREADABLE, goLive, goLiveStorageKey, type GoLiveDeps, type GoLiveInput, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
 import { MetaClient, type CampaignDeliverySnapshot } from "@/lib/meta/client";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
@@ -50,6 +50,7 @@ const recordedNumber = (() => {
   return accounts.data[0].phone_numbers.data[0].display_phone_number.replace(/\s/g, "");
 })();
 const MASKED = maskWhatsAppNumber(recordedNumber);
+const CHOICE_ID = "a".repeat(64);
 const recordedPlan: Record<string, unknown> = { ...groqAudience.plan };
 delete recordedPlan.radius_km;
 
@@ -101,6 +102,8 @@ type Options = {
   created?: OperationDTO["state"];
   patch?: { status: number; body: unknown };
   existing?: OperationDTO | null;
+  /** #2841: the WhatsApp status route's answer when it isn't the recorded number. */
+  whatsapp?: { status: number; body: unknown } | "throw";
   /** The plan route's own refusal instead of the recorded plan. */
   plan?: { status: number; body: unknown };
   /** The create route's own error envelope (`errorResponse` in campaigns/create/route.ts). */
@@ -126,7 +129,10 @@ async function api(options: Options = {}) {
     if (body !== undefined) bodies[`${method} ${url.pathname}`] = body;
     switch (`${method} ${url.pathname}`) {
       case "GET /api/meta/connections/status": return ok(connection);
-      case "GET /api/meta/whatsapp": return Response.json({ state: "ready", numbers: [{ masked: MASKED, source: "business" }] });
+      case "GET /api/meta/whatsapp":
+        if (options.whatsapp === "throw") throw new TypeError("network");
+        if (options.whatsapp) return Response.json(options.whatsapp.body, { status: options.whatsapp.status });
+        return Response.json({ state: "ready", numbers: [{ masked: MASKED, source: "business", choiceId: CHOICE_ID }] });
       case "POST /api/campaign-drafts":
         draftInput = body;
         return ok({ draftId: DRAFT, version: 1, expiresAt: "2099-01-01T00:00:00.000Z", input: body });
@@ -202,7 +208,7 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(draft()).toEqual({
       businessId: BUSINESS, name: "Diwali Renewal, Starting With Your Spine · WhatsApp · Oct 28", goal: "Diwali Renewal, Starting With Your Spine · WhatsApp · Oct 28",
       mode: "manual", creativeIds: ADS.map((ad) => ad.id), dailyBudgetRupees: DAILY, leadFormId: null, destination: "whatsapp",
-      whatsappNumber: MASKED, targeting: expect.any(Object), abTest: false,
+      whatsappNumber: MASKED, whatsappNumberSource: "business", whatsappNumberChoiceId: CHOICE_ID, targeting: expect.any(Object), abTest: false,
     });
     // #2257: Review passes only with the planned age range and audience, never the default AI age and no audience.
     expect(plans()).toBe(1);
@@ -294,6 +300,46 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     deps.client = { ...deps.client, status: async () => ({ ...connection, capabilities: { ...connection.capabilities, canActivate: { state: "blocked", blockers: [other] } } }) };
     await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [other.message] });
     expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ["route 500", { status: 500, body: { error: "x" } }, GO_LIVE_WHATSAPP_UNREADABLE],
+    ["route says unavailable", { status: 200, body: { state: "unavailable" } }, GO_LIVE_WHATSAPP_UNREADABLE],
+    ["route 429", { status: 429, body: { error: "slow down" } }, GO_LIVE_META_BUSY],
+    ["route throws", "throw" as const, GO_LIVE_WHATSAPP_UNREADABLE],
+  ])("%s: stops with a retry message and saves nothing (#2841)", async (_name, whatsapp, message) => {
+    const { deps, calls } = await api({ whatsapp });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message });
+    expect(writes(calls)).toEqual([]);
+    expect(calls).not.toContain("POST /api/campaign-drafts");
+  });
+
+  it("a genuine 'not linked' answer still proceeds, with the WhatsApp destination kept and no number (#2841)", async () => {
+    const { deps, calls, draft } = await api({ whatsapp: { status: 200, body: { state: "not_linked" } } });
+    await goLive(deps, input);
+    expect(calls).toContain("POST /api/campaign-drafts");
+    expect(draft()).toMatchObject({ destination: "whatsapp" });
+    expect(draft()?.whatsappNumber || "").toBe("");
+  });
+
+  it("a malformed 'ready' answer with no numbers stops before saving (#2841)", async () => {
+    const { deps, calls, draft } = await api({ whatsapp: { status: 200, body: { state: "ready", numbers: [] } } });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: GO_LIVE_WHATSAPP_UNREADABLE });
+    expect(calls).not.toContain("POST /api/campaign-drafts");
+    expect(draft()).toBeNull();
+  });
+
+  it("a 'ready' answer with indistinguishable business choices stops before saving", async () => {
+    const choice = { masked: MASKED, source: "business", choiceId: CHOICE_ID };
+    const { deps, calls } = await api({ whatsapp: { status: 200, body: { state: "ready", numbers: [choice, choice] } } });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: GO_LIVE_WHATSAPP_UNREADABLE });
+    expect(calls).not.toContain("POST /api/campaign-drafts");
+  });
+
+  it("a 429 'busy' answer from the route (Meta 80008) stops with the busy message and saves nothing (#2841)", async () => {
+    const { deps, calls } = await api({ whatsapp: { status: 429, body: { state: "busy" } } });
+    expect(await goLive(deps, input)).toMatchObject({ kind: "failed", message: GO_LIVE_META_BUSY });
+    expect(calls).not.toContain("POST /api/campaign-drafts");
   });
 
   it("not connected: asks to connect and calls nothing else", async () => {

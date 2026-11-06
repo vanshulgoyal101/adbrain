@@ -35,6 +35,38 @@ describe("<CampaignChat>", () => {
     expect(onStarted).toHaveBeenCalledTimes(1);
   });
 
+  it("sends the exact restored WhatsApp number, source, and choice identity to every guided-planning request", async () => {
+    const fetchMock = mockPlan(
+      { ready: false, questions: [{ id: "location", topic: "location", question: "Which city?", type: "text" }] },
+      { ready: true, draft: { draftId: "saved-draft" } },
+    );
+    const choice = { whatsappNumber: "+919876544842", whatsappNumberSource: "business" as const, whatsappNumberChoiceId: "a".repeat(64) };
+    render(<CampaignChat businessId="biz-1" destination="whatsapp" {...choice} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Solar chats" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Which city?" }), { target: { value: "Jaipur" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send answers" }));
+    await screen.findByRole("button", { name: "Plan another" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls) expect(JSON.parse(init.body)).toMatchObject(choice);
+  });
+
+  it("keeps a website interview's chosen goal and refuses a saved draft for a different goal", async () => {
+    const businessId = "11111111-1111-4111-8111-111111111111";
+    const fetchMock = mockPlan({ ready: true, draft: {
+      draftId: "33333333-3333-4333-8333-333333333333", version: 1, expiresAt: "2099-01-01T00:00:00.000Z",
+      input: { businessId, name: "Website", goal: "Sales", mode: "guided", creativeIds: [], dailyBudgetRupees: 300, leadFormId: null,
+        destination: "website", websiteGoal: "sales", targeting: {}, abTest: false },
+    } });
+    const onDraftReady = vi.fn();
+    render(<CampaignChat businessId={businessId} destination="website" websiteGoal="leads" websiteDraftMismatch="Check the website goal." onDraftReady={onDraftReady} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Website leads" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(await screen.findByText("Check the website goal.")).toBeVisible();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ destination: "website", websiteGoal: "leads" });
+    expect(onDraftReady).not.toHaveBeenCalled();
+  });
+
   it("offers an editor handoff and preserves answered context after reload", async () => {
     const fetchMock = mockPlan({ ready: false, questions: [
       { id: "location", topic: "location", question: "Which city?", type: "text" },

@@ -1,6 +1,5 @@
 # जाँचें और लाइव करें
-<!-- mirrors ../review.md 2c2c260da399 -->
-
+<!-- mirrors ../review.md cb337e0fdb7a -->
 यह [Review and Go Live](../review.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
 [Prepare a Campaign](../launch.md#prepare-a-campaign) का एक step।
@@ -96,6 +95,7 @@ Button दबाएँ, वह एक चीज़ ठीक करें, फ�
 | `REVIEW_META_ACCESS` | "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for." | "Connect Facebook again" | दोबारा जोड़ें और हर permission चालू रहने दें। |
 | `REVIEW_CREATIVES` | "Choose at least one ad to send to Meta.", "One of the ads you chose isn't available any more. Choose your ads again.", या कोई ad जो "isn't approved yet", "has no picture yet" या "has no headline" | "Choose your ads" (ad picker खुलता है) | ऐसे approved ads चुनें जिनमें picture और headline हो। |
 | `REVIEW_WHATSAPP_NOT_LINKED` | "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again." | "Link your WhatsApp number" (Settings खुलता है) | Meta में WhatsApp Business number को Page से जोड़ें, फिर Settings में जाँचें। |
+| `REVIEW_WHATSAPP_CHOOSE` | "Choose a WhatsApp number in Campaigns, then review again." | "Choose your WhatsApp number" (picker पर ले जाता है) | Campaigns में अभी सत्यापित WhatsApp नंबर चुनें, फिर Review दोबारा जाँचें। |
 | `REVIEW_WHATSAPP_MESSAGE` | "Your WhatsApp message: {problem}" | "Edit the WhatsApp message" | Message में जो कमी बताई है (बहुत लंबा, खाली, या welcome, pre-typed message या किसी question में कोई वादा) उसे ठीक करें। |
 | `REVIEW_NO_LEAD_FORM` | "Choose an active lead form from your Facebook Page in the Lead form field." | "Choose a lead form" | Active form चुनें, या पहले Facebook Page पर एक बनाएँ। |
 | `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add website in Your business" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | अपनी website डालें, या WhatsApp chat ads पर जाएँ। |

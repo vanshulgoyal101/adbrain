@@ -29,7 +29,7 @@ async function sentForms(destination: "whatsapp" | "instant_form") {
   await client.createLeadCampaign({
     name: "AdBrain #209 validate", dailyBudgetRupees: 280, destination, link: "https://solaride.in",
     ...(destination === "whatsapp"
-      ? { whatsappNumber: "+919999990874", whatsappGreeting: whatsappGreeting(solaride, [approved.headline, approved.primary_text], areas) }
+      ? { whatsappNumber: "+919999990874", whatsappNumberSource: "business" as const, whatsappGreeting: whatsappGreeting(solaride, [approved.headline, approved.primary_text], areas) }
       : { leadFormId: "form-1" }),
     creatives: [{ imageUrl: "https://example.com/ad.png", headline: approved.headline, message: approved.primary_text }],
     location: { cities: [{ key: "1021145" }] }, ageMin: 25, ageMax: 55,

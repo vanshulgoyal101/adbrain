@@ -37,6 +37,7 @@ const cases: [string, (value: PreflightInput) => void][] = [
   ["REVIEW_META_ACCESS", (v) => { v.connection!.canCreatePaused = false; }],
   ["REVIEW_CREATIVES", (v) => { v.creatives[0].approved = false; }],
   ["REVIEW_WHATSAPP_NOT_LINKED", (v) => { v.draft.destination = "whatsapp"; v.whatsappNumber = null; }],
+  ["REVIEW_WHATSAPP_CHOOSE", (v) => { v.draft.destination = "whatsapp"; v.draft.whatsappNumber = "+91 ••••• 3210"; v.whatsappNumber = null; }],
   ["REVIEW_NO_LEAD_FORM", (v) => { v.form = null; }],
   ["REVIEW_NO_WEBSITE", (v) => { v.website = null; }],
   ["REVIEW_BUDGET", (v) => { v.draft.dailyBudgetRupees = 0; }],

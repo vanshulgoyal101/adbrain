@@ -37,8 +37,11 @@ export function WhatsAppStatusPanel({ businessId, initialStatus, words }: { busi
     </div>
     <p role="status" className="text-sm text-slate-700">
       {status.state === "ready"
-        ? t("whatsappStatus.ready", { numbers: status.numbers.map(({ masked, source }) =>
-          t(source === "page" ? "whatsappStatus.readyPage" : "whatsappStatus.readyBusiness", { number: masked })).join(", ") })
+        ? <>
+          {t("whatsappStatus.ready", { numbers: status.numbers.map(({ masked, source }) =>
+            t(source === "page" ? "whatsappStatus.readyPage" : "whatsappStatus.readyBusiness", { number: masked })).join(", ") })}
+          {status.businessUnavailable && <> {t("whatsappStatus.businessUnavailable")}</>}
+        </>
         : t(status.state === "not_linked" ? "whatsappStatus.notLinked" : "whatsappStatus.unavailable")}
     </p>
     {status.state === "not_linked" && <div className="space-y-2 text-sm text-slate-600">

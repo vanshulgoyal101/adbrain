@@ -1,18 +1,27 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { MetaClient } from "./client";
+import { maskedWhatsAppNumberPattern, type WhatsAppNumberSource } from "./whatsapp-status-shared";
+import { whatsappChoiceId } from "./whatsapp-choice";
 
 /**
  * #253: the WhatsApp numbers bound to one AdBrain business (`whatsapp_number_bindings`). A
- * number other than the Page's own must be one of these before an ad may send chats to it.
+ * business-account number must have an appropriate binding before an ad may send chats to it.
  */
 export async function boundWhatsAppNumbers(businessId: string): Promise<string[]> {
+  return (await readBindings(businessId)).bound;
+}
+
+async function readBindings(businessId: string) {
   const [{ data, error }, managed] = await Promise.all([
     createAdminClient().from("whatsapp_number_bindings").select("phone_e164, source").eq("business_id", businessId),
     isManagedBusiness(businessId),
   ]);
   if (error) throw new Error("WhatsApp number bindings could not be read.");
-  // A managed business trusts only numbers Meta verified for it, even if it once picked one on its own connection (#524).
-  return (data ?? []).filter((row) => !managed || row.source !== "owner_pick").map((row) => row.phone_e164);
+  const rows = data ?? [];
+  // Page-link bindings never authorise a business-account candidate after the Page changes.
+  const bound = rows.filter((row) => row.source === "embedded_signup" || (!managed && row.source === "owner_pick"))
+    .map((row) => row.phone_e164);
+  return { bound, managed, rows };
 }
 
 async function isManagedBusiness(businessId: string): Promise<boolean> {
@@ -26,17 +35,24 @@ async function isManagedBusiness(businessId: string): Promise<boolean> {
  * pass. Otherwise, for a business on its **own** Meta connection, the owner's chosen number from
  * their ad account's business is bound on first use (`owner_pick`). A managed (2-Tier) business
  * never binds by pick: its parent's WABAs hold other customers' numbers, so only a number Meta
- * verified for it (Page link or Embedded Signup) can be bound.
+ * verified for it by Embedded Signup can be bound. A Page link is checked against the current Page,
+ * not treated as a business-account binding.
  */
-export async function whatsappNumberForBusiness(businessId: string, meta: MetaClient, requested: string | null): Promise<string | null> {
-  const [bound, managed] = await Promise.all([boundWhatsAppNumbers(businessId), isManagedBusiness(businessId)]);
-  const number = await meta.getWhatsAppNumber(requested, bound);
-  if (number || !requested || managed) return number;
-  const { business } = await meta.whatsappNumbers();
-  const picked = await meta.getWhatsAppNumber(requested, business);
-  if (!picked || !business.includes(picked)) return picked;
+export async function whatsappNumberForBusiness(
+  businessId: string, meta: MetaClient, requested: string | null, source?: WhatsAppNumberSource, choiceId?: string,
+): Promise<{ number: string; source: WhatsAppNumberSource } | null> {
+  if (requested && maskedWhatsAppNumberPattern.test(requested) && (!source || !choiceId)) return null;
+  if (choiceId && !source) return null;
+  const candidate = await meta.resolveWhatsAppNumberCandidate(requested, source);
+  if (!candidate) return null;
+  const { number, source: candidateSource } = candidate;
+  if (source && candidateSource !== source) return null;
+  if (choiceId && whatsappChoiceId(businessId, candidateSource, number) !== choiceId) return null;
+  const { bound, managed, rows } = await readBindings(businessId);
+  if (candidateSource === "page" || bound.includes(number)) return candidate;
+  if (!requested || managed || rows.some((row) => row.phone_e164 === number)) return null;
   const { error } = await createAdminClient().from("whatsapp_number_bindings")
-    .upsert({ business_id: businessId, phone_e164: picked, source: "owner_pick" }, { onConflict: "business_id,phone_e164", ignoreDuplicates: true });
+    .upsert({ business_id: businessId, phone_e164: number, source: "owner_pick" }, { onConflict: "business_id,phone_e164", ignoreDuplicates: true });
   if (error) throw new Error("The WhatsApp number could not be bound.");
-  return picked;
+  return candidate;
 }

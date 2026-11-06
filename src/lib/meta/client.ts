@@ -9,7 +9,9 @@ import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
 import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
 import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
-import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
+import { type WhatsAppNumberSource } from "./whatsapp-status-shared";
+import { normalizeWhatsAppNumber, readBusinessWhatsAppNumbers } from "./whatsapp-numbers";
+import { resolveWhatsAppNumberCandidate } from "./whatsapp-number-selection";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { ConnectionAccessError } from "./connection-access-error";
@@ -475,11 +477,6 @@ export function friendlyMetaError(
   return fallback;
 }
 
-function normalizeWhatsAppNumber(value: string): string | null {
-  const number = value.replace(/[\s().-]/g, "").replace(/^\+?/, "+");
-  return /^\+[1-9]\d{6,14}$/.test(number) ? number : null;
-}
-
 /**
  * How a click-to-WhatsApp chat opens (#840): the business's greeting, then either a message
  * pre-typed for the customer (optionally with a Call now button under the greeting) or up to
@@ -837,9 +834,10 @@ export class MetaClient {
       res = await fetch(`${GRAPH}/${path}${query}`, { method, headers, signal, cache: "no-store" });
     }
 
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || (json as { error?: unknown }).error) {
-      const err = (json as { error?: GraphErrorBody }).error;
+    const json: unknown = await res.json().catch(() => ({}));
+    const graphError = json && typeof json === "object" && "error" in json ? json.error : undefined;
+    if (!res.ok || graphError) {
+      const err = graphError && typeof graphError === "object" ? graphError as GraphErrorBody : undefined;
       const details = { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) };
       if (isThrottleCode(err?.code)) {
         throw new MetaThrottledError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
@@ -895,25 +893,20 @@ export class MetaClient {
    * on its WABAs alone doesn't make a number theirs. A request may name the number by its mask
    * ("+91 ••••• 4842", #235); it must match exactly one of those.
    */
-  async getWhatsAppNumber(requested: string | null | undefined, bound: readonly string[] = []): Promise<string | null> {
-    if (requested && maskedWhatsAppNumberPattern.test(requested)) {
-      // #366: the Page and the business lookups are independent; together they save ~1 s of Prepare.
-      const [pageNumber, businessNumbers] = await Promise.all([this.pageWhatsAppNumber(), this.boundBusinessNumbers(bound)]);
-      const matches = [...new Set([...(pageNumber ? [pageNumber] : []), ...businessNumbers])]
-        .filter((number) => maskWhatsAppNumber(number) === requested);
-      return matches.length === 1 ? matches[0] : null;
-    }
-    const pageNumber = await this.pageWhatsAppNumber();
-    const wanted = requested ? normalizeWhatsAppNumber(requested) : null;
-    if (!wanted || wanted === pageNumber) return pageNumber;
-    return (await this.boundBusinessNumbers(bound)).includes(wanted) ? wanted : null;
+  async getWhatsAppNumber(requested: string | null | undefined, bound: readonly string[] = [], source?: WhatsAppNumberSource): Promise<string | null> {
+    const candidate = await this.resolveWhatsAppNumberCandidate(requested, source);
+    if (!candidate || (candidate.source === "business" && !bound.some((number) => normalizeWhatsAppNumber(number) === candidate.number))) return null;
+    return candidate.number;
   }
 
-  /** The ad account business's WhatsApp numbers that are bound to this AdBrain business (#253). */
-  private async boundBusinessNumbers(bound: readonly string[]): Promise<string[]> {
-    const mine = new Set(bound.map((number) => normalizeWhatsAppNumber(number)).filter((number): number is string => number !== null));
-    if (mine.size === 0) return [];
-    return (await this.businessWhatsAppNumbers()).filter((number) => mine.has(number));
+  /** The caller must enforce business bindings before using a business-number candidate. */
+  async resolveWhatsAppNumberCandidate(requested: string | null | undefined, source?: WhatsAppNumberSource): Promise<{ number: string; source: WhatsAppNumberSource } | null> {
+    return resolveWhatsAppNumberCandidate(
+      requested,
+      source,
+      this.pageWhatsAppNumber(),
+      () => this.businessWhatsAppNumbers(),
+    );
   }
 
   /** WhatsApp numbers usable for this Page's ads: the Page's own, and those on the ad account business's WABAs (#235). */
@@ -940,8 +933,21 @@ export class MetaClient {
     };
   }
 
-  async whatsappNumbers(): Promise<{ page: string | null; business: string[] }> {
-    const [page, business] = await Promise.all([this.pageWhatsAppNumber(), this.businessWhatsAppNumbers()]);
+  async whatsappNumbers(): Promise<{ page: string | null; business: string[]; businessUnavailable?: true; pageUnavailable?: true; pageReadError?: unknown }> {
+    const [pageResult, businessResult] = await Promise.allSettled([
+      this.pageWhatsAppNumber(), this.businessWhatsAppNumbers(),
+    ]);
+    if (businessResult.status === "rejected") throw businessResult.reason;
+    const page = pageResult.status === "fulfilled" ? pageResult.value : null;
+    const business = businessResult.value;
+    if (business instanceof MetaError) {
+      if (!page) throw business;
+      return { page, business: [], businessUnavailable: true };
+    }
+    if (pageResult.status === "rejected") {
+      if (!business.length) throw pageResult.reason;
+      return { page: null, business, pageUnavailable: true, pageReadError: pageResult.reason };
+    }
     return { page, business: business.filter((number) => number !== page) };
   }
 
@@ -951,25 +957,29 @@ export class MetaClient {
       `${this.creds.pageId}?fields=id,has_whatsapp_business_number,whatsapp_number`,
       { token },
     );
-    return page.id === this.creds.pageId && page.has_whatsapp_business_number === true && typeof page.whatsapp_number === "string"
-      ? normalizeWhatsAppNumber(page.whatsapp_number) : null;
+    const number = typeof page?.whatsapp_number === "string" ? normalizeWhatsAppNumber(page.whatsapp_number) : null;
+    if (!page || page.id !== this.creds.pageId
+      || typeof page.has_whatsapp_business_number !== "boolean"
+      || (page.has_whatsapp_business_number && !number)) {
+      throw new MetaError("WhatsApp Page number could not be read.");
+    }
+    return page.has_whatsapp_business_number ? number : null;
   }
 
-  private async businessWhatsAppNumbers(): Promise<string[]> {
-    const account = await this.graph<{ id?: string; business?: { id?: string } }>(`${this.creds.adAccountId}?fields=id,business{id}`);
+  private async businessWhatsAppNumbers(): Promise<string[] | MetaError> {
+    const account = await this.graph<{ id?: string; business?: { id?: string } | null }>(`${this.creds.adAccountId}?fields=id,business{id}`);
+    if (!account || (account.id !== this.creds.adAccountId && `act_${account.id}` !== this.creds.adAccountId)) {
+      throw new MetaError("WhatsApp ad account could not be read.");
+    }
+    if (account.business === undefined) return new MetaError("WhatsApp business could not be read.");
+    if (account.business === null) return [];
     const businessId = account.business?.id;
-    if (!businessId || !/^\d+$/.test(businessId)) return [];
-    const wabas = await this.graph<{ data?: { phone_numbers?: { data?: { display_phone_number?: string }[] } }[]; paging?: { next?: string } }>(
-      `${businessId}/owned_whatsapp_business_accounts?fields=phone_numbers{display_phone_number}&limit=100`,
-    ).catch((error: unknown) => {
-      // #615: a token without WhatsApp access on this business gets 403 code 200 (or 10); that means
-      // "no business numbers we can use", not a failed Meta read. Every other error still throws.
-      if (error instanceof MetaError && error.status === 403 && (error.code === 200 || error.code === 10)) return { data: [] };
+    if (typeof businessId !== "string" || !/^\d{1,64}$/.test(businessId)) throw new MetaError("WhatsApp business could not be read.");
+    return readBusinessWhatsAppNumbers(businessId, (path) => this.graph<unknown>(path)).catch((error: unknown) => {
+      // #615: a verified Page number can still be used when the WABA edge denies access.
+      if (error instanceof MetaError && error.status === 403 && (error.code === 200 || error.code === 10)) return error;
       throw error;
     });
-    return [...new Set((wabas.data ?? []).flatMap((waba) => waba.phone_numbers?.data ?? [])
-      .map((phone) => normalizeWhatsAppNumber(phone.display_phone_number ?? ""))
-      .filter((number): number is string => number !== null))];
   }
 
   /** Active instant lead forms on the page. */
@@ -1209,6 +1219,8 @@ export class MetaClient {
     destination?: AdDestination;
     websiteGoal?: WebsiteGoal; pixelId?: string; // #2713: a website goal (absent: visits); leads/sales optimise for this pixel's Lead/Purchase
     whatsappNumber?: string;
+    /** The source Review verified and hashed; it must still be the same source at creation. */
+    whatsappNumberSource?: WhatsAppNumberSource;
     /** Numbers bound to this AdBrain business (#253); a non-Page number must be one of them. */
     boundWhatsAppNumbers?: readonly string[];
     whatsappGreeting?: WhatsAppOpening;
@@ -1251,7 +1263,10 @@ export class MetaClient {
     const problem = destinationProblem(requested, params);
     if (problem) throw new MetaError(problem);
     if (requested === "whatsapp") {
-      if (await this.getWhatsAppNumber(params.whatsappNumber, params.boundWhatsAppNumbers ?? []) !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
+      if (!params.whatsappNumberSource
+        || await this.getWhatsAppNumber(params.whatsappNumber, params.boundWhatsAppNumbers ?? [], params.whatsappNumberSource) !== params.whatsappNumber) {
+        throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
+      }
     }
 
     // Call ads need a phone number — fetch the page's if none was passed.

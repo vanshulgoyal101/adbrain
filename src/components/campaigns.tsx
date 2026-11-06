@@ -33,6 +33,7 @@ import {
   X,
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
+import { useWhatsAppNumberSelection, WhatsAppNumberPicker } from "@/components/whatsapp-number-picker";
 import { quotedAsk, whatsappGreeting, whatsappLanguageFor, withQuestionsLastLine, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
 import { updateCreativeCopy } from "@/app/(app)/studio/actions";
 import type { EditableCopy } from "@/lib/creative/concept";
@@ -99,8 +100,8 @@ import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/revie
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { preparedAudienceForm, targetingFromEditor, withPreparedAudienceForm, targetingToEditor } from "@/lib/campaign/editor-targeting";
-import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
-import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
+import { buildManualDraftInput } from "@/lib/campaign/manual-draft-input";
+import { parseWhatsAppStatus, type WhatsAppNumberSource, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
 import {
@@ -189,6 +190,8 @@ type ComposerSetup = {
   budget: number;
   destination: ComposerDestination;
   whatsappNumber: string;
+  whatsappNumberSource?: WhatsAppNumberSource;
+  whatsappNumberChoiceId?: string;
   whatsappLanguage?: WhatsAppLanguage;
   /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
   whatsappMessage?: WhatsAppTemplate | null;
@@ -322,7 +325,6 @@ function BusinessCampaigns({
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
   const [destination, setDestination] = useState<ComposerDestination>(initialSetup?.destination ?? brandDestination(business));
-  const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
   const [savedWhatsAppMessage, setSavedWhatsAppMessage] = useState<WhatsAppTemplate | null>(() => whatsappTemplateSchema.safeParse(business.whatsapp_template).data ?? null);
@@ -331,6 +333,12 @@ function BusinessCampaigns({
   // #235: an India-based business starts new campaigns on WhatsApp once a number is ready; a choice or a restored draft wins.
   const destinationChosenRef = useRef(Boolean(initialSetup));
   const whatsappOptions = whatsappStatus?.state === "ready" ? whatsappStatus.numbers : [];
+  const whatsappSelection = useWhatsAppNumberSelection(
+    whatsappOptions,
+    initialSetup,
+    whatsappStatus?.state === "ready" && whatsappStatus.businessUnavailable === true,
+  );
+  const { whatsappNumber, whatsappNumberSource, whatsappNumberChoiceId } = whatsappSelection;
   // #840: the chosen ads' words and stored language, as launch reads them for the WhatsApp message.
   const adsFor = (ids: Iterable<string>) => { const wanted = new Set(ids); return approved.filter((creative) => wanted.has(creative.id)); };
   const adWords = (ads: Creative[]) => ads.flatMap((creative) => [creative.headline ?? "", creative.primary_text ?? ""]);
@@ -340,7 +348,6 @@ function BusinessCampaigns({
     const text = whatsappGreeting(business, adWords(ads), [], adLanguages(ads), language);
     return [language, { greeting: text.greeting, prefill: text.autofill }];
   })) as Suggested;
-  const chosenWhatsAppNumber = pickWhatsAppNumber(whatsappOptions, whatsappNumber);
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
   const leadFormMemoryKey = `campaign-lead-form:${business.owner_id}:${business.id}`;
   const [availableForms, setAvailableForms] = useState(leadForms);
@@ -495,8 +502,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappNumberSource, whatsappNumberChoiceId, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, whatsappNumberSource, whatsappNumberChoiceId, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -572,8 +579,7 @@ function BusinessCampaigns({
     setBudget(input.dailyBudgetRupees);
     setLeadFormId(input.leadFormId ?? "");
     setDestination(input.destination ?? "instant_form");
-    // The form names numbers by their mask; a full number from an older draft shows as its mask.
-    setWhatsAppNumber(!input.whatsappNumber || maskedWhatsAppNumberPattern.test(input.whatsappNumber) ? input.whatsappNumber ?? "" : maskWhatsAppNumber(input.whatsappNumber));
+    whatsappSelection.restore(input);
     setWhatsAppLanguage(input.whatsappLanguage ?? "ad");
     setWhatsAppMessage(input.whatsappMessage ?? null);
     destinationChosenRef.current = true;
@@ -777,7 +783,7 @@ function BusinessCampaigns({
     setLeadFormId("");
     // #1171: WhatsApp is the channel (#680); an instant form only when the owner picks it. #2646: a website Brand starts on website.
     setDestination(brandDestination(business));
-    setWhatsAppNumber("");
+    whatsappSelection.restore({});
     setWhatsAppLanguage("ad");
     destinationChosenRef.current = false;
     setShowComposer(true);
@@ -821,7 +827,7 @@ function BusinessCampaigns({
       const copiedDestination = prefill.destination ?? (prefill.leadFormId ? "instant_form" : undefined);
       if (copiedDestination) setDestination(copiedDestination);
       destinationChosenRef.current = Boolean(copiedDestination);
-      setWhatsAppNumber(!prefill.whatsappNumber || maskedWhatsAppNumberPattern.test(prefill.whatsappNumber) ? prefill.whatsappNumber ?? "" : maskWhatsAppNumber(prefill.whatsappNumber));
+      whatsappSelection.restore(prefill);
       setWhatsAppLanguage(prefill.whatsappLanguage ?? "ad");
       setWhatsAppMessage(prefill.whatsappMessage ?? null);
       flushSync(() => setShowComposer(true));
@@ -981,7 +987,7 @@ function BusinessCampaigns({
       dailyBudgetRupees: budget,
       leadFormId,
       destination,
-      whatsappNumber: chosenWhatsAppNumber,
+      ...whatsappSelection.draft,
       whatsappLanguage,
       whatsappMessage,
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
@@ -1926,7 +1932,7 @@ function BusinessCampaigns({
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination === "website" ? undefined : destination /* TODO(#2595): the planner learns website in slice C. */}
-            whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
+            {...(destination === "whatsapp" ? whatsappSelection.guidedProps : {})}
             onStarted={() => { destinationChosenRef.current = true; }}
             onDraftReady={(draft) => void handleGuidedDraft(draft)}
             onEditManually={(goal) => {
@@ -2128,27 +2134,12 @@ function BusinessCampaigns({
                     {/* #1004: from Create, choosing the form is the last step before Review opens. */}
                     {autoReviewPending && !leadFormId && !formsLoading && availableForms.length > 1 && <p role="status" className="text-sm text-slate-600">Choose the form for these enquiries, and Review opens.</p>}
                   </div>}
-                  {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
-                    {whatsappOptions.length ? <>
-                      <Label htmlFor="whatsapp-number">WhatsApp button number</Label>
-                      <select
-                        id="whatsapp-number"
-                        value={chosenWhatsAppNumber}
-                        onChange={(e) => setWhatsAppNumber(e.target.value)}
-                        className="h-11 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
-                      >
-                        {whatsappOptions.map(({ masked, source }) => (
-                          <option key={masked} value={masked}>
-                            {masked} ({source === "page" ? "linked to your Page" : "your WhatsApp Business account"})
-                          </option>
-                        ))}
-                      </select>
-                    </> : <p role="status" className="text-sm text-slate-600">
-                      {whatsappStatus?.state === "not_linked"
-                        ? <>No WhatsApp number is linked yet. <Link href="/brand" className="font-medium text-blue-700 underline">Your business</Link> shows how to link one.</>
-                        : connectedForDraft && !whatsappStatus ? "Checking your WhatsApp numbers..." : "AdBrain checks your WhatsApp number when you prepare the review."}
-                    </p>}
-                  </div>}
+                  {destination === "whatsapp" && <WhatsAppNumberPicker
+                    options={whatsappOptions} selected={whatsappSelection.selectedChoice} wanted={whatsappSelection.wantedMask}
+                    businessUnavailable={whatsappStatus?.state === "ready" && whatsappStatus.businessUnavailable === true}
+                    notLinked={whatsappStatus?.state === "not_linked"} checking={connectedForDraft && !whatsappStatus}
+                    onChoose={whatsappSelection.choose}
+                  />}
                   {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
                     {/* #840: which WhatsApp message this campaign sends; the language picker drives only the suggestion. */}
                     <span className="text-sm font-medium leading-none text-slate-900">WhatsApp message</span>
@@ -2254,7 +2245,7 @@ function BusinessCampaigns({
                     budget={totalDailyBudget}
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
-                    whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
+                    whatsappNumber={destination === "whatsapp" && whatsappSelection.draft.whatsappNumber ? whatsappSelection.draft.whatsappNumber : undefined}
                     website={business.website} websiteAds={destination === "website" ? adsFor(selected) : undefined} words={campaignWords}
                     weeklyCap={composerCap}
                     audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}

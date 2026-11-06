@@ -1,7 +1,7 @@
 import { observeRoute, currentRequestId, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contracts";
+import { draftDtoSchema, draftInputSchema, whatsappNumberChoiceIdSchema, whatsappNumberSchema, whatsappNumberSourceSchema } from "@/lib/campaign/connect-contracts";
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
 import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_GROQ_MAX_TOKENS, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
@@ -14,7 +14,6 @@ import { createClient } from "@/lib/supabase/server";
 import { websiteOpenFor } from "@/lib/campaign/website-gate";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
-import { maskedWhatsAppNumberPattern } from "@/lib/meta/whatsapp-status-shared";
 import { cachedLeadForms } from "@/lib/meta/lead-form-cache";
 import { preferenceContext } from "@/lib/preferences/store";
 import {
@@ -59,9 +58,13 @@ async function handlePOST(req: Request) {
     goal: z.string().trim().min(1).max(2_000),
     audienceDraft: draftInputSchema.optional(),
     destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
-    whatsappNumber: z.string().regex(maskedWhatsAppNumberPattern).optional(),
+    whatsappNumber: whatsappNumberSchema.optional(),
+    whatsappNumberSource: whatsappNumberSourceSchema.optional(),
+    whatsappNumberChoiceId: whatsappNumberChoiceIdSchema.optional(),
     answers: z.union([z.string().max(12_000), z.array(plannerAnswerSchema).max(30)]).optional(),
-  }).safeParse(await req.json().catch(() => null));
+  }).refine((value) => !value.whatsappNumberSource || value.whatsappNumber)
+    .refine((value) => !value.whatsappNumberChoiceId || (value.whatsappNumber && value.whatsappNumberSource))
+    .safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: await ownerError("planRequestInvalid") }, { status: 400 });
   const goal = parsed.data.goal;
   const rawAnswers = parsed.data.answers;
@@ -300,8 +303,11 @@ async function handlePOST(req: Request) {
   }
 
   const now = new Date().toISOString();
-  // Preflight resolves this mask against the business's own numbers, as for a manual draft.
-  const draftInput = destination === "whatsapp" && parsed.data.whatsappNumber ? { ...draftResult.draft, whatsappNumber: parsed.data.whatsappNumber } : draftResult.draft;
+  const draftInput = destination === "whatsapp" && parsed.data.whatsappNumber ? {
+    ...draftResult.draft, whatsappNumber: parsed.data.whatsappNumber,
+    ...(parsed.data.whatsappNumberSource ? { whatsappNumberSource: parsed.data.whatsappNumberSource } : {}),
+    ...(parsed.data.whatsappNumberChoiceId ? { whatsappNumberChoiceId: parsed.data.whatsappNumberChoiceId } : {}),
+  } : draftResult.draft;
   const plan = prepareDraftCreate({ actor, draftInput, now, ttlMs: DRAFT_TTL_MS });
   if ("ok" in plan) {
     return NextResponse.json({ error: plan.message }, { status: plan.code === "FORBIDDEN" ? 403 : 400 });
