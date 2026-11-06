@@ -7,11 +7,11 @@ import type { Business, Creative } from "@/lib/types";
 
 // #235: the campaign form picks the WhatsApp button number; #1171: every new campaign opens on WhatsApp.
 const mocks = vi.hoisted(() => ({
-  drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
+  drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(), campaignChat: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: () => null }));
-vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => null }));
+vi.mock("@/components/campaign-chat", () => ({ CampaignChat: (props: unknown) => { mocks.campaignChat(props); return null; } }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => mocks, MetaConnectClientError: class extends Error {} }));
 
 const business = { id: "11111111-1111-4111-8111-111111111111", owner_id: "owner-1", name: "Solaride", phone: "+91 73802 80874", locations: ["Chandigarh"] } as Business;
@@ -83,6 +83,17 @@ describe("campaign WhatsApp button number (#235)", () => {
     await screen.findByText("WhatsApp chat +919800004842");
     expect(saved.input).toMatchObject({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "business", whatsappNumberChoiceId: BUSINESS_CHOICE, leadFormId: null });
     expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("passes the selected WhatsApp choice to guided planning", async () => {
+    view();
+    fireEvent.change(await screen.findByLabelText("WhatsApp button number"), { target: { value: BUSINESS_CHOICE } });
+    fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
+    await waitFor(() => expect(mocks.campaignChat).toHaveBeenLastCalledWith(expect.objectContaining({
+      whatsappNumber: "+91 ••••• 4842",
+      whatsappNumberSource: "business",
+      whatsappNumberChoiceId: BUSINESS_CHOICE,
+    })));
   });
 
   it("opens on WhatsApp even while no number is linked and points to the Your business guide", async () => {
