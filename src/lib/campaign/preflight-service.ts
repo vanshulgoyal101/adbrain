@@ -35,6 +35,8 @@ export type PreflightLoaders = {
   findVertical?: (actor: PreflightActor) => Promise<string | null>;
   /** #418 rule 5: the Brand's facts (USPs, description), for the proof-line warning only. */
   findBrandFacts?: (actor: PreflightActor) => Promise<string[]>;
+  /** #780: current Brand facts and vertical for owner-written ads; required only when one is selected. */
+  findOwnWordsContext?: (actor: PreflightActor) => Promise<{ brandFacts: string[]; vertical: string | null }>;
   /** #419 2(b): the business's own cost per result for this kind of campaign, or null. */
   findCostPerResult?: (actor: PreflightActor, destination: Exclude<LeadDestination, "call" | "website">) => Promise<number | null>;
   /** #2274: redraws one picture's printed phone over its saved background; the new picture's URL, or null. */
@@ -83,9 +85,16 @@ export async function prepareCampaignReview(
   // #2710/#2714: a signup or sales goal stays closed to every account until the CEO opens it (websiteGoalOpen).
   if (destination === "website" && !(websiteGoalOpen(draft.input.websiteGoal) && await input.websiteOpen?.())) return { kind: "website_closed" };
   const goal = conversionGoal(draft.input.destination, draft.input.websiteGoal);
-  const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts, tracking] = await Promise.all([
-    loaders.getConnection(input.actor),
-    loaders.findCreatives(input.actor.businessId, draft.input.creativeIds),
+  const connectionPromise = loaders.getConnection(input.actor);
+  const creativesPromise = loaders.findCreatives(input.actor.businessId, draft.input.creativeIds);
+  const ownWordsContextPromise = creativesPromise.then((creatives) => {
+    if (!creatives.some((creative) => creative.ownWords)) return undefined;
+    if (!loaders.findOwnWordsContext) throw new Error("Current Brand facts could not be checked for owner-written ads.");
+    return loaders.findOwnWordsContext(input.actor);
+  });
+  const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts, tracking, ownWordsContext] = await Promise.all([
+    connectionPromise,
+    creativesPromise,
     destination === "instant_form" && draft.input.leadFormId
       ? loaders.findForm(input.actor.businessId, draft.input.leadFormId)
       : Promise.resolve(null),
@@ -102,6 +111,7 @@ export async function prepareCampaignReview(
     loaders.findBrandFacts?.(input.actor).catch(() => []) ?? Promise.resolve([]),
     // An unreadable tracking is a blocker (preflight.ts), never a pass.
     goal ? loaders.findTracking?.(input.actor, goal).catch(() => undefined) ?? Promise.resolve(undefined) : Promise.resolve(undefined),
+    ownWordsContextPromise,
   ]);
   // #2274: the picture prints the chat's number, not an older Brand phone. Before the creative hash, so
   // Review and launch both see the redrawn picture.
@@ -132,6 +142,7 @@ export async function prepareCampaignReview(
       tracking,
       vertical,
       brandFacts,
+      ownWordsContext,
       geo,
       hash: loaders.hash,
       costPerResultRupees,

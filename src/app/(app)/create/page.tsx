@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requestWords, setupWords } from "@/i18n/request-locale";
+import { namespaceMessages } from "@/i18n/locale";
 import { createAdsTranslator } from "@/i18n/words";
 import { Building2 } from "lucide-react";
 import { openingLine } from "@/lib/campaign/result-evidence";
@@ -17,8 +18,9 @@ import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
 import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
-import { mediaUploadsEnabled, pickedMediaViews } from "@/lib/media/store";
+import { mediaUploadsEnabled, mediaVideoEnabled, pickedMediaViews } from "@/lib/media/store";
 import { createClient } from "@/lib/supabase/server";
+import { getEnv } from "@/lib/env";
 
 export const metadata = {
   title: "Create ads",
@@ -26,8 +28,8 @@ export const metadata = {
     "Start with your customer goal and create campaign images and copy for review.",
 };
 
-export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[]; again?: string | string[]; photos?: string | string[] }> } = {}) {
-  const [business, params, words] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[]; photos?: string | string[] }), requestWords("create")]);
+export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[]; again?: string | string[]; photos?: string | string[]; media?: string | string[] }> } = {}) {
+  const [business, params, words] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[]; photos?: string | string[]; media?: string | string[] }), requestWords("create")]);
   const t = createAdsTranslator(words), lang = words.locale === "en" ? undefined : words.locale;
   // #1934: a returning owner's "New campaign" runs step 2 again.
   const again = params.again === "1";
@@ -81,9 +83,11 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
   ].filter(([present]) => !present).map(([, label]) => label);
   // #371: Create opens on what the business's own campaigns achieved; a failed read just skips the line.
   // #780 slice 2a: "Make ads from these" in the library; an unreadable pick just makes ads without it.
-  const pickedIds = mediaUploadsEnabled() ? String(params.photos ?? "").split(",").filter(Boolean) : [];
-  const [assets, evidence, photos] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => []),
-    pickedIds.length ? createClient().then((client) => pickedMediaViews(client, business.id, pickedIds)).catch(() => []) : []]);
+  const pickedIds = mediaUploadsEnabled() ? String(params.media ?? params.photos ?? "").split(",").filter(Boolean) : [];
+  const [assets, evidence, media] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => []),
+    pickedIds.length ? createClient().then((client) => pickedMediaViews(client, business.id, pickedIds, mediaVideoEnabled())).catch(() => []) : []]);
+  const pick = media.length ? namespaceMessages(words.locale, "setup").ads : undefined;
+  const photoPickWords = pick && { tapToPick: pick.tapToPick, picked: pick.picked, pickOne: pick.pickOne };
   const hasPhotos = assets.some((a) => a.type === "product_photo");
   const visualsMissing = [!business.logo_url && t("logo"), !hasPhotos && t("photos")].filter(Boolean);
 
@@ -98,7 +102,8 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         </nav>
       )}
       <div id="create-flow" className="scroll-mt-4">
-      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)} words={words} photos={photos}>
+      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)} words={words} media={media} photoPickWords={photoPickWords}
+        overlayAvailable={media.length ? getEnv().AD_DESIGN_OVERLAY : undefined}>
         <aside aria-label={t("details")} className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
             <span lang={lang}>{t("using", { name: business.name })}</span>{" "}

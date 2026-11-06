@@ -45,21 +45,25 @@ export function buildCampaignPreflightLoaders(
         .select("id, business_id, status, image_url, headline, primary_text, cta, generation, media_asset_id")
         .in("id", creativeIds)
         .eq("business_id", businessId);
-      return (data ?? []).map((creative) => ({
-        id: creative.id,
-        businessId: creative.business_id,
-        approved: creative.status === "approved",
-        imageUrl: creative.image_url,
-        headline: creative.headline,
-        primaryText: creative.primary_text,
-        description: savedCreativeDescription(creative.generation),
-        cta: creative.cta,
-        storyReady: hasStoryDesign(creative.generation),
-        asksWhatsApp: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.contact === "whatsapp",
-        printedPhone: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.phone ?? null,
-        // A library photo, a Brand product photo (`generation.ownerPhoto`, no library link), or a receipt that only names the owner-photo provider.
-        ownMedia: Boolean(creative.media_asset_id) || Boolean((creative.generation as { ownerPhoto?: unknown } | null)?.ownerPhoto) || pictureSource(creative.generation) === "yours",
-      }));
+      return (data ?? []).map((creative) => {
+        const generation = isRecord(creative.generation) ? creative.generation : {};
+        return {
+          id: creative.id,
+          businessId: creative.business_id,
+          approved: creative.status === "approved",
+          imageUrl: creative.image_url,
+          headline: creative.headline,
+          primaryText: creative.primary_text,
+          description: savedCreativeDescription(creative.generation),
+          cta: creative.cta,
+          storyReady: hasStoryDesign(creative.generation),
+          asksWhatsApp: storedPictureDesign(generation.design)?.contact === "whatsapp",
+          printedPhone: storedPictureDesign(generation.design)?.phone ?? null,
+          // A library photo, a Brand product photo (`generation.ownerPhoto`, no library link), or a receipt that only names the owner-photo provider.
+          ownMedia: Boolean(creative.media_asset_id) || Boolean(generation.ownerPhoto) || pictureSource(creative.generation) === "yours",
+          ownWords: generation.ownWords === true,
+        };
+      });
     },
     redrawPictureNumber: (actor, creativeId, phone) => redrawPictureNumber(supabase, actor.businessId, creativeId, phone),
     findCostPerResult: (actor, destination) => getCostPerResult(actor.businessId, destination),
@@ -104,6 +108,21 @@ export function buildCampaignPreflightLoaders(
     findBrandFacts: async (actor) => {
       const { data } = await supabase.from("businesses").select("usps, description").eq("id", actor.businessId).maybeSingle();
       return [...(data?.usps ?? []), data?.description ?? ""].filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "");
+    },
+    findOwnWordsContext: async (actor) => {
+      const { data: business, error } = await supabase
+        .from("businesses")
+        .select("name, description, target_audience, usps, offers, locations, vertical")
+        .eq("id", actor.businessId)
+        .maybeSingle();
+      if (error || !business) throw new Error("Current Brand facts could not be checked for owner-written ads.");
+      return {
+        brandFacts: [
+          business.name, business.description, business.target_audience,
+          ...(business.usps ?? []), ...(business.offers ?? []), ...(business.locations ?? []),
+        ].filter((fact): fact is string => typeof fact === "string" && fact.trim() !== ""),
+        vertical: business.vertical,
+      };
     },
     findMediaConsent: async (actor) => {
       const { data, error } = await supabase.from("businesses").select("vertical").eq("id", actor.businessId).maybeSingle();

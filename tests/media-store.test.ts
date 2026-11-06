@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MEDIA_MONTHLY_UPLOADS, mediaFit } from "@/lib/media/rules";
 const CONFIRMED = "2026-10-28T10:00:00.000Z";
-import { deleteMedia, finalizeUpload, listMedia, mediaViews, pickedMediaViews, monthlyUploads, monthStartIst, ownMedia, readVerifiedMedia, signUpload, updateMedia, type MediaRow } from "@/lib/media/store";
+import { deleteMedia, finalizeUpload, listMedia, mediaViews, pickedMediaViews, pickedOwnMedia, monthlyUploads, monthStartIst, ownMedia, readVerifiedMedia, signUpload, updateMedia, type MediaRow } from "@/lib/media/store";
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ MEDIA_UPLOADS_ENABLED: true }) }));
 import { fakeSupabase } from "./helpers/media-fake";
@@ -139,6 +139,46 @@ describe("finalizeUpload (#1209)", () => {
     expect(picked.map((item) => item.id)).toEqual([second.id, first.id]);
     expect(picked.every((item) => item.url)).toBe(true);
     expect(await pickedMediaViews(db.client, BUSINESS, ["nope"])).toEqual([]);
+
+    const videoId = "55555555-5555-4555-8555-555555555555";
+    db.tables.media_assets.push({
+      ...db.tables.media_assets.find((row) => row.id === first.id)!, id: videoId, kind: "video", path: `${BUSINESS}/clip.mp4`,
+      mime: "video/mp4", width: 1080, height: 1920, duration_ms: 30_000,
+    });
+    expect(await pickedMediaViews(db.client, BUSINESS, [videoId])).toEqual([]);
+    expect(await pickedMediaViews(db.client, BUSINESS, [videoId], true)).toMatchObject([
+      { id: videoId, kind: "video", url: `https://storage.test/sign/${BUSINESS}/clip.mp4` },
+    ]);
+  });
+
+  it("#780: the owner-written path admits a ready video only when video creation is enabled", async () => {
+    const videoId = "55555555-5555-4555-8555-555555555555";
+    const row = {
+      id: videoId, business_id: BUSINESS, kind: "video", path: `${BUSINESS}/clip.mp4`, name: "Clip", tags: [], sha256: "a".repeat(64),
+      bytes: 1_000, mime: "video/mp4", width: 1080, height: 1920, duration_ms: 30_000, checks: {}, status: "ready",
+      deleted_at: null, created_at: "2026-10-29T10:00:00Z",
+    };
+    db.tables.media_assets.push(row);
+
+    await expect(pickedOwnMedia(db.client, BUSINESS, [videoId], false))
+      .rejects.toMatchObject({ status: 404, code: "MEDIA_VIDEO_DISABLED" });
+    await expect(pickedOwnMedia(db.client, BUSINESS, [videoId], true)).resolves.toEqual([row]);
+
+    row.status = "pending";
+    await expect(pickedOwnMedia(db.client, BUSINESS, [videoId], true))
+      .rejects.toMatchObject({ status: 409, code: "MEDIA_NOT_UPLOADED" });
+  });
+
+  it("#780: cannot select another business's media for owner-written ads", async () => {
+    const videoId = "55555555-5555-4555-8555-555555555556";
+    db.tables.media_assets.push({
+      id: videoId, business_id: "44444444-4444-4444-8444-444444444444", kind: "video", path: "other/clip.mp4",
+      name: "Clip", tags: [], sha256: "a".repeat(64), bytes: 1_000, mime: "video/mp4", width: 1080, height: 1920,
+      duration_ms: 30_000, checks: {}, status: "ready", deleted_at: null, created_at: "2026-10-29T10:00:00Z",
+    });
+
+    await expect(pickedOwnMedia(db.client, BUSINESS, [videoId], true))
+      .rejects.toMatchObject({ status: 404, code: "MEDIA_NOT_FOUND" });
   });
 
   // Dev 7 (#1245 attack): a refused upload still counts toward the month, so a reused token can't dodge the limit.

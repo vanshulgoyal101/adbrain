@@ -291,16 +291,41 @@ export async function ownMedia(client: SupabaseClient, id: string): Promise<Medi
   return data as MediaRow;
 }
 
-/** #780 slice 2a: the photos the library sent to Create (`?photos=`), under the owner's RLS and in the owner's order.
- * Bad, unknown, another business's, unready and video ids are dropped; Create re-checks them when it runs. */
-export async function pickedMediaViews(client: SupabaseClient, businessId: string, ids: readonly string[]): Promise<MediaView[]> {
+/** #780 slice 2a: the library media sent to Create, under the owner's RLS and in the owner's order.
+ * Bad, unknown, another business's, unready and disallowed video ids are dropped; Create re-checks them when it runs. */
+export async function pickedMediaViews(client: SupabaseClient, businessId: string, ids: readonly string[], allowVideos = false): Promise<MediaView[]> {
   const wanted = [...new Set(ids.filter((id) => UUID.test(id)))].slice(0, 10);
   if (!wanted.length) return [];
-  const { data, error } = await client.from("media_assets").select(COLUMNS).in("id", wanted).eq("business_id", businessId)
-    .eq("status", "ready").eq("kind", "image").is("deleted_at", null);
+  let query = client.from("media_assets").select(COLUMNS).in("id", wanted).eq("business_id", businessId)
+    .eq("status", "ready").is("deleted_at", null);
+  query = allowVideos ? query.in("kind", ["image", "video"]) : query.eq("kind", "image");
+  const { data, error } = await query;
   if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't load your photos. Try again.");
   const rows = new Map(((data ?? []) as MediaRow[]).map((row) => [row.id, row]));
   return mediaViews(client, wanted.flatMap((id) => rows.get(id) ?? []).slice(0, MAX_AD_PHOTOS));
+}
+
+/** #780: the owner's selected media for owner-written ads; authorize the whole batch before reading any bytes. */
+export async function pickedOwnMedia(client: SupabaseClient, businessId: string, ids: readonly string[], allowVideos: boolean): Promise<MediaRow[]> {
+  const wanted = [...new Set(ids.filter((id) => UUID.test(id)))];
+  if (!wanted.length || wanted.length !== ids.length) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
+  const { data, error } = await client.from("media_assets").select(COLUMNS).in("id", wanted)
+    .eq("business_id", businessId).is("deleted_at", null);
+  if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't load the photo. Try again.");
+  const rows = new Map(((data ?? []) as MediaRow[]).map((row) => [row.id, row]));
+  const selected: MediaRow[] = [];
+  for (const id of wanted) {
+    const row = rows.get(id);
+    if (!row) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
+    selected.push(row);
+  }
+  if (selected.some((row) => row.status !== "ready")) {
+    throw new MediaError(409, "MEDIA_NOT_UPLOADED", "This file isn't ready yet.");
+  }
+  if (!allowVideos && selected.some((row) => row.kind === "video")) {
+    throw new MediaError(404, "MEDIA_VIDEO_DISABLED", "Video ads aren't available right now.");
+  }
+  return selected;
 }
 
 export async function updateMedia(admin: SupabaseClient, row: MediaRow, change: { name?: string | null; tags?: string[] }): Promise<MediaView> {
@@ -334,4 +359,3 @@ export async function deleteMedia(admin: SupabaseClient, row: MediaRow): Promise
   const { error: saveError } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id);
   if (saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't delete the photo. Try again.");
 }
-

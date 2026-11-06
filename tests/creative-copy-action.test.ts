@@ -131,6 +131,34 @@ describe("updateCreativeCopy", () => {
     expect(h.updates).toHaveLength(1);
   });
 
+  it("#780: editing an owner-written ad cannot bypass its policy and claim checks", async () => {
+    h.rows.creatives = { business_id: "b1", generation: { ...generation, ownWords: true }, status: "approved" };
+    h.rows.businesses = { name: "Study centre", vertical: "IELTS coaching", offers: [], usps: [], locations: [] };
+    const res = await save({ headline: "Guaranteed visa", primary_text: "Apply today.", description: "" });
+    expect(res).toMatchObject({ ok: false, error: expect.stringMatching(/headline.*guaranteed.*reword/i) });
+    expect(h.updates).toEqual([]);
+    expect(h.logEvent).not.toHaveBeenCalled();
+  });
+
+  it("#780: an owner-written ad cannot be edited when its Brand instructions cannot be read", async () => {
+    h.rows.creatives = { business_id: "b1", generation: { ...generation, ownWords: true }, status: "approved" };
+    h.instructions.mockRejectedValueOnce(new Error("instructions unavailable"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await save()).toMatchObject({ ok: false, error: expect.stringMatching(/instructions.*try again/i) });
+      expect(h.updates).toEqual([]);
+      expect(log).toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("#780: a checked edit of an owner-written ad preserves its approval", async () => {
+    h.rows.creatives = { business_id: "b1", generation: { ...generation, ownWords: true }, status: "approved" };
+    expect(await save()).toMatchObject({ ok: true });
+    expect(h.updates[0].payload).not.toHaveProperty("status");
+  });
+
   // #1901 item 4: #1617's "our work" rule reads the same flag as the tile's Your photo / AI picture badge.
   it("allows 'our work' words only on an ad the badge calls Your photo", async () => {
     const { WORK_CLAIM_WARNING } = await import("@/lib/creative/concept");
