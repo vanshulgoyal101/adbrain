@@ -130,7 +130,14 @@ This JSON is valid to **save**, not valid to create a campaign:
 
 `POST /api/campaigns/plan` uses the primary business. Actual route fields:
 `goal` trimmed 1-2000; optional `answers` string up to 12000 or array up to 30
-`{question,answer}` records (maximum 1000/2000 characters); optional `audienceDraft`.
+`{question,answer}` records (maximum 1000/2000 characters); optional `destination`,
+`websiteGoal` and `audienceDraft`. When a website goal is supplied, all provided
+destinations must be website. A top-level `websiteGoal` must agree with an
+`audienceDraft` when supplied (an absent draft goal means visits); invalid or
+conflicting choices return 400 before the model or Meta is called. Clients must
+send the chosen goal on each interview request. A saved guided draft keeps that
+choice, rather than deriving it from the model's answer. Saving a conversion
+draft does not open the conversion Review gate.
 Structured answers also accept `questionId` (1-80 characters), a fixed `topic`
 (`location`, `radius`, `budget`, `offer`, `audience`, `exclusions`, `creative`,
 `lead_form`, `compliance`) and `disposition` (`answered` or `deferred`). A deferred
