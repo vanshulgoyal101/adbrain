@@ -7,6 +7,7 @@ import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-con
 import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE, type ReviewDestination } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
+import { ownerWrittenCopyWarning, type OwnerWrittenCreativeCopy } from "@/lib/campaign/own-words-preflight";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { translator, type AppLocale } from "@/i18n/locale";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
@@ -17,14 +18,11 @@ import { conversionGoal, goalWordsMismatch, trackingBlocker, type ReviewTracking
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
 
-export interface PreflightCreative {
+export interface PreflightCreative extends OwnerWrittenCreativeCopy {
   id: string;
   businessId: string;
   approved: boolean;
   imageUrl: string | null;
-  headline: string | null;
-  primaryText?: string | null;
-  description?: string | null;
   cta?: string | null;
   /** Its saved design can be laid out at 9:16 for Stories and Reels (#333). */
   storyReady?: boolean;
@@ -75,6 +73,8 @@ export interface PreflightInput {
   vertical?: string | null;
   /** #418 rule 5: the Brand's facts, for the proof-line warning; none means no warning. */
   brandFacts?: string[];
+  /** #780: current Brand facts and vertical for owner-written copy; unreadable context must not pass Review. */
+  ownWordsContext?: { brandFacts: string[]; vertical: string | null };
   /** Business website; undefined when the caller does not check it. */
   website?: string | null;
   /** #2599: whether a website ad's link opens the advertiser's own site; a website ad without it is blocked. */
@@ -272,7 +272,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", say("noWebsite"), { kind: "open_brand" }));
   }
   if (input.mediaConsent === false && input.creatives.some((creative) => creative.ownMedia)) blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_MEDIA_RIGHTS", say("mediaRights")));
-  const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
+  const ownWordsWarning = ownerWrittenCopyWarning(input);
+  if (ownWordsWarning) blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", ownWordsWarning));
+  const policyHit = adPolicyHits(input.creatives.filter((creative) => !creative.ownWords), input.vertical)[0];
   if (policyHit) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", say("adPolicy", {
       term: policyHit.term, named: policyHit.headline == null ? "no" : "yes", headline: policyHit.headline ?? "",
