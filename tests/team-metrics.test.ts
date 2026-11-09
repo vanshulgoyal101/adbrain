@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { activeHours, changeFailureRate, collectWorkflowRuns, deployFrequency, formatMinutes, isMetricPR, leadTimes, median, p90, productionGuardEvidence, roleForPost, rolesFromOwnerLabels, rolesMentionedInHandoff, timeToRestore, verifiedLiveShas } from "../scripts/lib/team-metrics.mjs";
 
@@ -166,5 +170,49 @@ describe("team metrics: DORA four keys and active hours (#620)", () => {
       { who: "QA", t: Date.parse(at("10:30")) }, { who: "?", t: Date.parse(at("11:00")) },
     ];
     expect(activeHours(posts)).toEqual({ Dev: 2, QA: 1 });
+  });
+
+  it("excludes comments created before the window even when edited inside it", () => {
+    const temp = mkdtempSync(join(tmpdir(), "team-metrics-"));
+    const gh = join(temp, "gh");
+    const oldComment = {
+      created_at: "2026-11-05T03:25:00Z",
+      updated_at: "2026-11-06T02:00:00Z",
+      body: "CEO: edited an older comment",
+      issue_url: "https://api.github.com/repos/vanshulgoyal101/adbrain/issues/1",
+    };
+    const newComment = {
+      created_at: "2026-11-05T04:00:00Z",
+      updated_at: "2026-11-05T04:00:00Z",
+      body: "CEO: posted inside the window",
+      issue_url: "https://api.github.com/repos/vanshulgoyal101/adbrain/issues/1",
+    };
+    writeFileSync(gh, `#!/usr/bin/env node
+const request = process.argv.join(" ");
+let page;
+if (request.includes("/issues/comments?")) page = [${JSON.stringify(oldComment)}, ${JSON.stringify(newComment)}];
+else if (request.includes("/labels?")) page = [{ name: "owner:ceo" }];
+else if (request.includes("/actions/workflows?")) page = { workflows: [] };
+else if (request.includes("/pulls?")) page = [];
+else throw new Error("Unexpected GitHub request: " + request);
+process.stdout.write(JSON.stringify([page]));
+`);
+    chmodSync(gh, 0o755);
+
+    try {
+      const result = spawnSync(process.execPath, [
+        resolve(process.cwd(), "scripts/team-metrics.mjs"),
+        "--hours", "24",
+        "--until", "2026-11-06T03:26:00Z",
+      ], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: { ...process.env, PATH: `${temp}:${process.env.PATH}` },
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("CEO: posts=1");
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
   });
 });
