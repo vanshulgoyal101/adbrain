@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/throttle.json";
-import { MetaClient, MetaError, MetaThrottledError } from "@/lib/meta/client";
+import { MetaClient, MetaError, MetaThrottledError, throttleWaitMs } from "@/lib/meta/client";
 
 // #1838 (Reviewer, CTO): Meta's throttle is read, not retried. The usage headers' shapes are recorded read-only from a
 // real Ads Insights GET (scripts/record-meta-throttle-headers.ts); the throttled values below are set in that shape.
@@ -32,6 +32,22 @@ describe("core: Meta throttling is recognised and never retried (#1838)", () => 
     answer(400, recorded.error4);
     const error = await new MetaClient(creds).getCampaignInsights("120000000000000001").catch((reason) => reason);
     expect(error).toMatchObject({ reason: "rate_limited", scope: "app", retryAfterMs: 15 * 60_000 });
+  });
+
+  it("a bodyless HTTP 429 is throttling and honors Retry-After", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 429, headers: { "Retry-After": "3600" } }));
+    const error = await new MetaClient(creds).getCampaignInsights("120000000000000001").catch((reason) => reason);
+    expect(error).toBeInstanceOf(MetaThrottledError);
+    expect(error).toMatchObject({ status: 429, reason: "rate_limited", scope: "account", retryAfterMs: 60 * 60_000 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the longest wait when Retry-After is an HTTP date", () => {
+    const now = Date.parse("2026-11-04T12:00:00Z");
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const retryAfter = new Date(now + 60 * 60_000).toUTCString();
+    expect(throttleWaitMs(new Headers({ "retry-after": retryAfter, "x-business-use-case-usage": buc(90) }))).toBe(90 * 60_000);
+    expect(throttleWaitMs(new Headers({ "retry-after": retryAfter }))).toBe(60 * 60_000);
   });
 
   it("the recorded header when not throttled parses to no wait, and an ordinary refusal isn't a throttle", async () => {

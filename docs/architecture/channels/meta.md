@@ -40,8 +40,8 @@ decides what is available (`src/lib/meta/capability-verification.ts`): insights 
 | Fact | Value | Source |
 | --- | --- | --- |
 | Limited tier budget | 60 points per ad account per 5 minutes; a write costs 3 | [Provider access prerequisites](../adr-001-multi-channel.md#provider-access-prerequisites) |
-| Throttle codes | `4` app; `17`, `613`, `80000`–`80014` user or ad account; `32` Page | `isThrottleCode` in `src/lib/meta/client.ts` |
-| Wait | Meta's estimate from `x-business-use-case-usage` (minutes) or `x-ad-account-usage` (seconds), else 15 minutes | `throttleWaitMs`, same file; tape from `scripts/record-meta-throttle-headers.ts` |
+| Throttle codes | `4` app; `17`, `613`, `80000`–`80014` user or ad account; `32` Page. HTTP 429 without a recognised code is treated as an account throttle | `isThrottleCode` in `src/lib/meta/errors.ts` |
+| Wait | Longest of `Retry-After` (seconds or HTTP date), `x-business-use-case-usage` (minutes) and `x-ad-account-usage` (seconds), else 15 minutes | `throttleWaitMs`, same file; tape from `scripts/record-meta-throttle-headers.ts` |
 | Behaviour | `MetaThrottledError` (`reason: "rate_limited"`, scope app/account/page). The results-refresh and lead-sync crons skip a throttled account and stop on an app throttle; a person's pause or activation is still tried | `src/app/api/cron/refresh-results/route.ts`, `src/app/api/cron/sync-leads/route.ts` |
 | Open work | #1838 (slices #1950, #2033) | #1838 |
 
@@ -64,6 +64,15 @@ the text follows the token owner's locale (#185).
 | WhatsApp number status | A number reading `DISCONNECTED`/`NOT_VERIFIED` still delivered and got chats; don't require `CONNECTED` | #286 |
 | Listings | Lists can be newest-first (bind by stored ID, #197); default listings hide archived ads unless the status filter is passed (#188) | #188, #197 |
 | Learning phase | About 50 optimisation events in 7 days after the last significant edit; a significant edit restarts it, so never edit a live run | `scripts/plan-check.ts` |
+
+Website conversion reads (#2716) keep pixel leads or purchases separate from page views
+and enquiries. Malformed, contradictory or unverifiable conversion data is unavailable,
+not zero; spend and page views remain separate. The conversion insights fixture is
+provisional until an authorized conversion run is recorded. An empty historical ad-set
+list cannot verify attribution, so campaign and per-ad conversions remain unavailable.
+The deleted/ad-set status
+filter has a recorded example, but its completeness across mixed-goal histories remains
+unverified. Storage and Manage presentation are later slices of #2716.
 
 ## Fixtures and Gates
 

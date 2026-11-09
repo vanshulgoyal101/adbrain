@@ -39,7 +39,7 @@ const noun = (destination: EvidenceCampaign["destination"], count: number) => `$
 const PLACES = { whatsapp: "WhatsApp", instant_form: "lead form", website: "website" } as const;
 
 /** A stored result row's headline count for a destination: chats, landing-page views or form leads. */
-export function storedResults(destination: EvidenceCampaign["destination"], result: { leads: number | null; conversations?: number | null; landing_page_views?: number | null }): number {
+export function storedResults(destination: EvidenceCampaign["destination"], result: { leads: number | null; conversations?: number | null; landing_page_views?: number | null; conversions?: number | null }): number {
   return result[outcomeDefinition(destination).campaignField] ?? 0;
 }
 

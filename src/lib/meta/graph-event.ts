@@ -1,4 +1,5 @@
 import type { ProductEvent } from "@/lib/observability/events";
+import { isThrottleCode } from "./errors";
 
 /**
  * #451 L2: what one Graph call looks like in product_events. The endpoint is a template
@@ -34,6 +35,6 @@ export function graphOutcome(error: unknown): ProductEvent["outcome"] {
   if (!error) return "success";
   const status = error && typeof error === "object" && "status" in error ? (error as { status?: number }).status : undefined;
   const code = error && typeof error === "object" && "code" in error ? (error as { code?: number }).code : undefined;
-  const throttled = code === 4 || code === 17 || code === 32 || code === 613 || code === 80004;
+  const throttled = status === 429 || isThrottleCode(typeof code === "number" ? code : undefined);
   return typeof status === "number" && status >= 400 && status < 500 && !throttled ? "rejected" : "failed";
 }

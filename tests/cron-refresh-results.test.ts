@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   campaigns: [] as Array<Record<string, unknown>>,
   latest: null as { fetched_at: string } | null,
   insights: vi.fn(),
+  adResults: vi.fn(),
   review: vi.fn(),
   pause: vi.fn(),
   updateStatus: vi.fn(),
@@ -46,7 +47,7 @@ vi.mock("@/lib/campaign/trusted-write", () => ({
 vi.mock("@/lib/meta/connection-access", () => ({
   requireScheduledBusiness: async (id: string) => ({ businessId: id, userId: "owner-1" }),
   withMetaConnection: async (_context: unknown, _options: unknown, execute: (meta: unknown) => unknown) => execute({
-    getCampaignInsights: mocks.insights, readAdReview: mocks.review,
+    getCampaignInsights: mocks.insights, getAdResults: mocks.adResults, readAdReview: mocks.review,
     pauseCampaignTree: mocks.pause, updateCampaignStatus: mocks.updateStatus,
   }),
 }));
@@ -63,6 +64,7 @@ const call = async (authorization = "Bearer cron-secret") => {
 const insights = { impressions: 120, clicks: 4, leads: 1, spend: 32.63, cpl: 32.63, destination: "instant_form", periodStart: "2026-10-01", periodEnd: "2026-10-23" };
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
   mocks.secret = "cron-secret";
   mocks.latest = null;
@@ -70,6 +72,7 @@ beforeEach(() => {
   mocks.rpc.mockResolvedValue({ data: null, error: null });
   mocks.campaigns = [bound("c1", "m1"), bound("c2", "m2")];
   mocks.insights.mockResolvedValue(insights);
+  mocks.adResults.mockResolvedValue([]);
   mocks.review.mockResolvedValue([{ adId: "a1", state: "approved", effectiveStatus: "ACTIVE", reasons: [] }]);
   mocks.saveCampaignResult.mockResolvedValue({ data: {}, error: null });
   mocks.saveCampaignHealth.mockResolvedValue({ data: { id: "c1" }, error: null });
@@ -129,6 +132,35 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     expect(result.body).toMatchObject({ ok: true, failed: 0, refreshed: 1 });
     expect(result.body.throttled).toEqual([{ key: expect.stringMatching(/^[0-9a-f]{12}$/), scope: "account", retryAfterMs: 37 * 60_000 }]);
     expect(mocks.insights.mock.calls.map(([id]) => id)).toEqual(["m-t1", "m1"]);
+  });
+
+  it.each(["throttle", "expired token"])("surfaces a %s from the optional per-ad read", async (failure) => {
+    const { MetaError, MetaThrottledError } = await import("@/lib/meta/client");
+    const error = failure === "throttle"
+      ? new MetaThrottledError("Synthetic throttle", 429, 17, undefined, "account", 60_000)
+      : new MetaError("Synthetic expired token", 400, 190);
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    mocks.campaigns = [{ ...bound("t1", "m-t1"), business_id: "business-busy" }, { ...bound("t2", "m-t2"), business_id: "business-busy" }, bound("c1", "m1")];
+    mocks.adResults.mockImplementation(async (id: string) => {
+      if (id === "m-t1") throw error;
+      return [];
+    });
+    const result = await call();
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, failed: 0, refreshed: 1 });
+    if (failure === "throttle") {
+      expect(result.body.throttled).toEqual([expect.objectContaining({ scope: "account", retryAfterMs: 60_000 })]);
+      expect(mocks.rpc).toHaveBeenCalledWith("meta_throttle_record", expect.objectContaining({ p_business_id: "business-busy", p_scope: "account" }));
+    } else {
+      expect(result.body.reauth).toEqual([expect.objectContaining({ activeCampaigns: 2 })]);
+    }
+    expect(mocks.insights.mock.calls.map(([id]) => id)).toEqual(["m-t1", "m1"]);
+  });
+
+  it("keeps a successful campaign refresh when an ordinary per-ad read fails", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    mocks.adResults.mockRejectedValue(new Error("Per-ad read failed"));
+    expect((await call()).body).toMatchObject({ ok: true, refreshed: 2, failed: 0 });
   });
 
   it("#1838: a throttle is remembered for the next runs, which skip that business, or everything while the app is limited", async () => {

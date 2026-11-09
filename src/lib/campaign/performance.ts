@@ -19,6 +19,8 @@ export interface CampaignPerf {
   costPerConversation?: number | null;
   /** #2601: a website campaign's result (Meta landing-page views). */
   landingPageViews?: number | null;
+  conversions?: number | null;
+  costPerConversion?: number | null;
   status: string;
 }
 

@@ -63,6 +63,22 @@ describe("results freshness (#1003)", () => {
     expect(running.getByText(messages.verdict.figures.visits)).toBeInTheDocument();
   });
 
+  it("#2716: website sales card shows conversions, conversion value and return on spend", async () => {
+    const stored = {
+      ...result(minutesAgo(2)), destination: "website" as const, landing_page_views: 55, link_clicks: 75,
+      conversions: 3, conversion_value: 4497, objective: "sales", spend: 1200,
+    } as CampaignResult;
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[{ ...active, destination: "website", objective: "sales" }]} initialResults={{ "campaign-2": stored }}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" verdictWords={{ locale: "en", messages: en.verdict }} />);
+    const running = await card("Solar EMI");
+    expect(running.getByText("Website sales")).toBeInTheDocument();
+    expect(running.getByText("3")).toBeInTheDocument();
+    expect(running.getByText("Conversion value")).toBeInTheDocument();
+    expect(running.getByText("₹4,497")).toBeInTheDocument();
+    expect(running.getByText("Return on spend")).toBeInTheDocument();
+    expect(running.getByText("3.75x")).toBeInTheDocument();
+  });
+
   it("#2635: refreshing only link clicks reports new results and replaces unread counts", async () => {
     const stored = { ...result(minutesAgo(2)), destination: "website" as const, landing_page_views: 55, link_clicks: null };
     fetchMock.mockImplementation(async (url) => Response.json(String(url).includes("/refresh")

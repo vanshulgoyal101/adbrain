@@ -528,11 +528,6 @@
     {
       "rule": "R1-ui-no-channels",
       "from": "src/components/campaigns.tsx",
-      "to": "src/lib/meta/insights.ts"
-    },
-    {
-      "rule": "R1-ui-no-channels",
-      "from": "src/components/campaigns.tsx",
       "to": "src/lib/meta/setup-checklist.ts"
     },
     {
@@ -594,11 +589,6 @@
       "rule": "R1-ui-no-channels",
       "from": "src/components/whatsapp-status.tsx",
       "to": "src/lib/meta/whatsapp-status-shared.ts"
-    },
-    {
-      "rule": "R2-client-no-server",
-      "from": "src/components/campaigns.tsx",
-      "to": "src/lib/meta/insights.ts"
     },
     {
       "rule": "R2-client-no-server",
@@ -697,7 +687,7 @@
       "rule": "C4-file-size",
       "from": "src/app/api/creatives/generate/route.ts",
       "to": "> 400 lines",
-      "lines": 436
+      "lines": 433
     },
     {
       "rule": "C4-file-size",
@@ -715,7 +705,7 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2684
+      "lines": 2641
     },
     {
       "rule": "C4-file-size",
@@ -727,7 +717,7 @@
       "rule": "C4-file-size",
       "from": "src/components/lead-inbox.tsx",
       "to": "> 400 lines",
-      "lines": 633
+      "lines": 627
     },
     {
       "rule": "C4-file-size",
@@ -751,7 +741,7 @@
       "rule": "C4-file-size",
       "from": "src/components/targeting-controls.tsx",
       "to": "> 400 lines",
-      "lines": 551
+      "lines": 548
     },
     {
       "rule": "C4-file-size",
@@ -763,7 +753,7 @@
       "rule": "C4-file-size",
       "from": "src/lib/creative/concept.ts",
       "to": "> 400 lines",
-      "lines": 653
+      "lines": 652
     },
     {
       "rule": "C4-file-size",
@@ -781,7 +771,7 @@
       "rule": "C4-file-size",
       "from": "src/lib/meta/client.ts",
       "to": "> 400 lines",
-      "lines": 2416
+      "lines": 2375
     },
     {
       "rule": "C4-file-size",
@@ -1001,21 +991,9 @@
     },
     {
       "rule": "C6-english-fallbacks",
-      "from": "src/components/campaign-launch-review.tsx",
-      "to": "English fallback texts",
-      "lines": 1
-    },
-    {
-      "rule": "C6-english-fallbacks",
-      "from": "src/components/campaign-whatsapp-message-dialog.tsx",
-      "to": "English fallback texts",
-      "lines": 1
-    },
-    {
-      "rule": "C6-english-fallbacks",
       "from": "src/components/campaigns.tsx",
       "to": "English fallback texts",
-      "lines": 17
+      "lines": 16
     },
     {
       "rule": "C6-english-fallbacks",
@@ -1085,18 +1063,6 @@
     },
     {
       "rule": "C6-english-fallbacks",
-      "from": "src/components/media-library.tsx",
-      "to": "English fallback texts",
-      "lines": 3
-    },
-    {
-      "rule": "C6-english-fallbacks",
-      "from": "src/components/media-upload.tsx",
-      "to": "English fallback texts",
-      "lines": 1
-    },
-    {
-      "rule": "C6-english-fallbacks",
       "from": "src/components/meta-connect/meta-connect-dialog.tsx",
       "to": "English fallback texts",
       "lines": 9
@@ -1135,7 +1101,7 @@
       "rule": "C6-english-fallbacks",
       "from": "src/components/sign-out-button.tsx",
       "to": "English fallback texts",
-      "lines": 2
+      "lines": 1
     },
     {
       "rule": "C6-english-fallbacks",
@@ -1157,19 +1123,7 @@
     },
     {
       "rule": "C6-english-fallbacks",
-      "from": "src/components/whatsapp-message-card.tsx",
-      "to": "English fallback texts",
-      "lines": 1
-    },
-    {
-      "rule": "C6-english-fallbacks",
       "from": "src/components/workspace-home.tsx",
-      "to": "English fallback texts",
-      "lines": 1
-    },
-    {
-      "rule": "C6-english-fallbacks",
-      "from": "src/components/workspace-shell.tsx",
       "to": "English fallback texts",
       "lines": 1
     }

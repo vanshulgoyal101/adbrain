@@ -14,7 +14,7 @@ import { outcomeDefinition } from "@/lib/campaign/outcomes";
 export type LedgerTotals = { results: number; spendRupees: number; runs: number };
 type Destination = Exclude<LeadDestination, "call">;
 const DESTINATIONS: Destination[] = ["whatsapp", "instant_form", "website"];
-type LedgerRead = { spend?: number | string | null; conversations?: number | null; leads?: number | null; landing_page_views?: number | null };
+type LedgerRead = { spend?: number | string | null; conversations?: number | null; leads?: number | null; landing_page_views?: number | null; conversions?: number | null };
 export type LedgerRun = LedgerRead & { businessId?: string | null; destination?: string | null; status?: string | null };
 
 /** A destination's pool is quoted only from this many stopped runs, by this many different businesses. */

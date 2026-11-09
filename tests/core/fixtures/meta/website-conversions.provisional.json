@@ -1,0 +1,62 @@
+{
+  "source": "PROVISIONAL (#2716): the documented shape of Meta's insights for a website leads (OUTCOME_LEADS) and sales (OUTCOME_SALES) campaign, optimization_goal OFFSITE_CONVERSIONS, same requests as getCampaignInsights/getAdResults plus action_values. Not a recording: no conversion campaign has run yet (no spend allowed). offsite_conversion.fb_pixel_lead/_purchase = the pixel event Meta attributes to the ad; Meta also lists its aggregate `lead`/`purchase`, which must not double count. Replace with the read of the first real conversion campaign (#2595 phase 2).",
+  "leads": {
+    "payload": {
+      "data": [
+        {
+          "impressions": "5120",
+          "clicks": "131",
+          "spend": "900.00",
+          "actions": [
+            { "action_type": "link_click", "value": "96" },
+            { "action_type": "landing_page_view", "value": "70" },
+            { "action_type": "omni_landing_page_view", "value": "70" },
+            { "action_type": "lead", "value": "6" },
+            { "action_type": "offsite_conversion.fb_pixel_lead", "value": "6" }
+          ],
+          "date_start": "2026-11-04",
+          "date_stop": "2026-11-08"
+        }
+      ]
+    }
+  },
+  "sales": {
+    "payload": {
+      "data": [
+        {
+          "impressions": "6400",
+          "clicks": "150",
+          "spend": "1200.00",
+          "actions": [
+            { "action_type": "link_click", "value": "110" },
+            { "action_type": "landing_page_view", "value": "84" },
+            { "action_type": "purchase", "value": "3" },
+            { "action_type": "offsite_conversion.fb_pixel_purchase", "value": "3" }
+          ],
+          "action_values": [
+            { "action_type": "purchase", "value": "4497.00" },
+            { "action_type": "offsite_conversion.fb_pixel_purchase", "value": "4497.00" }
+          ],
+          "date_start": "2026-11-04",
+          "date_stop": "2026-11-08"
+        }
+      ]
+    },
+    "ads": {
+      "list": { "data": [{ "id": "120000000000201", "name": "Ad 1", "effective_status": "ACTIVE" }, { "id": "120000000000202", "name": "Ad 2", "effective_status": "ACTIVE" }] },
+      "insights": {
+        "data": [
+          {
+            "ad_id": "120000000000201", "impressions": "4000", "clicks": "100", "spend": "800.00",
+            "actions": [{ "action_type": "link_click", "value": "75" }, { "action_type": "landing_page_view", "value": "60" }, { "action_type": "offsite_conversion.fb_pixel_purchase", "value": "3" }],
+            "action_values": [{ "action_type": "offsite_conversion.fb_pixel_purchase", "value": "4497.00" }]
+          },
+          {
+            "ad_id": "120000000000202", "impressions": "2400", "clicks": "50", "spend": "400.00",
+            "actions": [{ "action_type": "link_click", "value": "35" }, { "action_type": "landing_page_view", "value": "24" }]
+          }
+        ]
+      }
+    }
+  }
+}
