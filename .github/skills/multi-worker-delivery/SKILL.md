@@ -3,7 +3,7 @@ name: multi-worker-delivery
 description: "Use when independent coding agents share repositories, split implementation and review, hand off idle workers, or prepare a release from several feature branches."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@7a64868 skills/multi-worker-delivery.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@0d7d336 skills/multi-worker-delivery.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Multi-Worker Delivery
 
@@ -144,6 +144,10 @@ repair or integrate the same file while the user sees a growing local backlog.
    ("Unknown chat owner") and return empty transcripts. Recover by starting one fresh chat
    per role from a stored restart prompt (role, dispatch, label queue, today's P0, waiter).
    All eight roles resumed within two minutes, with GitHub as the memory (#573).
+   An editor auto-update is the same event: it restarted the agent host and ended all
+   22 running turns at once. Set the editor's update mode to manual on a machine that
+   runs long-lived agents, and give recovery a "mass death" path that replaces dead
+   roles itself instead of waiting on a coordinator that died with them (#364, Nov 4).
 36. Check that a worker is alive by reading its chat's latest turn, not by counting its
    recent issue comments. Workers stuck on a dead tool call look identical to workers
    waiting for work in both the UI and the comment log; only the turn shows which.
@@ -339,6 +343,12 @@ repair or integrate the same file while the user sees a growing local backlog.
    `--state all`: once the first request closed, every repeat was dropped. Decide
    open, reopen or skip from the newest close time, and reopen last so a failed
    label or comment write retries on the next run (#2806).
+94. Give every scheduled agent run a lock plus an "already done for this slot" check.
+   After the machine sleeps, the host runs missed schedules as catch-up runs, and a
+   manual run on top makes two copies at once: the locked supervisor backed off within
+   2.5 minutes, the unlocked scorecard ran twice. Don't contain duplicates by disabling
+   the only recovery automation either; that left an idle team with no recovery at all
+   when the host restarted the same day (#364, Nov 4).
 
 ## Discriminating checks
 

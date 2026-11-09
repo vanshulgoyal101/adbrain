@@ -3,7 +3,7 @@ name: verification-gates
 description: "Use this skill for any change that crosses source, generated assets, shared modules, database behavior, or deployment state."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@7a64868 skills/verification-gates.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@0d7d336 skills/verification-gates.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Verification Gates
 

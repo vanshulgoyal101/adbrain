@@ -3,7 +3,7 @@ name: external-api-error-contracts
 description: "Use this skill when a product integrates with a provider API whose errors are localized, unstable, overly technical, or capable of changing business behavior such as destination, campaign type, billing or permissions."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@7a64868 skills/external-api-error-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@0d7d336 skills/external-api-error-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # External API Error Contracts
 

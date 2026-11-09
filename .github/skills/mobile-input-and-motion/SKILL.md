@@ -3,7 +3,7 @@ name: mobile-input-and-motion
 description: "Use this skill for touch, pointer gestures, swipes, keyboard fallbacks, animated grids, sliders, or any interaction that must work on small screens."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@7a64868 skills/mobile-input-and-motion.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@0d7d336 skills/mobile-input-and-motion.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Mobile Input and Motion
 
