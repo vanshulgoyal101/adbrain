@@ -10,7 +10,12 @@ export type PhotoFit = "attention" | "blur";
  * anything a crop would lose. EXIF orientation is applied first. Returns PNG bytes.
  */
 export async function fitPhoto(bytes: Uint8Array, width: number, height: number, fit: PhotoFit = "attention"): Promise<Buffer> {
-  const upright = await sharp(Buffer.from(bytes)).rotate().toBuffer();
+  const image = sharp(Buffer.from(bytes));
+  const metadata = await image.metadata();
+  // downloadImage already returns upright PNG. Re-encoding it before the fit is lossless but redundant.
+  const normalized = metadata.format === "png" && !metadata.orientation && !metadata.hasProfile
+    && metadata.space === "srgb" && metadata.depth === "uchar";
+  const upright = normalized ? Buffer.from(bytes) : await image.rotate().toBuffer();
   if (fit === "attention") {
     return sharp(upright).resize(width, height, { fit: "cover", position: sharp.strategy.attention }).png().toBuffer();
   }

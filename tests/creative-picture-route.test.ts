@@ -93,8 +93,8 @@ async function post(body: unknown = words) {
 describe("POST /api/creatives/[id]/picture", () => {
   it("previews the words for the live editor without saving anything (#387)", async () => {
     const sharp = (await import("sharp")).default;
-    raster.render.mockImplementation(async (spec: { width: number; height: number }) =>
-      new Uint8Array(await sharp({ create: { width: spec.width, height: spec.height, channels: 3, background: "#123456" } }).png().toBuffer()));
+    raster.render.mockImplementation(async () =>
+      new Uint8Array(await sharp({ create: { width: 720, height: 900, channels: 3, background: "#123456" } }).png().toBuffer()));
     const res = await post({ ...words, preview: true });
     expect(res.status).toBe(200);
     expect(res.body.previewUrl).toMatch(/^data:image\/webp;base64,/);
@@ -102,13 +102,65 @@ describe("POST /api/creatives/[id]/picture", () => {
     expect(meta.width).toBe(720);
     expect(raster.render).toHaveBeenCalledWith(expect.objectContaining({
       ...words,
-      width: 720,
-      height: 900,
+      width: 1080,
+      height: 1350,
       backgroundUrl: "https://cdn.test/creatives/b1/g1/offer-photo.png",
     }));
     expect(h.render).not.toHaveBeenCalled();
     expect(h.updates).toEqual([]);
     expect(h.logEvent).not.toHaveBeenCalled();
+  });
+
+  it("shares only identical in-flight previews after each caller is authenticated", async () => {
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 720, height: 900, channels: 3, background: "#123456" } }).png().toBuffer();
+    let finish!: (value: Uint8Array) => void;
+    raster.render.mockImplementation(() => new Promise<Uint8Array>((resolve) => { finish = resolve; }));
+    const first = post({ ...words, preview: true });
+    const duplicate = post({ ...words, preview: true });
+    await vi.waitFor(() => expect(raster.render).toHaveBeenCalledTimes(1));
+    h.user = null;
+    expect((await post({ ...words, preview: true })).status).toBe(401);
+    h.user = { id: "u1" };
+    const creative = h.rows.creatives;
+    h.rows.creatives = null;
+    expect((await post({ ...words, preview: true })).status).toBe(404);
+    h.rows.creatives = creative;
+    finish(png);
+    const [a, b] = await Promise.all([first, duplicate]);
+    expect(a.status).toBe(200);
+    expect(b).toEqual(a);
+    expect(raster.render).toHaveBeenCalledTimes(1);
+    // Settled results are never cached across later edits or permissions changes.
+    h.user = { id: "u1" };
+    raster.render.mockResolvedValue(png);
+    expect((await post({ ...words, preview: true })).status).toBe(200);
+    expect(raster.render).toHaveBeenCalledTimes(2);
+  });
+
+  it("removes a failed in-flight preview so the next request can retry", async () => {
+    raster.render.mockRejectedValueOnce(new Error("preview render failed"));
+    expect((await post({ ...words, preview: true })).status).toBe(500);
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 720, height: 900, channels: 3, background: "#123456" } }).png().toBuffer();
+    raster.render.mockResolvedValue(png);
+    expect((await post({ ...words, preview: true })).status).toBe(200);
+    expect(raster.render).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not share previews across users or different drafts", async () => {
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 720, height: 900, channels: 3, background: "#123456" } }).png().toBuffer();
+    const finish: ((value: Uint8Array) => void)[] = [];
+    raster.render.mockImplementation(() => new Promise<Uint8Array>((resolve) => { finish.push(resolve); }));
+    const first = post({ ...words, preview: true });
+    await vi.waitFor(() => expect(raster.render).toHaveBeenCalledTimes(1));
+    h.user = { id: "u2" };
+    const otherOwner = post({ ...words, preview: true });
+    const otherDraft = post({ ...words, headline: "A different draft", preview: true });
+    await vi.waitFor(() => expect(raster.render).toHaveBeenCalledTimes(3));
+    finish.forEach((resolve) => resolve(png));
+    expect((await Promise.all([first, otherOwner, otherDraft])).every((result) => result.status === 200)).toBe(true);
   });
 
   it("still refuses invalid words in a preview", async () => {

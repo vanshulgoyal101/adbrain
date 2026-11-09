@@ -3,9 +3,8 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { getEnv } from "@/lib/env";
-import sharp from "sharp";
 import { renderAndPersistDesign } from "@/lib/creative/persist";
-import { renderCompositeAd } from "@/lib/creative/render";
+import { renderPicturePreview } from "@/lib/creative/picture-preview";
 import {
   pictureDesign,
   pictureWordsSchema,
@@ -93,16 +92,8 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   const design = withPictureWords(pictureDesign(creative, business), parsed.data);
   if (preview) {
     try {
-      const scale = Math.min(1, 720 / design.width);
-      const previewDesign = {
-        ...design,
-        width: Math.round(design.width * scale),
-        height: Math.round(design.height * scale),
-        backgroundUrl: photoUrl,
-      };
-      const bytes = await renderCompositeAd(previewDesign);
-      const small = await sharp(Buffer.from(bytes)).webp({ quality: 72 }).toBuffer();
-      return NextResponse.json({ previewUrl: `data:image/webp;base64,${small.toString("base64")}` });
+      const previewUrl = await renderPicturePreview(user.id, id, { ...design, backgroundUrl: photoUrl });
+      return NextResponse.json({ previewUrl });
     } catch (error) {
       return serverError("creative.picture.preview", error, await ownerError("previewFailed"));
     }

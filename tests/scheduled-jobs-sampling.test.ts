@@ -20,7 +20,7 @@ function stepScript(stepName: string): string {
 function runStep(stepName: string, runNumber: number) {
   return spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", stepScript(stepName)], {
     encoding: "utf8",
-    env: { PATH: process.env.PATH ?? "", GITHUB_RUN_NUMBER: String(runNumber), CRON_SECRET: "" },
+    env: { NODE_ENV: "test", PATH: process.env.PATH ?? "", GITHUB_RUN_NUMBER: String(runNumber), CRON_SECRET: "" },
   });
 }
 
