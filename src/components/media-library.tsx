@@ -14,6 +14,7 @@ import type { Codec, UploadDeps, VideoReader } from "@/lib/media/client-upload";
 import { MAX_AD_PHOTOS } from "@/lib/media/rules";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
+import { AssetResultBadge, AssetResultsNotice, type AssetResultProps } from "@/components/asset-result-badge";
 
 const TABS = ["all", "photos", "videos", "made"] as const;
 type Tab = (typeof TABS)[number];
@@ -111,7 +112,7 @@ function Grid({ children }: { children: React.ReactNode }) {
  * #778 slice 3a (#744 phase 1): "Photos & videos", the owner's own uploads beside the ads AdBrain made. Shown when
  * MEDIA_UPLOADS_ENABLED is on; the older Assets page stays otherwise. Words are the CPO's (#1868 on #744).
  */
-export function MediaLibrary({ words, business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, videoEnabled = false, deps, codec, videoReader }: {
+export function MediaLibrary({ words, business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, videoEnabled = false, deps, codec, videoReader, results, resultWords }: {
   /** The owner's language (`media`, #778 walk 1); English when none are passed. */
   words?: Words<"media">;
   business: { id: string; vertical: string | null };
@@ -128,7 +129,7 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   deps?: UploadDeps;
   codec?: Codec;
   videoReader?: VideoReader;
-}) {
+} & { results?: AssetResultProps["results"]; resultWords?: AssetResultProps["words"] }) {
   const t = useMemo(() => mediaTranslator(words), [words]);
   const [tab, setTab] = useState<Tab>("all");
   const [media, setMedia] = useState(initialMedia);
@@ -240,6 +241,7 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
             {m.kind === "video" && m.durationMs && <span className="block">{Math.floor(m.durationMs / 60_000)}:{String(Math.floor(m.durationMs / 1000) % 60).padStart(2, "0")}</span>}
           </> : undefined} actions={false}
           filename={`adbrain-${slugify(m.name ?? (m.kind === "video" ? "video" : "photo"), m.id.slice(0, 6))}.${m.kind === "video" ? "mp4" : "jpg"}`}>
+          <AssetResultBadge results={results} words={resultWords} assetId={m.id} kind="media" />
           <OwnPhotoControls key={m.name ?? ""} t={t} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} pick={pickBox(m)} />
         </AssetTile>
       ))}
@@ -261,7 +263,9 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
             title={c.headline ?? t("library.adFallback")}
             filename={`adbrain-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
             meta={c.status === "approved" ? <Status tone="live">{t("library.approved")}</Status> : undefined}
-            actions={!sample} />
+            actions={!sample}>
+            <AssetResultBadge results={results} words={resultWords} assetId={c.id} kind="creative" />
+          </AssetTile>
         ))}
       </Grid>
       {made.length > shown && (
@@ -275,6 +279,7 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
 
   return (
     <div className="flex flex-col gap-6">
+      <AssetResultsNotice results={results} words={resultWords} />
       {ownCount > 0 && <div>{addButton}</div>}
       {/* Delete feedback lives in one bottom toast, so a scrolled owner sees why a photo came back (Designer, #2008). */}
       {(deleted || deleteError) && (

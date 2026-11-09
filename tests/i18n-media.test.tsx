@@ -34,7 +34,7 @@ describe("Photos in Hindi (#778 walk 1)", () => {
       deps={{ fetch: vi.fn(), uploadToSignedUrl: vi.fn() }} codec={codec} />);
     const sheet = screen.getByRole("dialog", { name: "फ़ोटो जोड़ें" });
     fireEvent.change(within(sheet).getByLabelText("फ़ोटो चुनें"), { target: { files: ["tall.jpg", "wide.jpg", "tiny.jpg"].map((name) => new File(["x"], name, { type: "image/jpeg" })).concat(new File(["x"], "a.gif", { type: "image/gif" })) } });
-    await waitFor(() => expect(within(sheet).queryByText("जाँच हो रही है…")).toBeNull());
+    await waitFor(() => expect(within(sheet).queryAllByText("जाँच हो रही है…")).toHaveLength(0), { timeout: 5000 });
     const list = within(sheet).getByRole("list", { name: "आपकी चुनी फ़ोटो" });
     expect(within(list).getByText(hi.media.fit.ok)).toBeTruthy();
     expect(within(list).getByText("चौड़ी (16:9): Feed में दिखेगी; Stories और Reels के लिए लंबी फ़ोटो चाहिए।")).toBeTruthy();

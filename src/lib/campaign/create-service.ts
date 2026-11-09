@@ -9,7 +9,7 @@ import { createOperationCheckpoint } from "./operation-store";
 import { executeOperation, OperationPhaseError, OperationRolledBackError, recordExternalId, type OperationRecord } from "./operations";
 import { effectiveDailyBudget } from "./spend";
 import { savedCreativeDescription } from "@/lib/creative/concept";
-import { MetaCreateRolledBackError, splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
+import { MetaCreateRolledBackError, splitAgeRange, type CampaignMutationCheckpoint, type CreateCampaignResult } from "@/lib/meta/client";
 import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { boundWhatsAppNumbers } from "@/lib/meta/whatsapp-bindings";
 import type { CampaignSupabase } from "./preflight-runtime";
@@ -23,6 +23,9 @@ import { checkPlan, planCheckEvent } from "./plan-check";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildLaunchSnapshot, readCreativeMedia, saveLaunchSnapshot } from "./learnings";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { adResultsEnabled } from "./ad-results-store";
+import { buildAdAssetLinks } from "./asset-results";
+import { recordAdAssetLinks } from "./asset-results-store";
 
 /**
  * The stored objective label; website visits match what sync maps OUTCOME_TRAFFIC to, so they never read as a form
@@ -47,13 +50,15 @@ export async function executeReviewedCampaign(input: {
   const { database, operationDatabase, actor, draft, review, operation, signal } = input;
   let metaResult: CreateCampaignResult | null = null;
   let launchSnapshot: ReturnType<typeof buildLaunchSnapshot> | null = null;
+  const assetCheckpoints: CampaignMutationCheckpoint[] = [];
   let checkpointState = operation;
   const checkpoint = createOperationCheckpoint(operationDatabase, operation);
-  const onCheckpoint = async (event: { phase: "campaign" | "adset" | "creative" | "ad"; externalId: string }) => {
+  const onCheckpoint = async (event: CampaignMutationCheckpoint) => {
     checkpointState = { ...recordExternalId(checkpointState, event.externalId), phase: event.phase };
     const saved = await checkpoint.checkpoint(checkpointState);
     if (!saved) throw new OperationPhaseError("Operation lease was lost after Meta mutation.", { transmitted: true });
     checkpointState = saved;
+    assetCheckpoints.push(event);
     signal?.throwIfAborted();
   };
   return executeOperation(operation, [
@@ -72,7 +77,7 @@ export async function executeReviewedCampaign(input: {
           if (businessError || !business) throw new OperationPhaseError("Business could not be loaded before execution.", { transmitted: false });
           const location = review.resolvedLocation!;
           const excludedLocation = review.resolvedExcludedLocation;
-          const { data: creatives, error: creativeError } = await database.from("creatives").select("id, image_url, headline, primary_text, cta, generation, angle")
+          const { data: creatives, error: creativeError } = await database.from("creatives").select("id, image_url, headline, primary_text, cta, generation, angle, updated_at")
             .in("id", draft.input.creativeIds).eq("business_id", actor.businessId).eq("status", "approved");
           if (creativeError) throw new OperationPhaseError("Creatives could not be loaded before execution.", { transmitted: false });
           const byId = new Map((creatives ?? []).map(creative => [creative.id, creative]));
@@ -111,7 +116,10 @@ export async function executeReviewedCampaign(input: {
             throw new OperationPhaseError("Website signup and sales goals can't launch yet.", { transmitted: false });
           }
           // #789: for the ledger, read alongside Meta's create; never rejects.
-          const mediaRead = readCreativeMedia(database as unknown as SupabaseClient, actor.businessId, creativeInputs.map(creative => creative.id));
+          const mediaReadAt = new Date().toISOString();
+          const mediaRead = readCreativeMedia(database as unknown as SupabaseClient, actor.businessId, creativeInputs.map(creative => creative.id), {
+            readAt: new Map(creativeInputs.map(creative => [creative.id, creative.updated_at])),
+          });
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: (draft.input.destination ?? "instant_form") === "instant_form" ? draft.input.leadFormId ?? undefined : undefined,
@@ -153,7 +161,8 @@ export async function executeReviewedCampaign(input: {
               interests: (review.audienceInterests ?? []).map(interest => interest.name),
               whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill, prefillSource: message?.source,
               storyFormat: storyRendered, sentTargetings, metaCreativeIds: metaResult.creativeIds,
-              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation, media: media.get(creative.id) ?? null })),
+              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation, media: media?.get(creative.id) ?? null })),
+              ...(media ? {} : { mediaUnknownAt: mediaReadAt }),
             });
           } catch {
             launchSnapshot = null;
@@ -186,6 +195,20 @@ export async function executeReviewedCampaign(input: {
       if (error || !campaign) return null;
       if (launchSnapshot && !(await saveLaunchSnapshot(createAdminClient() as unknown as SupabaseClient, { campaignId: campaign.id, businessId: actor.businessId, snapshot: launchSnapshot }))) {
         recordProductEvent({ kind: "workflow", name: "campaign.learning_snapshot", outcome: "failed", businessId: actor.businessId });
+      }
+      // #789: an unverified photo is never stored as "no photo"; the next results refresh links these ads instead.
+      if (adResultsEnabled()) {
+        if (!launchSnapshot || launchSnapshot.mediaUnknownAt) {
+          recordProductEvent({ kind: "workflow", name: "campaign.ad_attribution", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: "media_unverified" } });
+        } else try {
+          await recordAdAssetLinks(createAdminClient() as unknown as SupabaseClient, buildAdAssetLinks({
+            businessId: actor.businessId, campaignId: campaign.id, creativeIds: draft.input.creativeIds,
+            mediaByCreative: new Map(launchSnapshot.creatives.map(creative => [creative.id, creative.mediaAssetId])),
+            events: assetCheckpoints,
+          }));
+        } catch {
+          recordProductEvent({ kind: "workflow", name: "campaign.ad_attribution", outcome: "failed", businessId: actor.businessId });
+        }
       }
       return { ...current, campaignId: campaign.id };
     },

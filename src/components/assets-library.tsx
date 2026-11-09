@@ -7,6 +7,7 @@ import { Status } from "@/components/ui/status";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
+import { AssetResultBadge, AssetResultsNotice, type AssetResultProps } from "@/components/asset-result-badge";
 
 const PAGE = 24;
 
@@ -152,18 +153,21 @@ export function AssetsLibrary({
   creatives,
   brandAssets,
   sample = false,
+  results,
+  words,
 }: {
   creatives: CreativePreview[];
   brandAssets: BrandAsset[];
   /** #1317: a prospect's ads are samples: no Download, Copy link or Open on them (the owner's own uploads keep theirs). */
   sample?: boolean;
-}) {
+} & AssetResultProps) {
   const generated = creatives.filter((c) => c.image_url);
   // #847: 88+ full images made a 44,000 px phone page; show a page at a time.
   const [shown, setShown] = useState(PAGE);
 
   return (
     <div className="flex flex-col gap-8">
+      <AssetResultsNotice results={results} words={words} />
       <section>
         <div className="mb-3 flex items-baseline gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Ads</h2>
@@ -187,7 +191,9 @@ export function AssetsLibrary({
                 filename={`adbrain-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
                 meta={c.status === "approved" ? <Status tone="live">Approved</Status> : undefined}
                 actions={!sample}
-              />
+              >
+                <AssetResultBadge results={results} words={words} assetId={c.id} kind="creative" />
+              </AssetTile>
             ))}
           </div>
           {generated.length > shown && (

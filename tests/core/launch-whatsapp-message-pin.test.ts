@@ -13,19 +13,26 @@ vi.mock("@/lib/meta/whatsapp-bindings", () => ({ boundWhatsAppNumbers: async () 
 vi.mock("@/lib/creative/story", () => ({ renderStoriesWithin: (generations: unknown[]) => generations.map(() => null) }));
 vi.mock("@/lib/campaign/operation-store", () => ({ createOperationCheckpoint: () => ({ checkpoint: async (operation: unknown) => operation }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: async () => ({ data: { id: "campaign-row" }, error: null }) }));
-vi.mock("@/lib/campaign/learnings", () => ({ buildLaunchSnapshot: () => null, readCreativeMedia: async () => new Map(), saveLaunchSnapshot: async () => true }));
+vi.mock("@/lib/campaign/learnings", () => ({
+  buildLaunchSnapshot: (input: { mediaUnknownAt?: string }) => attribution.snapshot && { ...attribution.snapshot, ...(input.mediaUnknownAt ? { mediaUnknownAt: input.mediaUnknownAt } : {}) },
+  readCreativeMedia: async (...args: unknown[]) => { attribution.mediaReads.push(args); return attribution.media; }, saveLaunchSnapshot: async () => true,
+}));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
-vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: () => undefined }));
+vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: attribution.events }));
 
 import { executeReviewedCampaign } from "@/lib/campaign/create-service";
 import { buildCanonicalReviewPayload, buildCreativeReviewPayload, isReviewedWhatsAppMessage } from "@/lib/campaign/preflight";
 import type { ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { OperationRecord } from "@/lib/campaign/operations";
+import type { CampaignMutationCheckpoint } from "@/lib/meta/client";
+
+const attribution = vi.hoisted(() => ({ record: vi.fn(), events: vi.fn(), mediaReads: [] as unknown[][], media: new Map() as Map<string, unknown> | null, snapshot: null as null | { creatives: { id: string; mediaAssetId: string | null }[] } }));
+vi.mock("@/lib/campaign/asset-results-store", () => ({ recordAdAssetLinks: attribution.record }));
 
 const solaride = { name: "Solaride", website: "https://solaride.in", locations: ["Chandigarh", "Panchkula", "Mohali"],
   offers: ["Free site survey", "PM Surya Ghar subsidy help", "Diwali offer: 10% off rooftop solar installation"], whatsapp_template: null as unknown };
 const creative = {
-  id: "8a5e19e9-0000-4000-8000-000000000001", image_url: "https://example.com/ad.png", cta: null, angle: null, generation: {},
+  id: "8a5e19e9-0000-4000-8000-000000000001", image_url: "https://example.com/ad.png", cta: null, angle: null, generation: {}, updated_at: "2026-11-03T10:00:00.123456+00:00",
   headline: "Wondering Whether Your Roof Is Ready?",
   primary_text: "Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\nMessage Solaride on WhatsApp to book your free site survey.",
 };
@@ -52,7 +59,77 @@ function launch(business: typeof solaride) {
 }
 
 beforeEach(() => {
+  attribution.record.mockReset().mockResolvedValue(undefined);
+  attribution.events.mockClear();
+  attribution.snapshot = null;
+  attribution.media = new Map();
+  attribution.mediaReads = [];
   meta.createLeadCampaign.mockReset().mockResolvedValue({ destination: "whatsapp", campaignId: "c1", adSetId: "s1", adSetIds: ["s1"], adIds: ["a1"], creativeIds: ["cr1"] });
+});
+
+async function checkpointLaunch() {
+  attribution.snapshot = { creatives: [{ id: creative.id, mediaAssetId: "00000000-0000-4000-8000-000000000001" }] };
+  meta.createLeadCampaign.mockImplementation(async ({ onCheckpoint }: { onCheckpoint: (event: CampaignMutationCheckpoint) => Promise<void> }) => {
+    await onCheckpoint({ phase: "creative", externalId: "501", variantIndex: 0, creativeIndex: 0 });
+    await onCheckpoint({ phase: "ad", externalId: "101", variantIndex: 0, creativeIndex: 0 });
+    return { destination: "whatsapp", campaignId: "1", adSetId: "2", adSetIds: ["2"], adIds: ["101"], creativeIds: ["501"] };
+  });
+  return launch(solaride);
+}
+
+describe("core: explicit launch attribution (#789), using the recorded reviewed message", () => {
+  it("persists checkpoint indices and immutable snapshot media only with the flag enabled", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    try {
+      expect((await checkpointLaunch()).kind).toBe("succeeded");
+      expect(attribution.record).toHaveBeenCalledWith({}, [{
+        business_id: "b1", campaign_id: "campaign-row", meta_ad_id: "101", meta_creative_id: "501",
+        creative_id: creative.id, media_asset_id: "00000000-0000-4000-8000-000000000001", variant_index: 0, position: 0,
+      }]);
+      attribution.record.mockClear();
+      vi.stubEnv("AD_RESULTS_ENABLED", "false");
+      expect((await checkpointLaunch()).kind).toBe("succeeded");
+      expect(attribution.record).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("logs attribution failure without changing a successfully created paused campaign", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    attribution.record.mockRejectedValue(new Error("down"));
+    try {
+      expect((await checkpointLaunch()).kind).toBe("succeeded");
+      expect(attribution.events).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "failed" }));
+    } finally { vi.unstubAllEnvs(); }
+  });
+});
+
+describe("core: an unverified launch photo is never stored as no photo (#789 QA hold)", () => {
+  it("writes no ad links and logs a partial when the media read fails or times out, so refresh links them later", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    try {
+      attribution.media = null;
+      expect((await checkpointLaunch()).kind).toBe("succeeded");
+      expect(attribution.record).not.toHaveBeenCalled();
+      expect(attribution.events).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "partial", attributes: { errorCode: "media_unverified" } }));
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("reads the photo link against the same creative row whose image Meta was sent, so a relink reads as unknown (QA #2753)", async () => {
+    expect((await checkpointLaunch()).kind).toBe("succeeded");
+    expect(attribution.mediaReads).toEqual([[expect.anything(), "b1", [creative.id], { readAt: new Map([[creative.id, creative.updated_at]]) }]]);
+  });
+
+  it("writes no ad links when the launch snapshot couldn't be built", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    meta.createLeadCampaign.mockImplementation(async ({ onCheckpoint }: { onCheckpoint: (event: CampaignMutationCheckpoint) => Promise<void> }) => {
+      await onCheckpoint({ phase: "ad", externalId: "101", variantIndex: 0, creativeIndex: 0 });
+      return { destination: "whatsapp", campaignId: "1", adSetId: "2", adSetIds: ["2"], adIds: ["101"], creativeIds: ["501"] };
+    });
+    try {
+      expect((await launch(solaride)).kind).toBe("succeeded");
+      expect(attribution.record).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
 });
 
 describe("core: launch sends only the WhatsApp message Review checked (#2452)", () => {

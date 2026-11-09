@@ -6,6 +6,7 @@ import { adResultViews, saveAdResults, type StoredAdResult } from "@/lib/campaig
 import { endTimeChangedInMeta, metaCapEndTime, metaDailyBudgetPaise, outsideChanges, OUTSIDE_LINES } from "@/lib/campaign/gone-in-meta";
 import { cappedRunEnded, runningNow } from "@/lib/campaign/activation";
 import { cardVerdictInput } from "@/lib/campaign/card-verdict";
+import { poolAssetResults, type AssetAdResult } from "@/lib/campaign/asset-results";
 
 // #783/#789: per-ad results. Meta's real read-only answers for Solaride's live WhatsApp campaign (#499), recorded
 // by scripts/record-meta-ad-results.ts: 6 ads, of which Meta lists insights only for the 3 that delivered.
@@ -51,6 +52,31 @@ describe("core: results per ad (#783)", () => {
     // One chat in the whole campaign: far too early to call a winner.
     expect(bestAd(ads)).toBeNull();
     expect(ads.some(ad => ad.replaced)).toBe(false);
+  });
+
+  it("#789: lifetime photo/AI-ad pools preserve the recorded campaign totals and undelivered ads", async () => {
+    replay();
+    const meta = new MetaClient(creds);
+    const ads = await meta.getAdResults(recorded.campaignId);
+    const total = await meta.getCampaignInsights(recorded.campaignId);
+    const rows: AssetAdResult[] = [];
+    const query = { upsert: async (stored: StoredAdResult[]) => {
+      rows.push(...stored.map((row, index) => ({ ...row, id: String(index), business_id: "b1", campaign_id: "c1", period_start: null, period_end: null })));
+      return { error: null };
+    } };
+    await saveAdResults({ from: () => query } as never, { businessId: "b1", campaignId: "c1", ads });
+    // Recorded delivery, synthetic saved asset bindings: no new Meta write or claim of a live v3 launch.
+    const pooled = poolAssetResults("b1", [{ id: "c1", business_id: "b1", destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT", creative_ids: ["ai"] }],
+      ads.map(ad => ({ business_id: "b1", campaign_id: "c1", meta_ad_id: ad.adId, creative_id: "ai", media_asset_id: "photo" })), rows, Date.now());
+    expect(pooled.byMedia.photo[0].results).toBe(total.conversations);
+    expect(pooled.byMedia.photo[0].spendPaise).toBe(Math.round(total.spend * 100));
+    expect(pooled.byCreative.ai).toEqual(pooled.byMedia.photo);
+    expect(pooled.unmatched).toBe(0);
+    const undelivered = rows.filter(row => !row.delivered);
+    expect(undelivered).toHaveLength(3);
+    expect(poolAssetResults("b1", [{ id: "c1", business_id: "b1", destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT", creative_ids: ["ai"] }],
+      undelivered.map(row => ({ business_id: "b1", campaign_id: "c1", meta_ad_id: row.meta_ad_id, creative_id: "ai", media_asset_id: null })), undelivered, Date.now())
+      .byCreative.ai[0]).toMatchObject({ delivered: false, results: 0, spendPaise: 0 });
   });
 
   // QA on #943: Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and can't list
