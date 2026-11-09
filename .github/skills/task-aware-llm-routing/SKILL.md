@@ -3,7 +3,7 @@ name: task-aware-llm-routing
 description: "Use this skill when one product sends multiple kinds of work to several LLM providers, especially when some tasks are expensive or latency-sensitive and others are extraction, summarization, classification, or conversational glue."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/task-aware-llm-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@0d7d336 skills/task-aware-llm-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Task-Aware LLM Routing
 
@@ -113,6 +113,9 @@ creative-generation settings.
   Create from 63-79s to 36.5-48s; model or effort changes risked quality (#142).
 - A capped bake-off on the real route through a recorded harness chose model and
   schedule cheaply; two consecutive production 3/3 runs followed (48s, 40s) (#98).
+- One request deadline shared across a repair loop needs a per-attempt reserve for the
+  last provider, or a hang → valid-but-rejected → hang sequence leaves the fallback no
+  time. Prove it with a virtual-time test of exactly that sequence (#2462).
 
 ### Discriminating checks
 

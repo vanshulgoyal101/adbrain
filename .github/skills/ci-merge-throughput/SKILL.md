@@ -3,7 +3,7 @@ name: ci-merge-throughput
 description: "Use when several workers merge to one main branch many times a day, when a required check blocks every PR for reasons unrelated to the change, or when a new test suite should become a required merge check."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/ci-merge-throughput.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@0d7d336 skills/ci-merge-throughput.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # CI Merge Throughput
 
@@ -134,3 +134,31 @@ PRs. Long-lived branches drift and fail CI on old dependencies. Observed in
   label, toast, JSX text), require the same tree shape and directives, and keep the
   gate when any code reads the old or new words. Fail closed when the parser is
   missing and log why a file stays gated (#364, #2428).
+
+## AdBrain lessons (Nov 1–4)
+
+- A train head whose only green CI came from `workflow_dispatch` never becomes
+  mergeable ("base branch policy prohibits the merge"): required checks must run on the
+  PR itself. Approve the bot PR's held (`action_required`) run instead, after re-reading
+  its head, base and workflow identity. 4 of 11 stuck train heads were dispatch-only
+  (#2642, #2682).
+- `cancel-in-progress` on a gap-timed promotion workflow cancelled 45 of 60 runs. Queue
+  new pushes behind a run already past the gap and promote the newest fully green SHA
+  (#2528); recompute the gap from the real deploy count when its trigger changes (#2609).
+- A "failed" run on a PR merged within seconds can have zero jobs: its check suite has
+  `latest_check_runs_count` 0 and it never gates. Confirm with
+  `gh api repos/<o>/<r>/commits/<sha>/check-runs` before treating it as red (#2459).
+- A direct release to `main` (hotfix or migration) resets the train's back-sync, and a
+  docs row edited on both branches blocks it. Batch such releases right after a
+  promotion and check that the next sync PR merges clean (#2702, #2751).
+- A Vitest custom reporter's constructor receives Vitest's options object, so a
+  defaulted path argument became `{}` and every shard exited 1 after all tests passed.
+  Read reporter config from env, and prove a CI reporter with a temporary demo test in
+  the PR (#618).
+- To check what a privileged workflow step writes, run the real step against stub
+  `gh`/`curl` and assert the captured body, not the call count (#2582).
+- CI ran Node 24 while the shared machine defaulted to 22.12, so `module.registerHooks`
+  (22.15+) passed CI and broke every local dev server. Run new runtime APIs under the
+  oldest local Node too, or feature-detect with a fallback (#2098).
+- A CI allowlist built from a local env file must match the repo secrets set from that
+  file; compare `gh secret list` update dates before merging (#2589).

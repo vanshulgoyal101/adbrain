@@ -3,7 +3,7 @@ name: provider-cooldown-rotation
 description: "When a product calls multiple external providers, models, accounts, or API keys for the same operation."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/provider-cooldown-rotation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@0d7d336 skills/provider-cooldown-rotation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Provider Cooldown Rotation
 
@@ -88,3 +88,9 @@ wait still open.
 - When a success rate misses by one request, group usage events by request id with
   `HAVING NOT bool_or(status = 'success')` to get the failed request's whole provider
   chain in one query (#2242).
+
+## AdBrain lesson (Nov 1)
+
+- A wrapper reason ("free text unavailable") hid the busy cause and turned load into
+  an alerting 500. Classify wrapped exhaustion by attempts and provider count, not by
+  the wrapper's name (#2457).

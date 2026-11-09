@@ -3,7 +3,7 @@ name: external-api-error-contracts
 description: "Use this skill when a product integrates with a provider API whose errors are localized, unstable, overly technical, or capable of changing business behavior such as destination, campaign type, billing or permissions."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/external-api-error-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@0d7d336 skills/external-api-error-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # External API Error Contracts
 
@@ -67,6 +67,8 @@ request.
   create an instant-form campaign.
 - A malformed or non-HTTP image URL is rejected before `fetch`.
 - Unknown provider errors use the safe fallback message.
+- Read-backs alone can't prove a field was sent; compare the recorded request bodies
+  (POST equality) for every create and edit path (#1932).
 
 ## Ambiguous mutation outcomes
 
@@ -98,6 +100,11 @@ request.
    inserts cannot land after the reconciliation audit.
 - Give each terminal state a way out, such as starting over with a note on what
    sync will import. A lock only a new tab clears is a dead end (#143).
+- An unclassified error after a step succeeded (the database save after the
+   picture rendered) lost the error code, skipped the top-up and hid inside a
+   generic message among 59 losses. Counting stored files (12 = 3 ads × 2 calls ×
+   2 files) proved it, not logs. Fix: a pre-made id, a read-back and one retry, plus
+   an event carrying the code (#2494).
 
 ## Common traps
 
