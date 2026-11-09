@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
 import { MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, videoTrimSeconds } from "@/lib/media/rules";
-import { finalizeUpload, monthStartIst, signUpload, type MediaRow } from "@/lib/media/store";
+import { deleteMedia, finalizeUpload, monthStartIst, signUpload, type MediaRow } from "@/lib/media/store";
 import { fakeSupabase } from "./helpers/media-fake";
 
 const env = vi.hoisted(() => ({ MEDIA_UPLOADS_ENABLED: true, MEDIA_VIDEO_ENABLED: true }));
@@ -123,6 +123,23 @@ describe("video uploads (#748)", () => {
     expect(db.tables.media_assets).toEqual([]);
   });
 
+  it("says uploads are paused when the database's global video budget is full (#2653), leaving no row; photos still work", async () => {
+    db.insertErrors.push({ code: "P0001", message: "MEDIA_VIDEO_BUDGET" });
+    await expect(sign(tall)).rejects.toMatchObject({ status: 503, code: "MEDIA_VIDEO_PAUSED", message: "Video uploads are paused. Please use photos instead." });
+    expect(db.tables.media_assets).toEqual([]);
+    const photo = await signUpload(db.client, { businessId: BUSINESS, userId: "u", mime: "image/jpeg", bytes: 1000, sha256: "c".repeat(64), width: 1080, height: 1350, rightsConfirmedAt: "x" });
+    expect(photo).toMatchObject({ duplicate: false, bucket: "media" });
+  });
+
+  it.each(["MEDIA_VIDEO_STORAGE_UNKNOWN", "MEDIA_VIDEO_BUCKET_UNSAFE"])(
+    "pauses video signing when the database cannot prove its Storage bound: %s",
+    async (message) => {
+      db.insertErrors.push({ code: "P0001", message });
+      await expect(sign(tall)).rejects.toMatchObject({ status: 503, code: "MEDIA_VIDEO_PAUSED" });
+      expect(db.storageCalls.filter((call) => call.op === "sign")).toEqual([]);
+    },
+  );
+
   it(`stops at ${MEDIA_MONTHLY_VIDEOS} videos a month, says when more come, and photos still count on their own`, async () => {
     for (let index = 0; index < MEDIA_MONTHLY_VIDEOS; index++) {
       db.tables.media_assets.push({ business_id: BUSINESS, source: "upload", kind: "video", sha256: String(index).padStart(64, "0"), created_at: new Date().toISOString(), deleted_at: null });
@@ -152,6 +169,186 @@ describe("video uploads (#748)", () => {
     // QA 2 on #2735: videos live in their own bucket, so a photo token stays bounded by the 8 MB `media` bucket.
     expect(new Set(db.storageCalls.map((call) => call.bucket))).toEqual(new Set(["media-video"]));
     expect(db.storageCalls.map((call) => call.op)).toEqual(["sign", "upload", "read"]);
+  });
+
+  it("fences a second finalize before either request can write another final copy", async () => {
+    const row = { ...await uploaded(tall) };
+    let release!: () => void;
+    let started!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { started = resolve; });
+    const firstMayFinish = new Promise<void>((resolve) => { release = resolve; });
+    let attempts = 0;
+    db.hooks.beforeUpload = async () => {
+      if (++attempts === 1) {
+        started();
+        await firstMayFinish;
+      }
+    };
+
+    const first = finalizeUpload(db.client, { ...row });
+    await firstStarted;
+    const second = await finalizeUpload(db.client, { ...row }).then(
+      () => ({ status: "fulfilled" }),
+      (error: unknown) => ({ status: "rejected", error }),
+    );
+    release();
+    await first;
+
+    expect(second).toMatchObject({ status: "rejected", error: { code: "MEDIA_FINALIZING" } });
+    expect(db.storageCalls.filter((call) => call.op === "upload")).toHaveLength(1);
+  });
+
+  it("reports a failed upload-path removal and leaves both copies available for reconciliation", async () => {
+    const row = { ...await uploaded(tall) };
+    db.hooks.removeError = (_bucket, paths) => paths.includes(row.path) ? { message: "storage unavailable" } : null;
+
+    await expect(finalizeUpload(db.client, row)).rejects.toMatchObject({ status: 503, code: "MEDIA_UNAVAILABLE" });
+    const saved = db.tables.media_assets[0] as MediaRow;
+    expect(saved.status).toBe("ready");
+    expect(db.objects.has(row.path)).toBe(true);
+    expect(db.objects.has(saved.path)).toBe(true);
+  });
+
+  it("records signing intent before a slow response and measures the token lifetime from that response", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T09:00:00.000Z"));
+    let release!: () => void;
+    let started!: () => void;
+    const signingStarted = new Promise<void>((resolve) => { started = resolve; });
+    const signingMayFinish = new Promise<void>((resolve) => { release = resolve; });
+    db.hooks.beforeSign = async () => { started(); await signingMayFinish; };
+    const signing = sign(tall);
+    try {
+      await signingStarted;
+      const upload = db.videoSlots.find((slot) => slot.slot === "upload")!;
+      expect(upload.signingIntent).not.toBeNull();
+      vi.setSystemTime(new Date("2026-11-04T11:10:00.000Z"));
+      release();
+      await expect(signing).resolves.toMatchObject({ duplicate: false });
+      expect(upload.signingIntent).toBeNull();
+      expect(upload.tokenExpiresAt).toBe("2026-11-04T13:15:00.000Z");
+      expect(db.tables.media_assets[0].upload_expires_at).toBe("2026-11-04T13:15:00.000Z");
+    } finally {
+      release();
+      await signing.catch(() => undefined);
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not return a signed token when its completed lifetime cannot be recorded", async () => {
+    db.rpcErrors.set("media_video_sign_finish", { message: "database unavailable" });
+    await expect(sign(tall)).rejects.toMatchObject({ status: 503, code: "MEDIA_UNAVAILABLE" });
+    const upload = db.videoSlots.find((slot) => slot.slot === "upload")!;
+    expect(upload.signingIntent).not.toBeNull();
+  });
+
+  it("does not finalize while a re-sign is in flight", async () => {
+    const row = { ...await uploaded(tall) };
+    let release!: () => void;
+    let started!: () => void;
+    const signingStarted = new Promise<void>((resolve) => { started = resolve; });
+    const signingMayFinish = new Promise<void>((resolve) => { release = resolve; });
+    db.hooks.beforeSign = async () => { started(); await signingMayFinish; };
+    const signing = sign(tall);
+    try {
+      await signingStarted;
+      db.objects.set(row.path, tall);
+      await expect(finalizeUpload(db.client, row)).rejects.toMatchObject({ status: 409, code: "MEDIA_FINALIZING" });
+      expect(db.storageCalls.filter((call) => call.op === "upload")).toHaveLength(0);
+    } finally {
+      release();
+      await signing.catch(() => undefined);
+    }
+  });
+
+  it("does not remove an upload while another finalize has claimed it", async () => {
+    const row = { ...await uploaded(tall) };
+    let release!: () => void;
+    let started!: () => void;
+    const finalizing = new Promise<void>((resolve) => { started = resolve; });
+    const finalMayFinish = new Promise<void>((resolve) => { release = resolve; });
+    db.hooks.beforeUpload = async () => { started(); await finalMayFinish; };
+    const first = finalizeUpload(db.client, row);
+    let uploadStillPresent = false;
+    try {
+      await finalizing;
+      await expect(sign(tall)).rejects.toMatchObject({ status: 409, code: "MEDIA_FINALIZING" });
+      uploadStillPresent = db.objects.has(row.path);
+    } finally {
+      release();
+      await first;
+    }
+    expect(uploadStillPresent).toBe(true);
+  });
+
+  it("keeps an ambiguous final write fenced even when a retry sees the upload again", async () => {
+    const row = { ...await uploaded(tall) };
+    db.hooks.uploadError = () => ({ message: "response lost after storage accepted the copy" });
+    await expect(finalizeUpload(db.client, row)).rejects.toMatchObject({ status: 503, code: "MEDIA_UNAVAILABLE" });
+    db.hooks.uploadError = undefined;
+
+    await expect(finalizeUpload(db.client, row)).rejects.toMatchObject({ status: 409, code: "MEDIA_FINALIZING" });
+    expect(db.storageCalls.filter((call) => call.op === "upload")).toHaveLength(1);
+    expect(db.videoSlots.find((slot) => slot.slot === "final")).toMatchObject({ state: "writing", reservedBytes: 50 * MB });
+  });
+
+  it("keeps the final copy and its reservation when saving the ready row fails", async () => {
+    const row = { ...await uploaded(tall) };
+    db.updateErrors.push({ message: "database unavailable" });
+    await expect(finalizeUpload(db.client, row)).rejects.toMatchObject({ status: 503, code: "MEDIA_UNAVAILABLE" });
+    const final = db.videoSlots.find((slot) => slot.slot === "final")!;
+    expect(final).toMatchObject({ state: "writing", reservedBytes: 50 * MB });
+    expect(final.path && db.objects.has(final.path)).toBe(true);
+    expect(db.objects.has(row.path)).toBe(true);
+    await expect(finalizeUpload(db.client, row)).rejects.toMatchObject({ status: 409, code: "MEDIA_FINALIZING" });
+  });
+
+  it("retains both reservations after logical deletion when physical cleanup is unproved", async () => {
+    const row = await uploaded(tall);
+    await finalizeUpload(db.client, row);
+    await deleteMedia(db.client, row);
+    expect(db.tables.media_assets[0].deleted_at).toEqual(expect.any(String));
+    expect(db.videoSlots.find((slot) => slot.slot === "final")).toMatchObject({ state: "removed", reservedBytes: tall.length });
+    expect(db.videoSlots.find((slot) => slot.slot === "upload")).toMatchObject({ reservedBytes: 50 * MB });
+  });
+
+  it("keeps deletion retryable when final-removal confirmation is unavailable", async () => {
+    const row = await uploaded(tall);
+    await finalizeUpload(db.client, row);
+    db.rpcErrors.set("media_video_final_removed", { message: "database unavailable" });
+    await expect(deleteMedia(db.client, row)).rejects.toMatchObject({ status: 503, code: "MEDIA_UNAVAILABLE" });
+    expect(db.tables.media_assets[0].deleted_at).toBeNull();
+    expect(db.videoSlots.find((slot) => slot.slot === "final")?.state).toBe("verified");
+
+    db.rpcErrors.delete("media_video_final_removed");
+    await expect(deleteMedia(db.client, row)).resolves.toBeUndefined();
+    expect(db.tables.media_assets[0].deleted_at).toEqual(expect.any(String));
+  });
+
+  it("does not issue a follow-up row update after atomic video removal", async () => {
+    const row = await uploaded(tall);
+    await finalizeUpload(db.client, row);
+    db.updateErrors.push({ message: "database unavailable" });
+    await expect(deleteMedia(db.client, row)).resolves.toBeUndefined();
+    expect(db.tables.media_assets[0].deleted_at).toEqual(expect.any(String));
+    expect(db.videoSlots.find((slot) => slot.slot === "final")?.state).toBe("removed");
+    expect(db.objects.has(row.path)).toBe(false);
+    expect(db.updateErrors).toHaveLength(1);
+    expect(db.videoSlots.find((slot) => slot.slot === "final")?.state).toBe("removed");
+  });
+
+  it("records the upload accounting expiry five minutes after the signed-token lifetime", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T09:00:00.000Z"));
+    try {
+      const row = { ...await uploaded(tall) };
+      expect(db.videoSlots.find((slot) => slot.slot === "upload")).toMatchObject({
+        path: row.path, reservedBytes: 50 * MB, tokenExpiresAt: "2026-11-04T11:05:00.000Z",
+      });
+      expect(db.tables.media_assets[0].upload_expires_at).toBe("2026-11-04T11:05:00.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("finalize reads the real length and type: a browser that lied is refused and the row still counts", async () => {

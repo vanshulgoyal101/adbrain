@@ -62,6 +62,21 @@ export async function monthlyUploads(admin: SupabaseClient, businessId: string, 
   return count ?? 0;
 }
 
+/** #2653: the database's global video budget (20261105_media_video_reclaim.sql) is full; photos still work. */
+function videoPausedError(): MediaError {
+  return new MediaError(503, "MEDIA_VIDEO_PAUSED", "Video uploads are paused. Please use photos instead.");
+}
+
+function videoBusyError(): MediaError {
+  return new MediaError(409, "MEDIA_FINALIZING", "This video can't finish yet. Try again later or use a photo.");
+}
+
+function videoLifecycleError(error: { message: string } | null): MediaError {
+  if (error?.message === "MEDIA_VIDEO_BUDGET" || error?.message === "MEDIA_VIDEO_STORAGE_UNKNOWN" || error?.message === "MEDIA_VIDEO_BUCKET_UNSAFE") return videoPausedError();
+  if (error?.message === "MEDIA_VIDEO_BUSY") return videoBusyError();
+  return new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the video. Try again.");
+}
+
 function quotaError(kind: MediaKind, now = new Date()): MediaError {
   const limit = MEDIA_MONTHLY_LIMIT[kind];
   if (kind === "image") return new MediaError(429, "MEDIA_QUOTA", `You've used ${limit} of ${limit} photo uploads this month.`);
@@ -96,7 +111,12 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     // The monthly limit is enforced on insert (20261103_media_upload_quota.sql), so a pending row from an earlier month
     // isn't reused (#2644 attack: 50 stale rows finished next month doubled the limit). It's retired, still counting in
     // its own month, and this try gets a new row that the limit sees.
-    await admin.storage.from(mediaBucket(existing.kind)).remove([existing.path]).catch(() => undefined);
+    if (existing.kind === "video") {
+      const { error } = await admin.storage.from(mediaBucket(existing.kind)).remove([existing.path]);
+      if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
+    } else {
+      await admin.storage.from(mediaBucket(existing.kind)).remove([existing.path]).catch(() => undefined);
+    }
     const { error } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString() })
       .eq("id", existing.id).eq("status", "pending").is("deleted_at", null);
     if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
@@ -104,12 +124,23 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
   }
   if (!existing && await monthlyUploads(admin, input.businessId, kind) >= MEDIA_MONTHLY_LIMIT[kind]) throw quotaError(kind);
 
-  // A pending row (an earlier try that didn't finish) is reused, so retrying never stores the file twice. It keeps its one
-  // upload path, so every token ever signed for it targets that path: at most one unverified object per counted row
-  // (Dev 7, #1245 attack: a new path per retry left old tokens able to store uncounted files). Tokens can't overwrite
-  // (Reviewer, #1245), so an unverified object from the earlier try goes first; finalize copies verified bytes elsewhere.
+  // Reuse one logical upload path so old tokens do not create untracked names. This does not bound concurrent backend
+  // versions created by replaying a token; the held video rollout needs a separate provider-backed admission bound.
   let row = existing;
-  if (row) await admin.storage.from(mediaBucket(row.kind)).remove([row.path]).catch(() => undefined);
+  let intent: string | null = null;
+  if (row?.kind === "video") {
+    const { data, error } = await admin.rpc("media_video_sign_begin", { p_asset_id: row.id, p_upload_path: row.path });
+    if (error || typeof data !== "string") throw videoLifecycleError(error);
+    intent = data;
+  }
+  if (row) {
+    if (row.kind === "video") {
+      const { error } = await admin.storage.from(mediaBucket(row.kind)).remove([row.path]);
+      if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
+    } else {
+      await admin.storage.from(mediaBucket(row.kind)).remove([row.path]).catch(() => undefined);
+    }
+  }
   if (!row) {
     const extension = kind === "video" ? MEDIA_VIDEO_EXTENSION[input.mime as keyof typeof MEDIA_VIDEO_EXTENSION] : MEDIA_EXTENSION[input.mime as MediaMime];
     const path = `${input.businessId}/${randomUUID()}.${extension}`;
@@ -120,6 +151,9 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     }).select(COLUMNS).single();
     // The database's monthly limit (20261103_media_upload_quota.sql) caught parallel requests the count above let through.
     if (error?.message === "MEDIA_QUOTA") throw quotaError(kind);
+    if (kind === "video" && (error?.message === "MEDIA_VIDEO_BUDGET" || error?.message === "MEDIA_VIDEO_STORAGE_UNKNOWN" || error?.message === "MEDIA_VIDEO_BUCKET_UNSAFE")) {
+      throw videoLifecycleError(error);
+    }
     if (error?.code === "23505") {
       const raced = await liveBySha(admin, input.businessId, input.sha256);
       if (raced?.status === "ready") return { duplicate: true, asset: (await mediaViews(admin, [raced]))[0] };
@@ -129,9 +163,18 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     } else row = data as MediaRow;
   }
   if (!row) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
+  if (row.kind === "video" && intent === null) {
+    const { data, error } = await admin.rpc("media_video_sign_begin", { p_asset_id: row.id, p_upload_path: row.path });
+    if (error || typeof data !== "string") throw videoLifecycleError(error);
+    intent = data;
+  }
   // Reviewer (#1245): a token that could overwrite would let a finished photo be swapped for other bytes for ~2 h.
   const { data: signed, error } = await admin.storage.from(mediaBucket(row.kind)).createSignedUploadUrl(row.path, { upsert: false });
   if (error || !signed) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
+  if (intent) {
+    const { data, error: finishError } = await admin.rpc("media_video_sign_finish", { p_asset_id: row.id, p_intent_id: intent });
+    if (finishError || data !== true) throw videoLifecycleError(finishError);
+  }
   return { duplicate: false, id: row.id, bucket: mediaBucket(row.kind), path: row.path, token: signed.token, fit };
 }
 
@@ -149,16 +192,19 @@ type Refuse = (status: number, code: string, message: string) => Promise<never>;
 /** Re-reads the stored object: the bytes must be the photo or video the browser described, or the object and row go. */
 export async function finalizeUpload(admin: SupabaseClient, row: MediaRow): Promise<MediaView> {
   if (row.status === "ready") return (await mediaViews(admin, [row]))[0];
+  if (row.kind === "video" && row.status !== "pending") throw new MediaError(409, "MEDIA_NOT_UPLOADED", "This video isn't ready yet.");
   const { data: blob, error } = await admin.storage.from(mediaBucket(row.kind)).download(row.path);
   if (error || !blob) throw new MediaError(409, "MEDIA_NOT_UPLOADED", "The upload didn't finish. Try again.");
   const bytes = Buffer.from(await blob.arrayBuffer());
   const refuse: Refuse = async (status, code, message) => {
-    await admin.storage.from(mediaBucket(row.kind)).remove([row.path]);
+    const { error: removeError } = await admin.storage.from(mediaBucket(row.kind)).remove([row.path]);
+    if (row.kind === "video" && removeError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't remove the video. Try again.");
     // Only the unfinished upload this call read: one another finalize already made ready stays. Soft-deleted, not
     // removed (Dev 7, #1245 attack): the row still counts toward the monthly limit and keeps its path for #2644's sweep,
     // so a token still live for that path can't store files the limit never sees. Honest refusals happen at sign (#748).
-    await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    const { error: saveError } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq("id", row.id).eq("path", row.path).eq("status", "pending");
+    if (row.kind === "video" && saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't remove the video. Try again.");
     throw new MediaError(status, code, message);
   };
   return row.kind === "video" ? finalizeVideo(admin, row, bytes, refuse) : finalizePhoto(admin, row, bytes, refuse);
@@ -215,6 +261,13 @@ async function promote(admin: SupabaseClient, row: MediaRow, stored: Uint8Array,
   // TODO(#2644): sweep the one orphan such a token can still leave at the old upload path, and stale pending rows.
   const uploadPath = row.path;
   const finalPath = `${row.business_id}/${randomUUID()}.${checked.extension}`;
+  if (row.kind === "video") {
+    const { data, error } = await admin.rpc("media_video_finalize_claim", {
+      p_asset_id: row.id, p_upload_path: uploadPath, p_final_path: finalPath,
+    });
+    if (error) throw videoLifecycleError(error);
+    if (data !== true) throw videoBusyError();
+  }
   const { error: writeError } = await admin.storage.from(mediaBucket(row.kind)).upload(finalPath, stored, { upsert: false, contentType: checked.mime });
   if (writeError) throw new MediaError(503, "MEDIA_UNAVAILABLE", `Couldn't save the ${noun}. Try again.`);
   const storedSha256 = createHash("sha256").update(stored).digest("hex");
@@ -222,16 +275,21 @@ async function promote(admin: SupabaseClient, row: MediaRow, stored: Uint8Array,
     path: finalPath, status: "ready", bytes: stored.length, mime: checked.mime, width: checked.width, height: checked.height,
     ...(checked.durationMs ? { duration_ms: checked.durationMs } : {}),
     checks: { fit: checked.fit, storedSha256 }, updated_at: new Date().toISOString(),
-  }).eq("id", row.id).eq("path", uploadPath).eq("status", "pending").select(COLUMNS).maybeSingle();
+  }).eq("id", row.id).eq("path", uploadPath).eq("status", "pending").is("deleted_at", null).select(COLUMNS).maybeSingle();
   if (saveError || !data) {
-    await admin.storage.from(mediaBucket(row.kind)).remove([finalPath]).catch(() => undefined);
+    if (row.kind !== "video") await admin.storage.from(mediaBucket(row.kind)).remove([finalPath]).catch(() => undefined);
     if (saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", `Couldn't save the ${noun}. Try again.`);
     // Another finalize of the same upload won the race: answer with its result.
     const { data: now } = await admin.from("media_assets").select(COLUMNS).eq("id", row.id).maybeSingle();
     if ((now as MediaRow | null)?.status === "ready") return (await mediaViews(admin, [now as MediaRow]))[0];
     throw new MediaError(409, "MEDIA_CHANGED", `The ${noun} changed while uploading. Add it again.`);
   }
-  await admin.storage.from(mediaBucket(row.kind)).remove([uploadPath]).catch(() => undefined);
+  if (row.kind === "video") {
+    const { error: removeError } = await admin.storage.from(mediaBucket(row.kind)).remove([uploadPath]);
+    if (removeError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't finish saving the video. Try again.");
+  } else {
+    await admin.storage.from(mediaBucket(row.kind)).remove([uploadPath]).catch(() => undefined);
+  }
   return (await mediaViews(admin, [data as MediaRow]))[0];
 }
 
@@ -331,7 +389,11 @@ export async function deleteMedia(admin: SupabaseClient, row: MediaRow): Promise
     await admin.from("media_assets").update({ status: "delete_failed", updated_at: new Date().toISOString() }).eq("id", row.id);
     throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't delete the photo. Try again.");
   }
+  if (row.kind === "video") {
+    const { data, error: confirmError } = await admin.rpc("media_video_final_removed", { p_asset_id: row.id, p_final_path: row.path });
+    if (confirmError || (row.status === "ready" && data !== true)) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't confirm the video was removed. Try again.");
+    if (data === true) return;
+  }
   const { error: saveError } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id);
   if (saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't delete the photo. Try again.");
 }
-
