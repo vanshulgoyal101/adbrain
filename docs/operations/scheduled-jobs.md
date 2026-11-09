@@ -38,6 +38,11 @@ the `CRON_SECRET` secret of the **`production-secrets`** environment (deployment
 red on any non-200 and opens one `Scheduled jobs failed twice in a row` `core` bug on
 two consecutive failures. The read-only parent-token check retries once after a curl timeout
 (10-second retry); HTTP errors and a second timeout remain failures, and the retry is logged.
+Pilot readiness and LLM credit/key health are advisory checks, sampled once per six
+workflow launches; their interval follows the scheduler dispatch rate. Spend enforcement,
+lead sync, payment health, campaign results, reconciliation and overdue-job checks still
+run on every scheduled-jobs launch. Owner daily results already return before database or
+Meta work when alerts are disabled or outside their 09:00–12:00 IST window.
 Pause it with `gh workflow disable scheduled-jobs.yml`; resume
 with `gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
 Each run also scans issue/PR bodies and comments since the previous run for customer data

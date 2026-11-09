@@ -19,6 +19,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 
 ## Rules
 
+- The picture-copy editor renders exact server previews at at most 720 px wide, scaling the height proportionally; save still renders and stores the full-size design. This avoids rasterizing a full poster only to downsample the preview.
 - Generated copy is used only after `validateConcept` passes ([concept.ts](concept.ts)). It runs the schema, [slopScan.ts](slopScan.ts) and [policy-rules.ts](policy-rules.ts); claims are checked against the supplied facts.
 - A concept gets at most two text calls: the first, then one repair that shows the model its own draft and the failed rules, and asks it to rewrite only those ([concept-repair.ts](concept-repair.ts), #2444). Then it fails with `CreativeValidationError`; picture failures are `CreativeImageError`.
 - Concept calls use `routing: "creative"`, no cache, and `CREATIVE_*` env settings for tokens, reasoning and per-attempt timeout. A whole `generateVariants` run is capped at 270 s.
@@ -29,6 +30,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 
 ## Tests
 
+- Offline preview CPU comparison (synthetic input only): `./node_modules/.bin/tsx --import ./scripts/trusted-server-cli.mjs scripts/benchmark-creative-preview.mts`
 - [creative-concept tests](../../../tests/creative-concept.test.ts), [creative-pipeline tests](../../../tests/creative-pipeline.test.tsx), [interview tests](../../../tests/interview.test.ts), [design tests](../../../tests/design.test.ts)
 - [slop-scan tests](../../../tests/slop-scan.test.ts), [creative-policy-rules tests](../../../tests/creative-policy-rules.test.ts), [creative-generation-route tests](../../../tests/creative-generation-route.test.ts)
 - Core (recorded responses in [fixtures](../../../tests/core/fixtures/)): [create-concept](../../../tests/core/create-concept.test.ts), [create-route](../../../tests/core/create-route.test.ts), [create-interview](../../../tests/core/create-interview.test.ts), [creative-indic](../../../tests/core/creative-indic.test.tsx)

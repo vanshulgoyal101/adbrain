@@ -93,13 +93,19 @@ async function post(body: unknown = words) {
 describe("POST /api/creatives/[id]/picture", () => {
   it("previews the words for the live editor without saving anything (#387)", async () => {
     const sharp = (await import("sharp")).default;
-    raster.render.mockResolvedValue(new Uint8Array(await sharp({ create: { width: 1080, height: 1350, channels: 3, background: "#123456" } }).png().toBuffer()));
+    raster.render.mockImplementation(async (spec: { width: number; height: number }) =>
+      new Uint8Array(await sharp({ create: { width: spec.width, height: spec.height, channels: 3, background: "#123456" } }).png().toBuffer()));
     const res = await post({ ...words, preview: true });
     expect(res.status).toBe(200);
     expect(res.body.previewUrl).toMatch(/^data:image\/webp;base64,/);
     const meta = await sharp(Buffer.from(res.body.previewUrl.split(",")[1], "base64")).metadata();
     expect(meta.width).toBe(720);
-    expect(raster.render).toHaveBeenCalledWith(expect.objectContaining({ ...words, backgroundUrl: "https://cdn.test/creatives/b1/g1/offer-photo.png" }));
+    expect(raster.render).toHaveBeenCalledWith(expect.objectContaining({
+      ...words,
+      width: 720,
+      height: 900,
+      backgroundUrl: "https://cdn.test/creatives/b1/g1/offer-photo.png",
+    }));
     expect(h.render).not.toHaveBeenCalled();
     expect(h.updates).toEqual([]);
     expect(h.logEvent).not.toHaveBeenCalled();
@@ -145,7 +151,7 @@ describe("POST /api/creatives/[id]/picture", () => {
     expect(res.status).toBe(200);
     expect(h.render).toHaveBeenCalledWith(
       expect.anything(), "b1", "g1", "offer",
-      expect.objectContaining({ ...words, layout: "top", primaryColor: "#f59e0b" }),
+      expect.objectContaining({ ...words, layout: "top", primaryColor: "#f59e0b", width: 1080, height: 1350 }),
       "https://cdn.test/creatives/b1/g1/offer-photo.png",
     );
     const [{ table, payload }] = h.updates;

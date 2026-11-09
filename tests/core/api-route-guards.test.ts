@@ -162,6 +162,18 @@ describe("core: every /api route is classified and calls its guard (#1729)", () 
     expect(files.map((path) => routeProblem(routeOf(path), readFileSync(path, "utf8"), ROUTES[routeOf(path)])).filter(Boolean)).toEqual([]);
   });
 
+  it("every cron route keeps its own bearer check when the proxy skips cron paths", () => {
+    const cronRoutes = Object.entries(ROUTES).filter(([, entry]) => entry.kind === "cron");
+    expect(cronRoutes.length).toBeGreaterThan(0);
+    for (const [route] of cronRoutes) {
+      const source = readFileSync(join(API, route, "route.ts"), "utf8");
+      expect(source, route).toMatch(/CRON_SECRET/);
+      expect(source, route).toMatch(/request\.headers\.get\(["']authorization["']\)/);
+      const adminCall = source.indexOf("createAdminClient()");
+      if (adminCall >= 0) expect(source.indexOf("authorization"), `${route} checks auth before admin work`).toBeLessThan(adminCall);
+    }
+  });
+
   it("the delegated payment handlers check ownership and webhook signatures themselves", () => {
     for (const path of DELEGATES) {
       const source = readFileSync(path, "utf8");
