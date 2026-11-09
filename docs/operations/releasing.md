@@ -70,6 +70,21 @@ PR into `next` every Monday; [dependabot-automerge.yml](../../.github/workflows/
 auto-merge only when Dependabot is the author and every changed file is under `.github/workflows/`. Required
 checks still gate the merge. Anything else Dependabot opens waits for a person.
 
+**npm updates (#2910):** The same configuration opens weekly npm PRs into `next`.
+Patch/minor updates are grouped; major upgrades remain separate for migration review.
+npm PRs do not qualify for the Actions-only auto-merge workflow. Review release notes,
+peer dependencies and Node 24 compatibility; require CI build, typecheck, tests and core
+checks before release. Install from the committed lockfile with `npm ci`; never use
+`--force` or `--legacy-peer-deps` to hide incompatibilities.
+
+Keep `@types/node` on the deployed Node 24 major. TypeScript remains on 6 because
+repository AST checks and Next's default typechecker use its compiler API, and
+typescript-eslint requires TypeScript below 6.1. ESLint stays on 9 while
+eslint-plugin-react excludes 10 from its peer range. Undici stays on 7 while
+the SSRF transport passes its Agent to Node's built-in fetch: Undici 8 changes the
+dispatcher handler contract and enables HTTP/2 by default. These majors need
+explicit migrations and regression evidence, not forced dependency resolution.
+
 **The corrected checked-in wildcard disables slash-containing Git branches.** Earlier
 single-star configurations did not.
 Before pushing a feature or release branch, inspect effective remote deployment
