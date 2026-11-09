@@ -3,7 +3,7 @@ name: post-deploy-production-guard
 description: "Use when merges auto-deploy to production and a CI workflow should smoke each deploy, roll back a bad one, run a scheduled smoke, or alert when production stops serving the main branch."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/post-deploy-production-guard.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@7a64868 skills/post-deploy-production-guard.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Post-Deploy Production Guard
 
@@ -159,3 +159,22 @@ failures. Observed in
   expected provider (#2412).
 - Budget smoke frequency against quotas shared with customers: a 2-hourly image check
   spent 12 of about 57 free daily images; every 4 h spends 6 (#2405).
+
+## AdBrain lessons (Nov 1–4)
+
+- Take the production host from the repo's config, never from memory: a parked domain
+  answered 200 and was briefly read as a restore (#364).
+- Retry a read-only monitor's transient connect timeout (curl exit 28) once within a
+  bound; keep HTTP errors and repeated timeouts red (#2611). One LCP overshoot under
+  ~10% on a single cold load, with the next deploy's guard green, is noise: rerun before
+  rolling back a non-core change (#2691).
+- GitHub drops and delays scheduled runs. Choose a scheduled job's mode from today's
+  recorded runs, not from the slot name, and budget spend on the schedule's maximum
+  (#2545, #2405).
+- Smoke a signed-in route without a browser: get a session with the auth provider's
+  password grant, send it as the session cookie plus the language cookie, and compare
+  both languages on one read-only call (#2333).
+- A smoke user minted by script needs every field a real sign-up has
+  (`email_confirmed_at`); a guard that read auth fields rejected the minted user and the
+  Create smoke failed. Test such guards against the minted smoke user, not only the
+  seeded one (#2574, #2396).

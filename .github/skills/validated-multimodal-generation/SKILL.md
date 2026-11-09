@@ -3,7 +3,7 @@ name: validated-multimodal-generation
 description: "Use this skill when an LLM plans copy and an image, video, audio, layout, or other generated artifact must remain coherent, grounded and attributable."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/validated-multimodal-generation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@7a64868 skills/validated-multimodal-generation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Validated Multimodal Generation
 
@@ -150,3 +150,14 @@ across four formats and three text positions passed after the renderer fix.
 - Provenance without tools: list PNG chunks (`caBX`, `iTXt`, `eXIf`) or WebP chunks
   (`VP8X`, `XMP `, `EXIF`) with the stdlib; none means no embedded credentials. Only a
   watermark detector or the platform's own view can say more (#1988).
+
+## AdBrain lessons (Nov 1–2)
+
+- Triage a lost ad before fixing it: check which deploy served it (3 of 4 "busy" losses
+  ran on a release older than their fix, #2552); find the stage from usage rows (no
+  image row means a text-stage loss, #2544); replay the loss's own first reply through
+  the validator before changing prompts or routing. One loss was a single byte: a
+  Hindi quote ended with `。` instead of `।` (#2541).
+- A top-up that re-runs an item must clear that item's earlier accounting (a
+  "recorded" mark), or a later untyped failure inherits it. Test with a replayed
+  untyped abort; a real one arrives typed and hides the bug (#2546).

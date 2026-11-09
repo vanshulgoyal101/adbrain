@@ -3,7 +3,7 @@ name: database-invariants
 description: "Use this skill when correctness depends on SQL triggers, RPCs, caps, RLS policies, constraints, or SECURITY DEFINER functions."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/database-invariants.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@7a64868 skills/database-invariants.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Database Invariants
 
@@ -147,3 +147,12 @@ AdBrain commit `1dbb4e9` (2026-09-16), its trusted-usage/rate-limit migration an
 - Count real leads from the leads table with test and smoke rows filtered in the query
   and the phone format validated, not from events, so the number matches the owner's
   inbox (#1942, #1965).
+
+## Lessons (Nov 2)
+
+- Verify default-privilege migrations by reading `pg_default_acl` per schema, including
+  the global row. PUBLIC's EXECUTE default on functions is global, and a per-schema
+  revoke can't remove a global grant (#2417).
+- Dedupe a paid batch in the admit RPC under a per-business lock taken before the quota
+  check; a request hash can't dedupe when the brief comes from an LLM. Ship the code
+  before the SQL when old code would mishandle the new RPC action (#1402).

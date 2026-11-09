@@ -3,7 +3,7 @@ name: rendered-ui-evidence
 description: "Use when changing responsive layouts, flickering scrollbars, editable fields, image framing, canvas/WebGL effects, or controls whose DOM presence does not prove usability."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/rendered-ui-evidence.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@7a64868 skills/rendered-ui-evidence.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Rendered UI Evidence
 
@@ -216,3 +216,21 @@ In a 2026-09-19 editor regression, native overflow changed Chromium textarea cli
   through the app's own undo (#1702).
 - Pin translated strings exactly in an i18n test; Hindi honorific agreement (आप … हैं)
   needs checking on every new line (#1945).
+
+## AdBrain lessons (Nov 1–3)
+
+- `grid-cols-3` with `break-words` split large money figures across lines; flex-wrap
+  with `whitespace-nowrap` figures fixed it, checked by counting rendered lines per
+  figure (#2455).
+- To see a panel that needs provider state to open, put the jsdom fixture's
+  `outerHTML` into a page with production CSS and screenshot that (#2456).
+- Measure sideways scroll signed in, on the real origin: signed-out routes load only
+  the homepage CSS (#1793).
+- Reserve the line for async status text before the response arrives, and measure CLS
+  with fresh localStorage so the background path runs (#2795). Store a notice's detail
+  list with its text, or a later notice inherits it (#2775).
+- A hard-coded string inside a shared helper escapes a page-level translation pass;
+  give helpers an optional translator argument and test both languages (#2749).
+- `focus()` in `requestAnimationFrame` after an async handler races React's commit.
+  When the target stays disabled until state clears, focus from an effect on that
+  state; reproduce by running rAF synchronously (#2498).

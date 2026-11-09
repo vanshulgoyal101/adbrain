@@ -3,7 +3,7 @@ name: supabase-rls-complete
 description: "When a multi-tenant application stores user, workspace, account, or organization data in a shared database, especially when tables or object storage are added."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@5d0975e skills/supabase-rls-complete.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@7a64868 skills/supabase-rls-complete.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Complete Row-Level Security
 
