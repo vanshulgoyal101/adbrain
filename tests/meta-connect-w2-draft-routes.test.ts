@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fenceHeaderValue } from "../scripts/lib/smoke-fence.mjs";
+import { issueDraftCapability } from "@/lib/security/smoke-fence-server";
 
+vi.mock("@/lib/env", () => ({ getEnv: () => ({ TEST_SESSION_SECRET: "s".repeat(40), SUPABASE_SERVICE_ROLE_KEY: "p".repeat(40) }) }));
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   requireOwnedBusiness: vi.fn(),
@@ -131,5 +134,59 @@ describe("campaign draft HTTP routes", () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "CONFLICT", message: expect.stringMatching(/campaign operation/) } });
+  });
+
+  describe("draft-only smoke fence (#2861)", () => {
+    const createdAt = "2026-09-07T10:00:00.000Z";
+    beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-09-07T10:10:00.000Z")); });
+    afterEach(() => { vi.useRealTimers(); });
+    const fenced = (method: string, drafts?: string, body?: unknown) => new Request(`http://localhost/api/campaign-drafts/${draftId}?version=1`, {
+      method,
+      headers: { "Content-Type": "application/json", "x-adbrain-smoke-fence": drafts ? fenceHeaderValue(new Map(drafts.split(",").map((id) => [id, issueDraftCapability(new Request("http://localhost", { headers: { "x-adbrain-smoke-fence": "draft-only" } }), userId, id, createdAt)!]))) : "draft-only" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const params = { params: Promise.resolve({ id: draftId }) };
+
+    it("refuses to update or delete a draft this run didn't create, before any write", async () => {
+      const { PUT, DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      for (const response of [
+        await PUT(fenced("PUT", undefined, { expectedVersion: 1, input }), params),
+        await DELETE(fenced("DELETE", "00000000-0000-4000-8000-000000000000"), params),
+        await DELETE(fenced("DELETE", "not-a-uuid"), params),
+      ]) {
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "SMOKE_FENCE", effect: "existing_draft" } });
+      }
+      expect(mocks.rpc).not.toHaveBeenCalled();
+    });
+
+    it("lets the run update and delete the draft it created", async () => {
+      const { PUT, DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      expect((await PUT(fenced("PUT", draftId, { expectedVersion: 1, input: { ...input, name: "Updated" } }), params)).status).toBe(200);
+      mocks.rpc.mockResolvedValue({ data: [{ id: draftId }], error: null });
+      expect((await DELETE(fenced("DELETE", draftId), params)).status).toBe(200);
+      expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    });
+
+    it("refuses a signed capability over a draft created before it (prior-run or pre-existing id)", async () => {
+      const { DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      mocks.draftRow = row({ created_at: "2026-09-07T09:00:00.000Z" });
+      const response = await DELETE(fenced("DELETE", draftId), params);
+      expect(response.status).toBe(409);
+      expect(mocks.rpc).not.toHaveBeenCalled();
+    });
+
+    it("refuses an existing draft named in an unsigned header (spoof)", async () => {
+      const { DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      const spoof = new Request(`http://localhost/api/campaign-drafts/${draftId}?version=1`, { method: "DELETE", headers: { "x-adbrain-smoke-fence": `draft-only; drafts=${draftId}` } });
+      expect((await DELETE(spoof, params)).status).toBe(409);
+      expect(mocks.rpc).not.toHaveBeenCalled();
+    });
+
+    it("leaves a request without the header unchanged", async () => {
+      const { DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+      mocks.rpc.mockResolvedValue({ data: [{ id: draftId }], error: null });
+      expect((await DELETE(new Request(`http://localhost/api/campaign-drafts/${draftId}?version=1`, { method: "DELETE" }), params)).status).toBe(200);
+    });
   });
 });

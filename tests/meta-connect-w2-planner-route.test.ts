@@ -440,4 +440,22 @@ describe("guided planner route", () => {
     const full = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Get chats", destination: "whatsapp", whatsappNumber: "+919876544842" }) }));
     expect(full.status).toBe(400);
   });
+
+  it("draft-only smoke fence never reaches the planner provider or usage ledger", async () => {
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const headers = { "x-adbrain-smoke-fence": "draft-only" };
+    const audienceDraft = {
+      businessId: business.id, name: "Leads", goal: "Leads", mode: "manual", creativeIds: [creativeId],
+      dailyBudgetRupees: 500, leadFormId: null, abTest: false,
+      targeting: { location: { mode: "ai", cityScope: "city_only" } },
+    };
+    const withDraft = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", headers, body: JSON.stringify({ goal: "Leads", audienceDraft }) }));
+    expect(withDraft.status).toBe(200);
+    expect(await withDraft.json()).toMatchObject({ fallback: true, smokeFenced: true });
+    const full = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", headers, body: JSON.stringify({ goal: "Leads" }) }));
+    expect(full.status).toBe(409);
+    expect((await full.json()).error.code).toBe("SMOKE_FENCE");
+    expect(mocks.runPlanner).not.toHaveBeenCalled();
+    expect(mocks.persist).not.toHaveBeenCalled();
+  });
 });

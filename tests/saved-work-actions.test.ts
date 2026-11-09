@@ -5,6 +5,7 @@ import { saveInstruction, deleteInstruction } from "@/app/(app)/brand/instructio
 
 const mocks = vi.hoisted(() => ({ result: vi.fn(), eq: vi.fn(), update: vi.fn(), remove: vi.fn(), log: vi.fn(), refresh: vi.fn(), getUser: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.refresh }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("@/lib/audit", () => ({ logEvent: mocks.log }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => {

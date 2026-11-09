@@ -8,6 +8,7 @@ import { logEvent } from "@/lib/audit";
 import { revokeBeforeDisconnect } from "@/services/meta-disconnect";
 import { z } from "zod";
 import { ownerError } from "@/i18n/request-locale";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,13 @@ export const runtime = "nodejs";
 export const POST = observeRoute("/api/meta/disconnect", "POST", handlePOST);
 
 async function handlePOST(request?: Request) {
+  if (request?.headers.has(SMOKE_FENCE_HEADER)) {
+    return NextResponse.json(
+      { error: { code: "SMOKE_FENCE", message: "This operation is unavailable during a draft-only smoke." } },
+      { status: 409 },
+    );
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

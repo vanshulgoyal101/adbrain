@@ -1,14 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 // #521: start provisioning for the caller's own managed business. Off unless MANAGED_ACCOUNTS_ENABLED.
 const state = vi.hoisted(() => ({
   owned: { ok: true, attempt: { businessId: "b1", userId: "u1", snapshot: {}, tokenId: "tok-1" } } as unknown,
   result: { ok: true, state: "ad_account_created", childBusinessId: "7", adAccountId: "act_8" } as unknown,
   runs: [] as unknown[],
+  ownershipChecks: 0,
+  events: [] as unknown[],
+}));
+vi.mock("@/lib/observability/logger", () => ({
+  observeRoute: (_path: string, _method: string, handler: (request: NextRequest) => unknown) => handler,
+  currentRequestId: () => "request-1",
+  recordProductEvent: (event: unknown) => state.events.push(event),
 }));
 vi.mock("@/lib/meta/managed-attempt", async () => ({
-  ownedManagedAttempt: async () => state.owned,
+  ownedManagedAttempt: async () => { state.ownershipChecks += 1; return state.owned; },
   managedFail: (status: number, code: string, message: string) => Response.json({ ok: false, error: { code, message } }, { status }),
 }));
 vi.mock("@/lib/meta/managed-provision-runner", () => ({
@@ -17,12 +25,18 @@ vi.mock("@/lib/meta/managed-provision-runner", () => ({
 }));
 
 const attemptId = "11111111-1111-4111-8111-111111111111";
-const post = (body: unknown) => new NextRequest("http://localhost/api/meta/managed/provision", { method: "POST", body: JSON.stringify(body) });
+const post = (body: unknown, fenced = false) => new NextRequest("http://localhost/api/meta/managed/provision", {
+  method: "POST",
+  headers: fenced ? { [SMOKE_FENCE_HEADER]: "draft-only" } : undefined,
+  body: JSON.stringify(body),
+});
 
 beforeEach(() => {
   state.owned = { ok: true, attempt: { businessId: "b1", userId: "u1", snapshot: {}, tokenId: "tok-1" } };
   state.result = { ok: true, state: "ad_account_created", childBusinessId: "7", adAccountId: "act_8" };
   state.runs = [];
+  state.ownershipChecks = 0;
+  state.events = [];
 });
 
 describe("POST /api/meta/managed/provision (#521)", () => {
@@ -40,6 +54,17 @@ describe("POST /api/meta/managed/provision (#521)", () => {
     state.owned = { ok: false, response: Response.json({ ok: false }, { status: 404 }) };
     expect((await POST(post({ attemptId }))).status).toBe(404);
     expect(state.runs).toEqual([]);
+  });
+
+  it("refuses a fenced request before looking up or provisioning an attempt", async () => {
+    const { POST } = await import("@/app/api/meta/managed/provision/route");
+    const response = await POST(post({ attemptId }, true));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "SMOKE_FENCE" } });
+    expect(state.ownershipChecks).toBe(0);
+    expect(state.runs).toEqual([]);
+    expect(state.events).toEqual([]);
   });
 
   it.each([

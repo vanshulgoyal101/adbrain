@@ -1,3 +1,4 @@
+import { refuseWhenFenced } from "@/lib/security/smoke-fence";
 import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { NextResponse } from "next/server";
@@ -32,6 +33,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * same admission claim as Regenerate, and the copy and overlay words are kept.
  */
 async function handlePOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const fenced = refuseWhenFenced(req);
+  if (fenced) return fenced;
   const { id } = await params;
   const supabase = await createClient();
   const {

@@ -29,6 +29,7 @@ import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { CampaignEditError, refuseWhileSwitchPending } from "@/lib/campaign/edit-service";
+import { withSmokeFence } from "@/lib/security/smoke-fence";
 import { ownerWords } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
@@ -78,12 +79,9 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
  * Pause or resume a campaign. Updates the status on Meta, then mirrors it
  * locally so the dashboard reflects reality immediately.
  */
-export const PATCH = observeRoute("/api/campaigns/[id]", "PATCH", handlePATCH);
+export const PATCH = observeRoute("/api/campaigns/[id]", "PATCH", withSmokeFence("campaign_write", handlePATCH));
 
-async function handlePATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+async function handlePATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const say = await ownerWords();
   const supabase = await createClient();
@@ -371,12 +369,9 @@ async function handlePATCH(
 }
 
 /** Delete a campaign from Meta (best-effort) and remove it from AdBrain. */
-export const DELETE = observeRoute("/api/campaigns/[id]", "DELETE", handleDELETE);
+export const DELETE = observeRoute("/api/campaigns/[id]", "DELETE", withSmokeFence("campaign_write", handleDELETE));
 
-async function handleDELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+async function handleDELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {

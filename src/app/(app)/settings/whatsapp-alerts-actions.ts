@@ -3,14 +3,20 @@
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
 import { observeAction } from "@/lib/observability/logger";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { alertStartLink } from "@/lib/alerts/owner-alerts";
 import { alertSettingsFrom, type AlertSettings } from "@/lib/alerts/alert-settings";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 const saveSchema = z.object({ businessId: z.uuid(), leadAlerts: z.boolean(), dailyResults: z.boolean(), language: z.enum(["en", "hi"]) }).strict();
 
 export async function saveAlertSettings(input: z.input<typeof saveSchema>): Promise<{ ok: true; settings: AlertSettings } | { ok: false; error: string }> {
   return observeAction("server.saveAlertSettings", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "This action is unavailable during a draft-only smoke." };
+    }
+
     const parsed = saveSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "Invalid alert settings." };
     const supabase = await createClient();
@@ -25,6 +31,10 @@ export async function saveAlertSettings(input: z.input<typeof saveSchema>): Prom
 /** A fresh "START <code>" link to AdBrain's alerts number; the owner sends it from the WhatsApp that should get alerts. */
 export async function startAlertVerification(input: { businessId: string }): Promise<{ ok: true; link: string } | { ok: false; error: string }> {
   return observeAction("server.startAlertVerification", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "This action is unavailable during a draft-only smoke." };
+    }
+
     if (!z.uuid().safeParse(input.businessId).success) return { ok: false, error: "Invalid business." };
     const alertsNumber = getEnv().ALERTS_WHATSAPP;
     if (!alertsNumber) return { ok: false, error: "WhatsApp alerts aren't available yet." };

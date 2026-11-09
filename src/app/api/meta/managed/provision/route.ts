@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { managedFail as fail, ownedManagedAttempt } from "@/lib/meta/managed-attempt";
 import { runManagedProvisioning, runnerDeps } from "@/lib/meta/managed-provision-runner";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -27,6 +28,10 @@ const OWNER_MESSAGES: Record<string, string> = {
 };
 
 async function handlePOST(request: NextRequest) {
+  if (request.headers.has(SMOKE_FENCE_HEADER)) {
+    return fail(409, "SMOKE_FENCE", "This operation is unavailable during a draft-only smoke.");
+  }
+
   const body = bodySchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return fail(400, "INVALID_INPUT", "A Facebook connection is required.");
   const owned = await ownedManagedAttempt(body.data.attemptId);

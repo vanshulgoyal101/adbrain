@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 /**
  * Server actions ("use server"): the mutation path behind the Brand Brain form,
@@ -14,10 +15,12 @@ const insert = vi.fn();
 const del = vi.fn();
 const revalidatePath = vi.fn();
 const logEvent = vi.fn();
+let requestHeaders = new Headers();
 
 let updateResult: { error: { message: string } | null } = { error: null };
 
 vi.mock("next/cache", () => ({ revalidatePath }));
+vi.mock("next/headers", () => ({ headers: async () => requestHeaders }));
 vi.mock("@/lib/audit", () => ({ logEvent }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -37,7 +40,14 @@ vi.mock("@/lib/supabase/server", () => ({
         };
         return query;
       },
-      delete: () => ({ eq: del, select: () => ({ eq: (column: string, value: string) => ({ maybeSingle: () => del(column, value) }) }) }),
+      delete: () => {
+        const query = {
+          eq: () => query,
+          select: () => query,
+          maybeSingle: () => del(),
+        };
+        return query;
+      },
     }),
   }),
 }));
@@ -46,6 +56,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
+  requestHeaders = new Headers();
   getUser.mockResolvedValue({ data: { user: { id: "u1", email: "o@x.com" } } });
   single.mockResolvedValue({ data: { id: "b1" }, error: null });
   maybeSingle.mockResolvedValue({ data: { business_id: "b1" } });
@@ -194,6 +205,27 @@ describe("saveInstruction", () => {
       expect.objectContaining({ action: "instruction.update" }),
     );
   });
+
+  it("does not save instructions during a draft-only smoke", async () => {
+    requestHeaders = new Headers({ [SMOKE_FENCE_HEADER]: "draft-only" });
+    const { saveInstruction } = await import("@/app/(app)/brand/instruction-actions");
+
+    await expect(saveInstruction(base)).resolves.toMatchObject({ ok: false });
+    expect(insert).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(logEvent).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("does not delete instructions during a draft-only smoke", async () => {
+    requestHeaders = new Headers({ [SMOKE_FENCE_HEADER]: "draft-only" });
+    const { deleteInstruction } = await import("@/app/(app)/brand/instruction-actions");
+
+    await expect(deleteInstruction("i1", "b1")).resolves.toMatchObject({ ok: false });
+    expect(del).not.toHaveBeenCalled();
+    expect(logEvent).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
 });
 
 describe("studio actions", () => {
@@ -249,6 +281,26 @@ describe("studio actions", () => {
       ok: false,
       error: "row locked",
     });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("does not change creative status during a draft-only smoke", async () => {
+    requestHeaders = new Headers({ [SMOKE_FENCE_HEADER]: "draft-only" });
+    const { setCreativeStatus } = await import("@/app/(app)/studio/actions");
+
+    await expect(setCreativeStatus("c1", "approved")).resolves.toMatchObject({ ok: false });
+    expect(update).not.toHaveBeenCalled();
+    expect(logEvent).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("does not delete creatives during a draft-only smoke", async () => {
+    requestHeaders = new Headers({ [SMOKE_FENCE_HEADER]: "draft-only" });
+    const { deleteCreative } = await import("@/app/(app)/studio/actions");
+
+    await expect(deleteCreative("c1")).resolves.toMatchObject({ ok: false });
+    expect(del).not.toHaveBeenCalled();
+    expect(logEvent).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

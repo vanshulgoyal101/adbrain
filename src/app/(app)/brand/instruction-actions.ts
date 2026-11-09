@@ -3,8 +3,10 @@
 import { observeAction } from "@/lib/observability/logger";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { logEvent } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
+import { SMOKE_FENCE_HEADER } from "@/lib/security/smoke-fence";
 
 export type InstructionResult = { ok: boolean; error?: string };
 
@@ -16,6 +18,10 @@ export async function saveInstruction(input: {
   isActive: boolean;
 }): Promise<InstructionResult> {
   return observeAction("server.saveInstruction", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "This action is unavailable during a draft-only smoke." };
+    }
+
     const supabase = await createClient();
     const {
       data: { user },
@@ -68,6 +74,10 @@ export async function deleteInstruction(
   businessId: string,
 ): Promise<InstructionResult> {
   return observeAction("server.deleteInstruction", async () => {
+    if ((await headers()).has(SMOKE_FENCE_HEADER)) {
+      return { ok: false, error: "This action is unavailable during a draft-only smoke." };
+    }
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { ok: false, error: "Not authenticated." };

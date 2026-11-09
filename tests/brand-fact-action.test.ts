@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // #2032: Home's meter saves one Brand fact to its existing column, under the owner's own session (RLS).
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), current: vi.fn(), update: vi.fn(), written: vi.fn(), logEvent: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("@/lib/audit", () => ({ logEvent: mocks.logEvent }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({

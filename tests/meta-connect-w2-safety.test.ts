@@ -212,7 +212,7 @@ describe("campaign create authorization boundary", () => {
     const { ConnectionAccessError } = await import("@/lib/meta/connection-access");
     mocks.withMetaConnection.mockRejectedValueOnce(new ConnectionAccessError("UNAVAILABLE", "Meta is not connected."));
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    const response = await POST();
+    const response = await POST(new Request("http://localhost/api/campaigns/sync"));
 
     expect(mocks.withMetaConnection).toHaveBeenCalledWith(expect.any(Object), { purpose: "read_insights" }, expect.any(Function));
     expect(response.status).toBe(400);
