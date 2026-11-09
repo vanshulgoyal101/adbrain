@@ -163,6 +163,17 @@ describe("proxy config", () => {
     }
   });
 
+  it("skips cron endpoints only because each route independently requires the cron bearer", async () => {
+    const { config } = await import("@/proxy");
+    const matcher = config.matcher[0];
+    expect(matcher).toContain("api/cron(?:/|$)");
+    expect(matcher).toContain("_next/static");
+    const matcherRegex = new RegExp(`^${matcher}`);
+    expect(matcherRegex.test("/api/cron/enforce-spend")).toBe(false);
+    expect(matcherRegex.test("/api/cron")).toBe(false);
+    expect(matcherRegex.test("/api/creatives/c1/picture")).toBe(true);
+  });
+
   it("delegates to updateSession", async () => {
     signedIn();
     const { proxy } = await import("@/proxy");

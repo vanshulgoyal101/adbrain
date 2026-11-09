@@ -84,6 +84,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          if (( GITHUB_RUN_NUMBER % 6 != 0 )); then echo "Advisory monitoring runs once per 6 scheduler launches."; exit 0; fi
           [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
           code=$(curl -sS --max-time 30 -o pilot.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/pilot-readiness") || code=000
           # Names and states only; the route never returns values.
@@ -253,6 +254,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if (( GITHUB_RUN_NUMBER % 6 != 0 )); then echo "Advisory monitoring runs once per 6 scheduler launches."; exit 0; fi
           [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
           code=$(curl -sS --max-time 30 -o credit.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/llm-credit") || code=000
           [ "$code" = 404 ] && { echo "llm-credit not deployed yet"; exit 0; }

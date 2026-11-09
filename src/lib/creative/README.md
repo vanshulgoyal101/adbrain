@@ -19,6 +19,9 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 
 ## Rules
 
+- The picture-copy editor coalesces identical in-flight exact previews per authenticated user, creative and complete design, after each request's auth, tenant lookup and rate limit. There is no completed-image cache; at most 32 distinct in-flight keys are retained per instance. Client instant preview, debounce and stale-response suppression are unchanged.
+- Exact previews retain final-size layout and Indic shaping, then downsample to at most 720 px wide. Changing layout dimensions can change rounded text metrics and wrapping; bounded rasterization is deferred rather than weakening exactness. Save still renders/stores the full-size design.
+- Photo fitting reuses upright PNG input instead of encoding/decoding it again before fitting. Other formats and oriented input retain the rotation path; download validation, pixel/byte limits, SSRF checks and watermark trimming are unchanged.
 - Generated copy is used only after `validateConcept` passes ([concept.ts](concept.ts)). It runs the schema, [slopScan.ts](slopScan.ts) and [policy-rules.ts](policy-rules.ts); claims are checked against the supplied facts.
 - A concept gets at most two text calls: the first, then one repair that shows the model its own draft and the failed rules, and asks it to rewrite only those ([concept-repair.ts](concept-repair.ts), #2444). Then it fails with `CreativeValidationError`; picture failures are `CreativeImageError`.
 - Concept calls use `routing: "creative"`, no cache, and `CREATIVE_*` env settings for tokens, reasoning and per-attempt timeout. A whole `generateVariants` run is capped at 270 s.
@@ -29,6 +32,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 
 ## Tests
 
+- Offline preview/codec CPU comparison (synthetic input only): `./node_modules/.bin/tsx --import ./scripts/trusted-server-cli.mjs scripts/benchmark-creative-preview.mts`. Five alternating trials measure native-inclusive process CPU for four identical concurrent previews (independent vs coalesced) and the PNG fit roundtrip. These workloads do not establish production duplication rate or whole-app savings.
 - [creative-concept tests](../../../tests/creative-concept.test.ts), [creative-pipeline tests](../../../tests/creative-pipeline.test.tsx), [interview tests](../../../tests/interview.test.ts), [design tests](../../../tests/design.test.ts)
 - [slop-scan tests](../../../tests/slop-scan.test.ts), [creative-policy-rules tests](../../../tests/creative-policy-rules.test.ts), [creative-generation-route tests](../../../tests/creative-generation-route.test.ts)
 - Core (recorded responses in [fixtures](../../../tests/core/fixtures/)): [create-concept](../../../tests/core/create-concept.test.ts), [create-route](../../../tests/core/create-route.test.ts), [create-interview](../../../tests/core/create-interview.test.ts), [creative-indic](../../../tests/core/creative-indic.test.tsx)

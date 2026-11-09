@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fitPhoto } from "@/lib/creative/fit-photo";
 
 // #1904 (#744 phase 1): an owner's phone photo is fitted to the ad's 4:5 or 1:1 without cutting the face off.
@@ -24,6 +24,48 @@ async function skinShare(png: Buffer, region?: { left: number; top: number; widt
 }
 
 describe("fitPhoto (#1904)", () => {
+  it("reuses upright validated PNG pixels without an intermediate full-size encode", async () => {
+    const png = await sharp(Buffer.from(await photo(900, 1200, [{ cx: 300, cy: 250, r: 120 }]))).png().toBuffer();
+    const legacy = await sharp(png).rotate().toBuffer();
+    const expected = await sharp(legacy).resize(720, 900, { fit: "cover", position: sharp.strategy.attention }).png().toBuffer();
+    const encode = vi.spyOn(sharp.prototype, "toBuffer");
+    try {
+      const actual = await fitPhoto(png, 720, 900);
+      expect(actual).toEqual(expected);
+      expect(encode).toHaveBeenCalledTimes(1);
+    } finally {
+      encode.mockRestore();
+    }
+  });
+
+  it("keeps the legacy blur-fit bytes when reusing upright PNG input", async () => {
+    const png = await sharp(Buffer.from(await photo(900, 600, [{ cx: 300, cy: 250, r: 120 }]))).png().toBuffer();
+    const upright = await sharp(png).rotate().toBuffer();
+    const backdrop = await sharp(upright).resize(720, 900, { fit: "cover" }).blur(36).modulate({ brightness: 0.55 }).toBuffer();
+    const whole = await sharp(upright).resize({ width: 720, height: 900, fit: "inside" }).toBuffer();
+    const { width = 720, height = 900 } = await sharp(whole).metadata();
+    const expected = await sharp(backdrop).composite([{ input: whole, left: Math.round((720 - width) / 2), top: Math.round((900 - height) / 2) }]).png().toBuffer();
+    expect(await fitPhoto(png, 720, 900, "blur")).toEqual(expected);
+  });
+
+  it.each(["jpeg", "oriented-png", "profiled-png"] as const)("preserves the original rotate/codec path for %s", async (format) => {
+    const source = Buffer.from(await photo(900, 600, [{ cx: 300, cy: 250, r: 120 }]));
+    const input = format === "jpeg"
+      ? source
+      : format === "profiled-png"
+        ? await sharp(source).withIccProfile("p3").png().toBuffer()
+        : await sharp(source).withMetadata({ orientation: 6 }).png().toBuffer();
+    const upright = await sharp(input).rotate().toBuffer();
+    const expected = await sharp(upright).resize(720, 900, { fit: "cover", position: sharp.strategy.attention }).png().toBuffer();
+    const encode = vi.spyOn(sharp.prototype, "toBuffer");
+    try {
+      expect(await fitPhoto(input, 720, 900)).toEqual(expected);
+      expect(encode).toHaveBeenCalledTimes(2);
+    } finally {
+      encode.mockRestore();
+    }
+  });
+
   it("portrait photo, face near the top: a 1:1 crop keeps the whole face (a centre crop would cut it)", async () => {
     const tall = await photo(1000, 2000, [{ cx: 500, cy: 260, r: 150 }]);
     const out = await fitPhoto(tall, 1080, 1080);
