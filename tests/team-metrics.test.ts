@@ -32,10 +32,11 @@ describe("team metrics: DORA four keys and active hours (#620)", () => {
     });
   });
 
-  it("verifies live SHAs only after core smoke passes without a rollback (#2796)", () => {
+  it("verifies live SHAs only after smoke and serving pass without a rollback (#2796)", () => {
     const runs = [
       { head_sha: "live", coreSmokePassed: true, created_at: at("10:00") },
       { head_sha: "ws1-only", coreSmokePassed: true, created_at: at("10:00") },
+      { head_sha: "domain-failed", coreSmokePassed: true, servedDomainFailed: true, created_at: at("10:00") },
       { head_sha: "rolled-back", coreSmokePassed: true, created_at: at("10:00") },
       { head_sha: "smoke-failed", coreSmokeFailed: true, created_at: at("10:00") },
       { head_sha: "rolled-back", rolledBack: true, created_at: at("11:00") },

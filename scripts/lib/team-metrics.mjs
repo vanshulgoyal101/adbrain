@@ -80,7 +80,7 @@ export function verifiedLiveShas(guardRuns) {
   const live = new Map();
   for (const run of [...guardRuns].sort((a, b) => Date.parse(a.created_at ?? "") - Date.parse(b.created_at ?? ""))) {
     if (!run.head_sha) continue;
-    if (run.rolledBack || run.coreSmokeFailed) live.set(run.head_sha, false);
+    if (run.rolledBack || run.coreSmokeFailed || run.servedDomainFailed) live.set(run.head_sha, false);
     else if (run.coreSmokePassed) live.set(run.head_sha, true);
   }
   return new Set([...live].filter(([, verified]) => verified).map(([sha]) => sha));
