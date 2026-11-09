@@ -57,7 +57,7 @@ beforeEach(() => {
     destination: "whatsapp", whatsappNumber: "+919800000874", whatsappMessage: reviewedMessage,
   }));
   vi.stubGlobal("fetch", vi.fn(async (url: string) => url.startsWith("/api/meta/whatsapp")
-    ? Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page" }] })
+    ? Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page", choiceId: "a".repeat(64) }] })
     : Response.json(url === "/api/campaigns/plan" ? { ready: true, targeting: recommended } : { forms: [] })));
 });
 

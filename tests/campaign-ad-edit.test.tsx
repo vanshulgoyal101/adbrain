@@ -56,7 +56,10 @@ beforeEach(() => {
     // The server resolves the masked choice to the full number (core: whatsapp-number.test.ts).
     destination: saved.input.destination, whatsappNumber: saved.input.whatsappNumber === "+91 ••••• 4842" ? "+919800004842" : null,
   }));
-  whatsapp = async () => Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page" }, { masked: "+91 ••••• 4842", source: "business" }] });
+  whatsapp = async () => Response.json({ state: "ready", numbers: [
+    { masked: "+91 ••••• 0874", source: "page", choiceId: "a".repeat(64) },
+    { masked: "+91 ••••• 4842", source: "business", choiceId: "b".repeat(64) },
+  ] });
   vi.stubGlobal("fetch", vi.fn(async (url: string) => url.startsWith("/api/meta/whatsapp") ? whatsapp() : url.endsWith("/picture")
     ? Response.json({ creative: { ...creative, image_url: "/redrawn.png" }, liveNotice: "This ad is live on Meta; your edit applies to new campaigns." })
     : Response.json(url === "/api/campaigns/plan"

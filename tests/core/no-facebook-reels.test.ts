@@ -57,7 +57,7 @@ async function launch(destination: AdDestination, excludeFacebookReels: boolean 
     creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative, storyImage: new Uint8Array([0]) }],
     destination,
     ...(destination === "whatsapp"
-      ? { whatsappNumber: inputs.phone, whatsappGreeting: inputs.whatsappGreeting }
+      ? { whatsappNumber: inputs.phone, whatsappNumberSource: "page" as const, whatsappGreeting: inputs.whatsappGreeting }
       : { leadFormId: "LEAD_FORM" }),
     excludeFacebookReels,
     onPlanned,

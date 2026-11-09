@@ -55,6 +55,7 @@ const breaks: Record<ReviewBlockerReason, (input: PreflightInput) => void> = {
   REVIEW_META_ACCESS: (input) => { input.connection!.canCreatePaused = false; },
   REVIEW_CREATIVES: (input) => { input.creatives[0].approved = false; },
   REVIEW_WHATSAPP_NOT_LINKED: (input) => { input.draft.destination = "whatsapp"; input.whatsappNumber = null; },
+  REVIEW_WHATSAPP_CHOOSE: (input) => { input.draft.destination = "whatsapp"; input.draft.whatsappNumber = "+91 ••••• 3210"; input.whatsappNumber = null; },
   REVIEW_NO_LEAD_FORM: (input) => { input.form = null; },
   REVIEW_NO_WEBSITE: (input) => { input.website = "https://www.facebook.com/cedarridge"; },
   REVIEW_BUDGET: (input) => { input.draft.dailyBudgetRupees = 0; },
@@ -105,11 +106,15 @@ const scrollIntoView = vi.fn();
 async function prepareBlockedOn(reason: ReviewBlockerReason) {
   mocks.preflight.mockResolvedValue(reviewBlockedOn(reason));
   render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
-  // #1171: WhatsApp chat is the default; this draft is the production lead-form one.
-  fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
-  const leadForm = screen.getByLabelText("Lead form");
-  await within(leadForm).findByRole("option", { name: "Enquiries" });
-  fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
+  if (reason === "REVIEW_WHATSAPP_CHOOSE") {
+    await screen.findByLabelText("WhatsApp button number");
+  } else {
+    // #1171: WhatsApp chat is the default; this draft is the production lead-form one.
+    fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+    const leadForm = screen.getByLabelText("Lead form");
+    await within(leadForm).findByRole("option", { name: "Enquiries" });
+    fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
+  }
   fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
   fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
   const region = await screen.findByRole("region", { name: "Campaign review result" });
@@ -128,9 +133,11 @@ beforeEach(() => {
   mocks.status.mockResolvedValue({ authorization: "connected", selected, generation: 1 });
   mocks.saveDraft.mockImplementation(async (input: DraftInput): Promise<DraftDTO> => ({ draftId: "90d1d2bb-466c-4889-9af2-edb533e82531", version: 2, expiresAt: "2099-01-01T00:00:00.000Z", input }));
   mocks.updateDraft.mockImplementation(async (draftId: string, version: number, input: DraftInput): Promise<DraftDTO> => ({ draftId, version: version + 1, expiresAt: "2099-01-01T00:00:00.000Z", input }));
-  vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url === "/api/campaigns/plan"
-    ? { ready: true, targeting: composerTargeting }
-    : { forms: [{ id: "1732372914636573", name: "Enquiries", status: "ACTIVE" }] })));
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url.startsWith("/api/meta/whatsapp")
+    ? { state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page", choiceId: "a".repeat(64) }] }
+    : url === "/api/campaigns/plan"
+      ? { ready: true, targeting: composerTargeting }
+      : { forms: [{ id: "1732372914636573", name: "Enquiries", status: "ACTIVE" }] })));
 });
 afterEach(() => { Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); vi.unstubAllGlobals(); });
 
@@ -152,6 +159,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     ["REVIEW_CREATIVES", () => screen.getByRole("button", { name: creative.headline! })],
     ["REVIEW_AD_POLICY", () => screen.getByRole("button", { name: creative.headline! })],
     ["REVIEW_GOAL_WORDS", () => screen.getByRole("button", { name: creative.headline! })],
+    ["REVIEW_WHATSAPP_CHOOSE", () => screen.getByLabelText("WhatsApp button number")],
     ["REVIEW_NO_LEAD_FORM", () => screen.getByLabelText("Lead form")],
     ["REVIEW_BUDGET", () => screen.getByLabelText("Daily budget (₹)")],
     ["REVIEW_NO_AGE_RANGE", () => screen.getByLabelText("Minimum age")],

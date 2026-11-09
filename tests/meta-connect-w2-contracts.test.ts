@@ -33,6 +33,16 @@ describe("Worker 2 campaign contracts", () => {
     expect(parsed.success).toBe(true);
   });
 
+  it("accepts a WhatsApp source only alongside an explicitly chosen WhatsApp number", () => {
+    const input = {
+      businessId, name: "Chats", goal: "Enquiries", mode: "manual", creativeIds: [],
+      dailyBudgetRupees: 300, leadFormId: null, targeting: {}, abTest: false,
+    };
+    expect(draftInputSchema.safeParse({ ...input, destination: "whatsapp", whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "business" }).success).toBe(true);
+    expect(draftInputSchema.safeParse({ ...input, destination: "whatsapp", whatsappNumberSource: "page" }).success).toBe(false);
+    expect(draftInputSchema.safeParse({ ...input, destination: "instant_form", whatsappNumber: "+91 ••••• 4842", whatsappNumberSource: "page" }).success).toBe(false);
+  });
+
   it("retains the current planner request shape without allowing extra fields", () => {
     expect(planRequestSchema.safeParse({ goal: "Generate leads", answers: [] }).success).toBe(true);
     expect(planRequestSchema.safeParse({ goal: "Generate leads", businessId }).success).toBe(false);

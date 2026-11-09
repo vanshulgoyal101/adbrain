@@ -108,6 +108,7 @@ function reviewPlanHash(): string {
   runPreflight({
     draft: input,
     whatsappNumber: input.destination === "whatsapp" ? "+919876543210" : null,
+    whatsappNumberSource: input.destination === "whatsapp" ? "page" : undefined,
     // #2452: every message is in the hash, so this builds it from the same business and ad rows the route reads.
     whatsappMessage: input.destination === "whatsapp" ? campaignWhatsAppMessage({
       draft: input, business: { name: "Solaride", locations: ["Jaipur"], offers: [], whatsapp_template: mocks.whatsappTemplate },
@@ -248,7 +249,15 @@ vi.mock("@/lib/media/consent", async (importOriginal) => ({ ...(await importOrig
 // #253's bindings have their own tests (whatsapp-bindings.test.ts); here the number is already bound.
 vi.mock("@/lib/meta/whatsapp-bindings", () => ({
   boundWhatsAppNumbers: async () => ["+919876543210"],
-  whatsappNumberForBusiness: (_businessId: string, meta: { getWhatsAppNumber: (requested: string | null, bound: string[]) => Promise<string | null> }, requested: string | null) => meta.getWhatsAppNumber(requested, ["+919876543210"]),
+  whatsappNumberForBusiness: async (
+    _businessId: string,
+    meta: { getWhatsAppNumber: (requested: string | null, bound: string[]) => Promise<string | null> },
+    requested: string | null,
+    source?: "page" | "business",
+  ) => {
+    const number = await meta.getWhatsAppNumber(requested, ["+919876543210"]);
+    return number ? { number, source: source ?? "page" } : null;
+  },
 }));
 
 beforeEach(() => {

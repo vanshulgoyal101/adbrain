@@ -4,7 +4,7 @@ const access = vi.hoisted(() => ({
   getConnectionStatus: vi.fn(async () => ({ generation: 3, selected: { adAccountId: "act_1", pageId: "1" }, capabilities: { canCreatePaused: { state: "available" } } })),
   withMetaConnection: vi.fn(async (_actor: unknown, _options: unknown, run: (meta: unknown) => unknown) => run({
     readActiveLeadForm: async (id: string) => ({ id }),
-    getWhatsAppNumber: async () => "+919999994842",
+    resolveWhatsAppNumberCandidate: async () => ({ number: "+919999994842", source: "page" }),
     resolveGeoTargeting: async () => ({ targeting: { cities: [{ key: "1" }] }, matched: [{ key: "1", name: "Austin", type: "city" }], unresolved: [] }),
     resolveAudienceInterests: async () => ({ interests: [], unresolved: [] }),
   })),
@@ -14,10 +14,12 @@ const evidence = vi.hoisted(() => ({ getCostPerResult: vi.fn(async () => 69) }))
 vi.mock("@/lib/campaign/result-evidence-store", () => evidence);
 // #253's bindings have their own tests (whatsapp-bindings.test.ts); here the Page's number is the one.
 vi.mock("@/lib/meta/whatsapp-bindings", () => ({
-  whatsappNumberForBusiness: (_businessId: string, meta: { getWhatsAppNumber: (requested: string | null, bound: string[]) => Promise<string | null> }, requested: string | null) => meta.getWhatsAppNumber(requested, []),
+  whatsappNumberForBusiness: vi.fn(async (_businessId: string, meta: { resolveWhatsAppNumberCandidate: (requested: string | null) => Promise<{ number: string; source: "page" } | null> }, requested: string | null) =>
+    meta.resolveWhatsAppNumberCandidate(requested)),
 }));
 
 import { buildCampaignPreflightLoaders } from "@/lib/campaign/preflight-runtime";
+import { whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
 
 const actor = { businessId: "b1", userId: "u1" } as never;
 const supabase = {
@@ -47,7 +49,12 @@ describe("WhatsApp number loader (#681)", () => {
   });
 
   it("reads the Page's number when Meta answers", async () => {
-    await expect(buildCampaignPreflightLoaders(supabase, actor).findWhatsAppNumber?.(actor, "+91 ••••• 4842")).resolves.toBe("+919999994842");
+    await expect(buildCampaignPreflightLoaders(supabase, actor).findWhatsAppNumber?.(actor, "+91 ••••• 4842")).resolves.toEqual({ number: "+919999994842", source: "page" });
+  });
+
+  it("passes the explicit Page source to the binding resolver", async () => {
+    await buildCampaignPreflightLoaders(supabase, actor).findWhatsAppNumber?.(actor, "+91 ••••• 4842", "page", "a".repeat(64));
+    expect(whatsappNumberForBusiness).toHaveBeenCalledWith("b1", expect.any(Object), "+91 ••••• 4842", "page", "a".repeat(64));
   });
 });
 

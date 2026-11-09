@@ -12,11 +12,11 @@ import {
 } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
 import type { Campaign } from "@/lib/types";
-import type { DraftDTO } from "@/lib/campaign/connect-contracts";
+import { draftDtoSchema, websiteGoalSchema, type DraftDTO } from "@/lib/campaign/connect-contracts";
 import { useSessionDraft } from "@/lib/use-session-draft";
 import { cn } from "@/lib/utils";
 import type { PlannerQuestion, PlannerAnswer as Answer, PlannerLLMResult } from "@/lib/campaign/planner";
-import type { LeadDestination } from "@/lib/types/campaign";
+import type { LeadDestination, WebsiteGoal, WhatsAppNumberSource } from "@/lib/types/campaign";
 
 type Turn =
   | { role: "user"; text: string }
@@ -50,21 +50,36 @@ function reviveSession(raw: unknown): ChatSession | null {
 
 type CampaignChatProps = {
   businessId: string;
-  destination?: Exclude<LeadDestination, "call" | "website">;
-  /** Masked WhatsApp number chosen above the chat; saved on the guided draft. */
-  whatsappNumber?: string;
   onStarted?: () => void;
   onCreated?: (campaign: Campaign) => void;
   onDraftReady?: (draft: DraftDTO) => void;
   onEditManually?: (goal: string) => void;
-};
+} & (
+  | { destination: "website"; websiteGoal: WebsiteGoal; websiteDraftMismatch: string; whatsappNumber?: never; whatsappNumberSource?: never; whatsappNumberChoiceId?: never }
+  | {
+    destination?: Exclude<LeadDestination, "call" | "website">;
+    websiteGoal?: never;
+    websiteDraftMismatch?: never;
+    /** The chosen mask or restored full number, retained exactly for Review. */
+    whatsappNumber?: string;
+    whatsappNumberSource?: WhatsAppNumberSource;
+    whatsappNumberChoiceId?: string;
+  }
+);
 
 export function CampaignChat(props: CampaignChatProps) {
-  return <CampaignChatSession key={`${props.businessId}:${props.destination ?? "whatsapp"}`} {...props} />;
+  if (props.destination === "website" && !websiteGoalSchema.safeParse(props.websiteGoal).success) {
+    return <Alert variant="error">{props.websiteDraftMismatch}</Alert>;
+  }
+  const identity = props.destination === "website"
+    ? `${props.businessId}:website:${props.websiteGoal}`
+    : `${props.businessId}:${props.destination ?? "whatsapp"}`;
+  return <CampaignChatSession key={identity} {...props} />;
 }
 
-function CampaignChatSession({ businessId, destination = "whatsapp", whatsappNumber, onStarted, onCreated, onDraftReady, onEditManually }: CampaignChatProps) {
-  const sessionKey = `adbrain:campaign-chat:${businessId}${destination === "whatsapp" ? ":whatsapp" : ""}`;
+function CampaignChatSession(props: CampaignChatProps) {
+  const { businessId, destination = "whatsapp", whatsappNumber, whatsappNumberSource, whatsappNumberChoiceId, onStarted, onCreated, onDraftReady, onEditManually } = props;
+  const sessionKey = `adbrain:campaign-chat:${businessId}${props.destination === "website" ? `:website:${props.websiteGoal}` : destination === "whatsapp" ? ":whatsapp" : ""}`;
   // Keeps the interview alive across tab changes; a finished one is discarded.
   const [session, setSession, clearSession] = useSessionDraft<ChatSession>(
     sessionKey,
@@ -101,7 +116,15 @@ function CampaignChatSession({ businessId, destination = "whatsapp", whatsappNum
       const res = await fetch("/api/campaigns/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: goalText, answers, destination, ...(destination === "whatsapp" && whatsappNumber ? { whatsappNumber } : {}) }),
+        body: JSON.stringify({
+          goal: goalText, answers, destination,
+          ...(props.destination === "website" ? { websiteGoal: props.websiteGoal } : {}),
+          ...(destination === "whatsapp" && whatsappNumber ? {
+            whatsappNumber,
+            ...(whatsappNumberSource ? { whatsappNumberSource } : {}),
+            ...(whatsappNumberChoiceId ? { whatsappNumberChoiceId } : {}),
+          } : {}),
+        }),
         signal: controller.signal,
       });
       const data = (await res.json()) as {
@@ -117,6 +140,16 @@ function CampaignChatSession({ businessId, destination = "whatsapp", whatsappNum
       if (!res.ok) {
         setError(data.error ?? "Planning failed.");
         return;
+      }
+      if (props.destination === "website" && data.ready === true) {
+        const draft = draftDtoSchema.safeParse(data.draft);
+        if (!draft.success || data.campaign || draft.data.input.businessId !== businessId
+          || draft.data.input.destination !== "website"
+          || (draft.data.input.websiteGoal ?? "visits") !== props.websiteGoal) {
+          setError(props.websiteDraftMismatch);
+          return;
+        }
+        data.draft = draft.data;
       }
       if ((data.ready === false && !data.handoff && !data.questions?.length)
         || (data.ready !== false && !(data.ready === true && (data.draft || data.campaign)))) {

@@ -50,7 +50,7 @@ async function launch(destination: AdDestination, onPlanned?: (plan: Omit<Planne
     creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative }],
     destination,
     ...(destination === "whatsapp"
-      ? { whatsappNumber: inputs.phone, whatsappGreeting: inputs.whatsappGreeting }
+      ? { whatsappNumber: inputs.phone, whatsappNumberSource: "page" as const, whatsappGreeting: inputs.whatsappGreeting }
       : { leadFormId: "LEAD_FORM" }),
     onPlanned,
   });

@@ -73,11 +73,11 @@ export function buildCampaignPreflightLoaders(
       );
       return form ? { id: form.id, businessId, active: true } : null;
     },
-    findWhatsAppNumber: async (_actor, requested) => {
+    findWhatsAppNumber: async (_actor, requested, source, choiceId) => {
       const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") return null;
       // #681: a failed read throws (Review says try again); swallowing it told the owner to link a number they had linked.
-      return withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null));
+      return withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null, source, choiceId));
     },
     findWhatsAppMessage: async (actor, draft) => {
       const [{ data: business, error }, { data: creatives, error: creativesError }] = await Promise.all([

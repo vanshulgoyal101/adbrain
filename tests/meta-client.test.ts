@@ -70,15 +70,23 @@ describe("MetaClient Page-token lookup", () => {
   it.each([
     [{ id: "999", has_whatsapp_business_number: true, whatsapp_number: "+91 98765-43210" }, "+919876543210"],
     [{ id: "999", has_whatsapp_business_number: false, whatsapp_number: "+919876543210" }, null],
-    [{ id: "other", has_whatsapp_business_number: true, whatsapp_number: "+919876543210" }, null],
-    [{ id: "999", has_whatsapp_business_number: true, whatsapp_number: "123<script>" }, null],
-    [{ id: "999", has_whatsapp_business_number: true }, null],
   ])("requires Page-owned WhatsApp Business number evidence: %j", async (page, expected) => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ access_token: "page-token" }))
       .mockResolvedValueOnce(Response.json(page));
     expect(await new MetaClient(creds).getWhatsAppNumber(null)).toBe(expected);
     expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
+  it.each([
+    { id: "other", has_whatsapp_business_number: true, whatsapp_number: "+919876543210" },
+    { id: "999", has_whatsapp_business_number: true, whatsapp_number: "123<script>" },
+    { id: "999", has_whatsapp_business_number: true },
+  ])("reports an incomplete Page answer as unreadable: %j", async (page) => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ access_token: "page-token" }))
+      .mockResolvedValueOnce(Response.json(page));
+    await expect(new MetaClient(creds).getWhatsAppNumber(null)).rejects.toThrow("WhatsApp Page number could not be read");
   });
 
   it("propagates search cancellation to the provider request", async () => {
@@ -452,7 +460,7 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     vi.spyOn(client, "getWhatsAppNumber").mockResolvedValue("+919876543210");
     vi.spyOn(client, "uploadAdImage").mockResolvedValue("image-hash");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
-    await client.createLeadCampaign({ name: "WhatsApp", dailyBudgetRupees: 200, destination: "whatsapp", whatsappNumber: "+919876543210", link: "https://example.com", creatives: [{ imageUrl: "https://example.com/ad.png", headline: "Offer", message: "Contact us" }], location: { countries: ["IN"] }, ageMin: 25, ageMax: 60 });
+    await client.createLeadCampaign({ name: "WhatsApp", dailyBudgetRupees: 200, destination: "whatsapp", whatsappNumber: "+919876543210", whatsappNumberSource: "page", link: "https://example.com", creatives: [{ imageUrl: "https://example.com/ad.png", headline: "Offer", message: "Contact us" }], location: { countries: ["IN"] }, ageMin: 25, ageMax: 60 });
     const forms = fetchMock.mock.calls.map(([, init]) => new URLSearchParams(String(init?.body)));
     expect(forms[0].get("objective")).toBe("OUTCOME_ENGAGEMENT");
     expect(forms[1].get("destination_type")).toBe("WHATSAPP");
@@ -471,7 +479,7 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     vi.spyOn(client, "uploadAdImage").mockResolvedValue("image-hash");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
     const whatsappGreeting = { autofill: "Namaste! Mujhe jaankari chahiye.", greeting: "Namaste! Swagat hai." };
-    await client.createLeadCampaign({ name: "WhatsApp", dailyBudgetRupees: 200, destination: "whatsapp", whatsappNumber: "+919876543210", whatsappGreeting, link: "https://example.com", creatives: [{ imageUrl: "https://example.com/ad.png", headline: "Offer", message: "Contact us" }], location: { countries: ["IN"] }, ageMin: 25, ageMax: 60 });
+    await client.createLeadCampaign({ name: "WhatsApp", dailyBudgetRupees: 200, destination: "whatsapp", whatsappNumber: "+919876543210", whatsappNumberSource: "page", whatsappGreeting, link: "https://example.com", creatives: [{ imageUrl: "https://example.com/ad.png", headline: "Offer", message: "Contact us" }], location: { countries: ["IN"] }, ageMin: 25, ageMax: 60 });
     const story = JSON.parse(new URLSearchParams(String(fetchMock.mock.calls[2][1]?.body)).get("object_story_spec")!);
     // Shape from Meta's Click-to-WhatsApp guide, "Adding autofill message with a greeting message".
     expect(JSON.parse(story.link_data.page_welcome_message)).toEqual({

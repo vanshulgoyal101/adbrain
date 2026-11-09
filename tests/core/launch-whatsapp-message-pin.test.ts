@@ -38,7 +38,7 @@ const draft = { id: "d1", version: 1, input: {
 } } as never;
 const review = {
   selected: { adAccountId: "act_9000000000000001", pageId: "900000000000002" }, connectionGeneration: 1, creativeHash,
-  resolvedLocation: { cities: [{ key: "1021145" }] }, whatsappNumber: "+919999990874",
+  resolvedLocation: { cities: [{ key: "1021145" }] }, whatsappNumber: "+919999990874", whatsappNumberSource: "business",
   whatsappMessage: { source: "suggested", language: null, ...recorded.greeting },
 } as unknown as ReviewDTO;
 const operation = { operationId: "o1", businessId: "b1", kind: "campaign_create", idempotencyKey: "k", requestHash: "h", connectionGeneration: 1,
@@ -60,6 +60,7 @@ describe("core: launch sends only the WhatsApp message Review checked (#2452)", 
     const result = await launch(solaride);
     expect(result.kind).toBe("succeeded");
     expect(meta.createLeadCampaign).toHaveBeenCalledTimes(1);
+    expect(meta.createLeadCampaign.mock.calls[0][0].whatsappNumberSource).toBe("business");
     expect(meta.createLeadCampaign.mock.calls[0][0].whatsappGreeting).toEqual(recorded.greeting);
   });
 

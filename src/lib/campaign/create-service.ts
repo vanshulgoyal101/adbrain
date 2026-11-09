@@ -84,6 +84,9 @@ export async function executeReviewedCampaign(input: {
             description: savedCreativeDescription(creative.generation),
           }))))).digest("hex");
           if (creativeHash !== review.creativeHash) throw new OperationPhaseError("Selected creative changed since review.", { transmitted: false });
+          if (draft.input.destination === "whatsapp" && (!review.whatsappNumber || !review.whatsappNumberSource)) {
+            throw new OperationPhaseError("WhatsApp number is missing from review.", { transmitted: false });
+          }
           // #333: Stories and Reels get a 9:16 layout of the same reviewed design; on any failure they keep the 4:5.
           // The renders run alongside Meta's campaign create and 4:5 uploads (#499: three 9:16s never fit a
           // separate 6 s wait in production). Capped inside the 60 s create lease; a slow host just means no 9:16.
@@ -116,6 +119,7 @@ export async function executeReviewedCampaign(input: {
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: (draft.input.destination ?? "instant_form") === "instant_form" ? draft.input.leadFormId ?? undefined : undefined,
             destination: draft.input.destination ?? "instant_form", whatsappNumber: review.whatsappNumber ?? undefined,
+            whatsappNumberSource: review.whatsappNumberSource,
             // #253: the create step re-checks the number against this business's bindings.
             ...(draft.input.destination === "whatsapp" ? { boundWhatsAppNumbers: await boundWhatsAppNumbers(actor.businessId) } : {}),
             ...(prefill ? { whatsappGreeting: prefill } : {}),

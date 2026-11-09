@@ -1,0 +1,13 @@
+{
+  "note": "#2838/#2841: shape of production's Nov 3 10:25-10:34Z failures on GET [WABA owner id]/owned_whatsapp_business_accounts: HTTP 400, Graph error code 80008 (WhatsApp Business account rate limit). Rebuilt from the product_events fields (status, metaCode, path); the message text is Meta's documented wording, not a captured body.",
+  "path": "owned_whatsapp_business_accounts",
+  "status": 400,
+  "body": {
+    "error": {
+      "message": "(#80008) There have been too many calls to this WhatsApp Business account. Wait a bit and try again.",
+      "type": "OAuthException",
+      "code": 80008,
+      "fbtrace_id": "SCRUBBED"
+    }
+  }
+}
