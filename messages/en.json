@@ -765,6 +765,53 @@
     "closeNav": "Close navigation",
     "continueFirstAd": "Continue your first ad"
   },
+  "websiteTracking": {
+    "card": {
+      "title": "Website tracking",
+      "intro": "Only needed for website leads or sales.",
+      "legend": "Which tracking source should AdBrain use?",
+      "noSource": "No website tracking source is available to this ad account.",
+      "noSourceHelp": "Check Meta access or open Events Manager.",
+      "unreadable": "We couldn't check tracking for this ad account.",
+      "unreadableHelp": "Check Meta access, then try again.",
+      "choose": "Choose which tracking source to use.",
+      "quiet": "Meta hasn't seen any recent events.",
+      "missing": "Meta hasn't seen one or more events for website goals.",
+      "selectionUnavailable": "Choosing a tracking source is not available yet.",
+      "pixelUnavailable": "Unavailable",
+      "unnamed": "Tracking source {n}",
+      "leadCount": "Website leads (Lead): {n}",
+      "purchaseCount": "Sales (Purchase): {n}",
+      "window": "Checked from {since} to {until}",
+      "countsNote": "These are Meta events, not orders verified by AdBrain.",
+      "checkAgain": "Check again",
+      "checking": "Checking…",
+      "refreshFailed": "We couldn't refresh website tracking. Try again.",
+      "checkAccess": "Check Meta access",
+      "eventsManager": "Open Events Manager"
+    },
+    "goals": {
+      "legend": "What do you want from your website?",
+      "visits": "Visits",
+      "leads": "Website leads",
+      "sales": "Sales",
+      "needsTracking": "Needs tracking",
+      "unavailable": "Not available yet",
+      "missing": "Meta hasn't seen the event for this goal.",
+      "finish": "Finish tracking setup"
+    },
+    "review": {
+      "visitsHint": "Meta counts people who open your page.",
+      "leadsHint": "Meta reports Lead events, not customers verified by AdBrain.",
+      "salesHint": "Meta reports Purchase events, not orders verified by AdBrain.",
+      "attributionLabel": "Results counted within",
+      "attributionHelp": "Meta counts results after clicks or views in this period.",
+      "attributionUnavailable": "Not confirmed"
+    },
+    "chat": {
+      "draftMismatch": "We couldn't confirm the website goal on the saved draft. Check Saved drafts before retrying."
+    }
+  },
   "campaigns": {
     "header": {
       "running": "{n} running",

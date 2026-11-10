@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { metaWriteMode } from "@/lib/internal-accounts";
 import { businessOwnerId } from "@/lib/business-owner";
 import { MetaClient, type MetaCredentials } from "./client";
+import type { TrackingStatus } from "./pixels";
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
 import { getManagedAccount, isManagedReady, managedCredentials, type ManagedAccount } from "./managed-account";
 
@@ -114,6 +115,16 @@ export async function metaClientForBusiness(
   const ownerId = await businessOwnerId(businessId);
   if (!ownerId) return null;
   return new MetaClient(creds, undefined, metaWriteMode(ownerId, creds.adAccountId));
+}
+
+/** A fresh, read-only tracking check using only the business's own Meta credentials. */
+export async function readTrackingStatusForBusiness(
+  businessId: string,
+  pixelId?: string,
+): Promise<TrackingStatus | null> {
+  const meta = await metaClientForBusiness(businessId);
+  if (!meta) return null;
+  return meta.trackingStatus(pixelId === undefined ? {} : { pixelId });
 }
 
 /** Connection status for the settings UI (never includes the token). */

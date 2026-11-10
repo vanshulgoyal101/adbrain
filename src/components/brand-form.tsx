@@ -1,11 +1,12 @@
 "use client";
 
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
-import { CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
+import { CheckCircle2, Save, Wand2 } from "lucide-react";
 import { saveBusiness, type SaveState } from "@/app/(app)/brand/actions";
+import { BrandPreview } from "@/components/brand-preview";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -119,7 +120,11 @@ function firstLine(value: string): string {
 
 type BrandSaveState = SaveState & { submittedRevision?: number };
 
-export function BrandForm({ business, photoCount = 0 }: { business: Business | null; photoCount?: number }) {
+export function BrandForm({ business, photoCount = 0, trackingCard }: {
+  business: Business | null;
+  photoCount?: number;
+  trackingCard?: ReactNode;
+}) {
   const [form, setForm] = useState(() => ({ fields: fromBusiness(business), revision: 0 }));
   const { fields, revision } = form;
   function setFields(update: (current: FieldsState) => FieldsState) {
@@ -182,7 +187,6 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
     { label: "Logo", ready: Boolean(fields.logo_url.trim()), href: business ? "#brand-assets" : undefined },
     { label: "Real photos", ready: photoCount > 0, href: business ? "#brand-assets" : undefined },
   ];
-  const readinessCount = readinessChecks.filter((check) => check.ready).length;
 
   function set<K extends keyof FieldsState>(key: K, value: string) {
     if (key === "website") websiteRevision.current++;
@@ -372,6 +376,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       </Card>
       </div>
 
+      {trackingCard}
+
       <div id="brand-contact" className="scroll-mt-6">
       <Card>
         <CardHeader>
@@ -520,49 +526,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       </div>
 
       {/* #681: on a phone the fields come first; on desktop this panel leads (order-first). */}
-      <section
-        aria-labelledby="brand-preview-title"
-        className="grid gap-4 border-y border-slate-200 py-6 lg:order-first lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-12"
-      >
-        <div>
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 id="brand-preview-title" className="text-lg font-semibold text-slate-950">
-              {OWNER_WORDS.preview}
-            </h2>
-            <span className="text-xs text-slate-500">
-              {readinessCount} of {readinessChecks.length} ready
-            </span>
-          </div>
-          <p className="mt-1 text-sm text-slate-500">What every ad will use. It updates as you type.</p>
-          {readinessCount < readinessChecks.length && (
-            <ul className="mt-3 flex flex-col">
-              {readinessChecks.filter((check) => !check.ready).map((check) => (
-                <li key={check.label} className="flex min-h-11 items-center gap-2 text-sm text-slate-500">
-                  <Circle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  {check.href ? (
-                    <a href={check.href} className="font-medium text-blue-700 underline-offset-2 hover:underline">
-                      Add {check.label.toLowerCase()}
-                    </a>
-                  ) : (
-                    `Add ${check.label.toLowerCase()}`
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div>
-          <p className="text-lg font-semibold text-slate-950">{previewMessage}</p>
-          <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
-            {previewFacts.map(([term, value]) => (
-              <div key={term} className="contents">
-                <dt className="text-slate-500">{term}</dt>
-                <dd className="text-slate-700">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
+      <BrandPreview message={previewMessage} facts={previewFacts} checks={readinessChecks} />
 
       <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)]">
         <Button type="submit" data-product-event="brand.save" disabled={pending || autofilling}>
