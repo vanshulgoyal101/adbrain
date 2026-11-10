@@ -10,6 +10,7 @@ Consent, account selection, managed accounts, disconnect and the WhatsApp webhoo
 | --- | --- | --- | --- |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | GET | `/api/meta/whatsapp` | `businessId` -> `{state: "ready", numbers: [{masked, source: "page" \| "business"}]} \| {state: "not_linked" \| "unavailable"}` | Owned business only; read-only Graph; numbers leave the server masked ("+91 ••••• 4842"); 20 per 5 min (#235) |
+| GET | `/api/meta/tracking` | `businessId`, optional `fresh=1` -> envelope `{businessId, connectionGeneration, binding: {adAccountId, pageId}, status}` | Internal and owned business only; read-only account tracking with a 2-minute business/connection cache and 20 requests per 5 min. A changed connection returns 409; a fresh check supersedes older reads. The pixel checked in `status` is not a saved Brand selection. Callers must discard results for a different business, connection generation, ad account or Page; `lastSeenAt` refers to any event, not specifically Lead or Purchase. Counts from an `unreadable` status may be partial, not definitive. |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
 | POST | `/api/meta/connections/change` | Business/intent -> envelope attempt (or 409 `REAUTH_REQUIRED`) | 'Change': lists the pairs the saved grant allows, no new Facebook login; commit via `select` |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |

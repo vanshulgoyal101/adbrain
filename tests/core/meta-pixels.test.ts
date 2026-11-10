@@ -4,7 +4,7 @@ import provisional from "./fixtures/meta/pixel-stats.provisional.json";
 import revoked from "./fixtures/meta/token-revoked.json";
 import { MetaClient } from "@/lib/meta/client";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
-import { cachedTrackingStatus, resetTrackingStatusCache } from "@/lib/meta/pixels";
+import { cachedTrackingStatus, resetTrackingStatusCache, type TrackingStatus } from "@/lib/meta/pixels";
 
 // #2712 (#2595 phase 2): can this ad account's website report Lead/Purchase? Real answers from the test ad account
 // (scripts/record-meta-pixels.ts, scrubbed): no pixel (read just before #2717 created one), one pixel whose 7-day
@@ -89,6 +89,39 @@ describe("core: the website tracking check reads Meta's real pixel answers (#271
     expect(status).toMatchObject({ state: "unreadable", unreadable: "unavailable", pixelId });
     expect(calls).toEqual([listPath]);
   });
+
+  it.each([
+    ["a malformed pixel", { data: [{ id: "invalid" }] }],
+    ["a partially malformed list", { data: [{ id: pixelId }, { name: "missing id" }] }],
+    ["a list whose next page cannot be followed", { data: [{ id: pixelId }], paging: { next: "more" } }],
+  ])("reports %s as unreadable, not an empty or complete list", async (_name, body) => {
+    const calls = graph({ [listPath]: ok(body) });
+    expect(await new MetaClient(creds).trackingStatus({ now })).toMatchObject({
+      state: "unreadable", unreadable: "list_failed", pixels: [], counts: null,
+    });
+    expect(calls).toEqual([listPath]);
+  });
+
+  it.each([
+    { rows: [{ data: [{ value: "Lead", count: "invalid" }] }] },
+    { rows: [{ data: [{ value: "Lead", count: -1 }] }] },
+    { rows: [{ data: [{ value: "Lead", count: null }] }] },
+    { rows: [{ data: [{ count: 2 }] }] },
+    { rows: [{ data: [{ value: "Lead", count: Number.MAX_SAFE_INTEGER }, { value: "Purchase", count: 1 }] }] },
+    { rows: [{}] },
+  ])("does not turn malformed event rows into a real zero or missing event: $rows", async ({ rows }) => {
+    graph({ [listPath]: listCall, [statsPath]: ok({ data: rows }) });
+    expect(await new MetaClient(creds).trackingStatus({ now })).toMatchObject({
+      state: "unreadable", unreadable: "stats_failed", counts: null, totalEvents: null,
+    });
+  });
+
+  it("accepts valid numeric-string counts, including a real zero", async () => {
+    graph({ [listPath]: listCall, [statsPath]: ok({ data: [{ data: [{ value: "Lead", count: "0" }, { value: "Purchase", count: "2" }] }] }) });
+    expect(await new MetaClient(creds).trackingStatus({ now })).toMatchObject({
+      state: "ready", counts: { Lead: 0, Purchase: 2 }, totalEvents: 2,
+    });
+  });
 });
 
 describe("core: Lead and Purchase counts decide ready or event missing (#2712, PROVISIONAL stats shape)", () => {
@@ -115,6 +148,13 @@ describe("core: Lead and Purchase counts decide ready or event missing (#2712, P
     graph({ [listPath]: fired, [statsPath]: ok(noCursor) });
     const status = await new MetaClient(creds).trackingStatus({ now, need: "Lead" });
     expect(status).toMatchObject({ state: "unreadable", unreadable: "stats_incomplete", counts: { Lead: 0, Purchase: 0 } });
+  });
+
+  it("does not present partial positive counts as a complete result", async () => {
+    graph({ [listPath]: fired, [statsPath]: ok({ ...provisional.leadOnly, paging: { next: "more" } }) });
+    expect(await new MetaClient(creds).trackingStatus({ now })).toMatchObject({
+      state: "unreadable", unreadable: "stats_incomplete", counts: { Lead: 2, Purchase: 0 },
+    });
   });
 
   it("with no pixel chosen, the one that fired most recently is checked", async () => {
@@ -169,5 +209,66 @@ describe("tracking status cache (#2712)", () => {
     expect((await cachedTrackingStatus(meta, business)).state).toBe("unreadable");
     await cachedTrackingStatus(meta, business);
     expect(calls).toHaveLength(2);
+  });
+
+  it("does not let an older read overwrite a newer fresh failure", async () => {
+    const meta = new MetaClient(creds);
+    const business = connection("00000000-0000-4000-8000-000000000004");
+    const ready: TrackingStatus = {
+      state: "ready", unreadable: null, pixelId,
+      pixels: [{ id: pixelId, name: "Site", lastFiredAt: null, unavailable: false }],
+      window: { since: "2026-10-26T16:00:00+0000", until: "2026-11-02T16:00:00+0000" },
+      lastSeenAt: null, counts: { Lead: 1, Purchase: 0 }, totalEvents: 1,
+    };
+    const unreadable: TrackingStatus = {
+      state: "unreadable", unreadable: "stats_failed", pixelId, pixels: [], window: null,
+      lastSeenAt: null, counts: null, totalEvents: null,
+    };
+    let finishOld!: (status: TrackingStatus) => void;
+    const older = new Promise<TrackingStatus>((resolve) => { finishOld = resolve; });
+    const read = vi.spyOn(meta, "trackingStatus")
+      .mockImplementationOnce(() => older)
+      .mockResolvedValueOnce(unreadable)
+      .mockResolvedValueOnce(unreadable);
+
+    const first = cachedTrackingStatus(meta, business).catch((error: unknown) => error);
+    await Promise.resolve();
+    expect(await cachedTrackingStatus(meta, business, { fresh: true })).toEqual(unreadable);
+    finishOld(ready);
+    expect(await first).toBeInstanceOf(Error);
+    expect(await cachedTrackingStatus(meta, business)).toEqual(unreadable);
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it("joins concurrent ordinary reads for the same business and connection", async () => {
+    const meta = new MetaClient(creds);
+    const business = connection("00000000-0000-4000-8000-000000000005");
+    let finish!: (status: TrackingStatus) => void;
+    const pending = new Promise<TrackingStatus>((resolve) => { finish = resolve; });
+    const read = vi.spyOn(meta, "trackingStatus").mockImplementation(() => pending);
+    const first = cachedTrackingStatus(meta, business);
+    const second = cachedTrackingStatus(meta, business);
+    await Promise.resolve();
+    finish({ state: "none", unreadable: null, pixelId: null, pixels: [], window: null, lastSeenAt: null, counts: null, totalEvents: null });
+    expect(await first).toEqual(await second);
+    expect(read).toHaveBeenCalledOnce();
+  });
+
+  it("does not serve cached success while a fresh read is pending", async () => {
+    const meta = new MetaClient(creds);
+    const business = connection("00000000-0000-4000-8000-000000000006");
+    const none: TrackingStatus = { state: "none", unreadable: null, pixelId: null, pixels: [], window: null, lastSeenAt: null, counts: null, totalEvents: null };
+    const unreadable: TrackingStatus = { ...none, state: "unreadable", unreadable: "list_failed" };
+    let finish!: (status: TrackingStatus) => void;
+    const pending = new Promise<TrackingStatus>((resolve) => { finish = resolve; });
+    const read = vi.spyOn(meta, "trackingStatus").mockResolvedValueOnce(none).mockImplementationOnce(() => pending);
+    expect(await cachedTrackingStatus(meta, business)).toEqual(none);
+    const fresh = cachedTrackingStatus(meta, business, { fresh: true });
+    const normal = cachedTrackingStatus(meta, business);
+    await Promise.resolve();
+    finish(unreadable);
+    expect(await fresh).toEqual(unreadable);
+    expect(await normal).toEqual(unreadable);
+    expect(read).toHaveBeenCalledTimes(2);
   });
 });

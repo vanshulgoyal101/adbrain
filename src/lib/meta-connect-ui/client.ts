@@ -19,6 +19,7 @@ import {
   type ConnectIntent,
   type ConnectionDTO,
 } from "@/lib/meta/connect-contracts";
+import { accountTrackingDtoSchema, type AccountTrackingDTO } from "@/lib/meta/tracking-contracts";
 
 const startDataSchema = z.object({
   attemptId: z.string().uuid(),
@@ -139,6 +140,21 @@ export function createMetaConnectClient({
         connectionDtoSchema,
         { signal },
       );
+    },
+    async trackingStatus(connection: ConnectionDTO, options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AccountTrackingDTO> {
+      const { businessId, generation, authorization, selected } = connection;
+      if (authorization !== "connected" || !selected) {
+        throw new MetaConnectClientError("AdBrain returned an invalid connection response.", { code: "CONFLICT", retryable: true });
+      }
+      const { adAccountId, pageId } = selected;
+      const params = new URLSearchParams({ businessId });
+      if (options.fresh) params.set("fresh", "1");
+      const result = await request(`/api/meta/tracking?${params}`, accountTrackingDtoSchema, { signal: options.signal });
+      if (result.businessId !== businessId || result.connectionGeneration !== generation
+        || result.binding.adAccountId !== adAccountId || result.binding.pageId !== pageId) {
+        throw new MetaConnectClientError("AdBrain returned an invalid connection response.", { code: "CONFLICT", retryable: true });
+      }
+      return result;
     },
     attempt(attemptId: string, signal?: AbortSignal): Promise<AttemptDTO> {
       return request(`/api/meta/connections/attempts/${encodeURIComponent(attemptId)}`, attemptDtoSchema, {

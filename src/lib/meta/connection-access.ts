@@ -142,8 +142,8 @@ export async function withMetaConnection<Result>(
     binding?: ConnectionBinding;
     expectedGeneration?: number;
     signal?: AbortSignal;
-    /** #1540: the product event's name when the call is gated by `purpose` but isn't that operation (a status read). */
-    event?: "whatsapp_numbers";
+    /** #1540: name a different operation, or let the caller record its own more specific outcome. */
+    event?: "whatsapp_numbers" | false;
   },
   execute: (client: MetaClient, connection: ConnectionDTO) => Promise<Result>,
 ): Promise<Result> {
@@ -162,13 +162,17 @@ async function runMetaConnection<Result>(
     // #1324: a smoke-owned business may only read, validate and pause on a real ad account.
     const result = await withConnectionCredentials(context, options, (credentials, connection) =>
       execute(new MetaClient(credentials, options.signal, metaWriteMode(context.userId, credentials.adAccountId)), connection));
-    recordProductEvent({ kind: "workflow", name: `meta.${options.event ?? options.purpose}`, outcome: "success", businessId: context.businessId,
-      durationMs: Math.round(performance.now() - started), attributes: { provider: "meta" } });
+    if (options.event !== false) {
+      recordProductEvent({ kind: "workflow", name: `meta.${options.event ?? options.purpose}`, outcome: "success", businessId: context.businessId,
+        durationMs: Math.round(performance.now() - started), attributes: { provider: "meta" } });
+    }
     return result;
   } catch (error) {
-    recordProductEvent({ kind: "workflow", name: `meta.${options.event ?? options.purpose}`, outcome: error instanceof ConnectionAccessError ? "rejected" : "failed",
-      businessId: isAuthorizedBusiness(context) ? context.businessId : undefined,
-      durationMs: Math.round(performance.now() - started), attributes: { provider: "meta", errorCode: error instanceof ConnectionAccessError ? error.code : "META_OPERATION_FAILED", ...metaErrorAttributes(error) } });
+    if (options.event !== false) {
+      recordProductEvent({ kind: "workflow", name: `meta.${options.event ?? options.purpose}`, outcome: error instanceof ConnectionAccessError ? "rejected" : "failed",
+        businessId: isAuthorizedBusiness(context) ? context.businessId : undefined,
+        durationMs: Math.round(performance.now() - started), attributes: { provider: "meta", errorCode: error instanceof ConnectionAccessError ? error.code : "META_OPERATION_FAILED", ...metaErrorAttributes(error) } });
+    }
     throw error;
   }
 }

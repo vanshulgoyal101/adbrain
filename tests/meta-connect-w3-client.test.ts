@@ -34,6 +34,82 @@ describe("Meta connect browser client", () => {
     );
   });
 
+  it("reads account tracking with the selected business and an explicit fresh check", async () => {
+    const controller = new AbortController();
+    const tracking = {
+      businessId, connectionGeneration: 3,
+      binding: { adAccountId: connected.selected!.adAccountId, pageId: connected.selected!.pageId },
+      status: {
+        state: "quiet", unreadable: null, pixelId: "9000000000000004",
+        pixels: [{ id: "9000000000000004", name: "Site", lastFiredAt: null, unavailable: false }],
+        window: { since: "2026-10-26T16:00:00+0000", until: "2026-11-02T16:00:00+0000" },
+        lastSeenAt: null, counts: { Lead: 0, Purchase: 0 }, totalEvents: 0,
+      },
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, data: tracking, requestId })),
+    );
+    const client = createMetaConnectClient({ fetchImpl });
+    await expect(client.trackingStatus(connected, { fresh: true, signal: controller.signal })).resolves.toEqual(tracking);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `/api/meta/tracking?businessId=${businessId}&fresh=1`,
+      expect.objectContaining({ credentials: "same-origin", cache: "no-store", signal: controller.signal }),
+    );
+  });
+
+  it("rejects tracking responses for a different business or with malformed counts", async () => {
+    const tracking = {
+      businessId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", connectionGeneration: 3,
+      binding: { adAccountId: connected.selected!.adAccountId, pageId: connected.selected!.pageId },
+      status: { state: "none", unreadable: null, pixelId: null, pixels: [], window: null, lastSeenAt: null, counts: null, totalEvents: null },
+    };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: tracking, requestId })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: {
+        ...tracking, businessId, status: { ...tracking.status, counts: { Lead: -1, Purchase: 0 } },
+      }, requestId })));
+    const client = createMetaConnectClient({ fetchImpl });
+    await expect(client.trackingStatus(connected)).rejects.toBeInstanceOf(MetaConnectClientError);
+    await expect(client.trackingStatus(connected)).rejects.toBeInstanceOf(MetaConnectClientError);
+  });
+
+  it.each([
+    { connectionGeneration: 4 },
+    { binding: { adAccountId: "act_987654", pageId: connected.selected!.pageId } },
+    { binding: { adAccountId: connected.selected!.adAccountId, pageId: "other-page" } },
+  ])("rejects another connection binding, even at the same generation: %j", async (changes) => {
+    const tracking = {
+      businessId, connectionGeneration: 3,
+      binding: { adAccountId: connected.selected!.adAccountId, pageId: connected.selected!.pageId },
+      status: { state: "none", unreadable: null, pixelId: null, pixels: [], window: null, lastSeenAt: null, counts: null, totalEvents: null },
+      ...changes,
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, data: tracking, requestId })),
+    );
+    await expect(createMetaConnectClient({ fetchImpl }).trackingStatus(connected)).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it.each([
+    { state: "none", unreadable: "list_failed" },
+    { state: "ready", unreadable: null },
+    { state: "unreadable", unreadable: null },
+    { state: "quiet", unreadable: null, counts: { Lead: 2, Purchase: 0 }, totalEvents: 2 },
+  ])("rejects a contradictory tracking state: %j", async (changes) => {
+    const tracking = {
+      businessId, connectionGeneration: 3,
+      binding: { adAccountId: connected.selected!.adAccountId, pageId: connected.selected!.pageId },
+      status: {
+        pixelId: null, pixels: [], window: null, lastSeenAt: null,
+        counts: null, totalEvents: null, ...changes,
+      },
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, data: tracking, requestId })),
+    );
+    await expect(createMetaConnectClient({ fetchImpl }).trackingStatus(connected)).rejects.toBeInstanceOf(MetaConnectClientError);
+  });
+
   it("sends the frozen DraftInput envelope before a prepare intent", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({
