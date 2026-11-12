@@ -1048,6 +1048,38 @@
       "adNumber": "Ad {n}",
       "expectWebsite": "What to expect: AdBrain hasn’t run enough website campaigns yet to quote a cost per visit. Meta reviews new ads first, usually within 24 hours, and nothing spends until you go live."
     },
+    "budgetEdit": {
+      "title": "Edit budget",
+      "descriptionCapped": "{name}. This run stops when it reaches its total or its end date, whichever comes first.",
+      "descriptionDaily": "{name}. Meta spends up to this much a day.",
+      "close": "Close edit budget",
+      "cap": "Total cap (₹)",
+      "endsOn": "Ends on",
+      "daily": "Daily budget (₹)",
+      "smallSteps": "Small steps (a fifth or less) keep Meta's learning going.",
+      "dailyChange": "{was} → {now} a day",
+      "capChange": "total {was} → {now}",
+      "endChange": "ends {was} → {now}",
+      "noEnd": "no end date",
+      "accepted": "{changes}. Meta accepted it; budget changes don't go back to review.",
+      "needsConfirmation": "This spends more, or faster, than you approved before, so it needs your confirmation.",
+      "changed": "Budget changed in Meta.",
+      "failed": "Couldn't change the budget. Nothing changed.",
+      "offline": "No connection. Nothing changed; try again.",
+      "cancel": "Cancel",
+      "confirmCapped": "Confirm the new total and date",
+      "confirmDaily": "Confirm {money} a day",
+      "save": "Save change",
+      "wait": "Meta needs a moment… {s}s",
+      "check": "Check with Meta",
+      "errors": {
+        "capMissing": "Enter the total cap in rupees.",
+        "endInvalid": "Choose a valid end date.",
+        "dailyMissing": "Enter the daily budget in rupees.",
+        "nothingCapped": "Change the total cap or the end date.",
+        "nothingDaily": "Change the daily budget."
+      }
+    },
     "editAd": {
       "title": "Edit ad words",
       "ad": "Ad",

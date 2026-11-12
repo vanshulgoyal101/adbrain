@@ -2368,7 +2368,7 @@ function BusinessCampaigns({
               <EditBudgetDialog
                 campaignId={budgetEdit.campaign.id}
                 campaignName={budgetEdit.campaign.name ?? `${business.name} — ${budgetEdit.campaign.objective}`}
-                start={budgetEdit.start}
+                start={budgetEdit.start} words={campaignWords}
                 onClose={() => { setBudgetEdit(null); loadWaiting(); }}
                 onSaved={(message, after) => {
                   const id = budgetEdit.campaign.id;
