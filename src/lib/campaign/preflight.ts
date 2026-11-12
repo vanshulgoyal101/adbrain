@@ -2,6 +2,7 @@ import { adPolicyHits, isHealthPromise } from "@/lib/campaign/ad-policy";
 import type { GeoTargeting } from "@/lib/meta/client";
 import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
+import { campaignAdCount, campaignAdSetCount, MEDIA_PILOT_AD_LIMIT } from "@/lib/campaign/ad-count";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
 import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE, type ReviewDestination } from "@/lib/campaign/plan-check";
@@ -11,8 +12,11 @@ import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { translator, type AppLocale } from "@/i18n/locale";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
 import { isAdvertiserWebsite, websiteAdLink, websiteBlocker } from "@/lib/campaign/website-review";
+import type { PreflightVideo } from "@/lib/campaign/creative-video";
 import { creativesBlockerMessage, named, trackingBlockerWords, websiteBlockerWords } from "@/lib/campaign/review-blocker-words";
 import { conversionGoal, goalWordsMismatch, trackingBlocker, type ReviewTracking } from "@/lib/campaign/website-tracking";
+import { canonicalJson, reviewedMessage } from "./review-canonicalization";
+export { isReviewedWhatsAppMessage } from "./review-canonicalization";
 
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
@@ -34,6 +38,8 @@ export interface PreflightCreative {
   printedPhone?: string | null;
   /** #784: its picture is the owner's own upload (`creatives.media_asset_id`), so launch needs their rights confirmation. */
   ownMedia?: boolean;
+  /** #781: set only for an owner's video; Go live waits until it is ready at Meta. */
+  video?: PreflightVideo;
 }
 
 export interface PreflightForm {
@@ -91,6 +97,8 @@ export interface PreflightInput {
   locale?: AppLocale;
   /** #784: the owner confirmed the current rights terms; undefined when no ad uses their own photos. */
   mediaConsent?: boolean;
+  /** Server-side eligibility for the actor whose draft is being reviewed. */
+  mediaPilotEnabled?: boolean;
 }
 
 export type ReviewFreshnessInput = {
@@ -126,6 +134,7 @@ export interface CanonicalReviewPayload {
   pixelId?: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
+  mediaPilot?: true;
   excludeFacebookReels?: true;
   targeting: DraftInput["targeting"];
   resolvedAreaLabel: string | null;
@@ -138,39 +147,9 @@ function blocker(code: ReviewBlocker["code"], reason: ReviewBlockerReason, messa
   return { code, reason, message, action };
 }
 
-function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage): NonNullable<ReviewDTO["whatsappMessage"]> {
-  return {
-    source, language, greeting: opening.greeting, autofill: opening.autofill,
-    ...(opening.callButton ? { callButton: true } : {}),
-    ...(opening.iceBreakers?.length ? { iceBreakers: opening.iceBreakers } : {}),
-  };
-}
-
-/** #2452: whether the message launch rebuilt from fresh reads is the one this review checked; launch refuses otherwise. */
-export function isReviewedWhatsAppMessage(message: ResolvedWhatsAppMessage, review: Pick<ReviewDTO, "whatsappMessage">): boolean {
-  return Boolean(review.whatsappMessage)
-    && JSON.stringify(canonicalize(reviewedMessage(message))) === JSON.stringify(canonicalize(review.whatsappMessage));
-}
-
 /** The destination Review checks; a draft saved before destinations existed is a form campaign. */
 function reviewDestination(draft: DraftInput): ReviewDestination {
   return draft.destination ?? "instant_form";
-}
-
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, canonicalize(entry)]),
-    );
-  }
-  return value;
-}
-
-function canonicalJson(payload: CanonicalReviewPayload): string {
-  return JSON.stringify(canonicalize(payload));
 }
 
 export function buildCanonicalReviewPayload(
@@ -202,6 +181,7 @@ export function buildCanonicalReviewPayload(
       ? { whatsappOpening: input.whatsappMessage.opening } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
+    ...(input.mediaPilotEnabled ? { mediaPilot: true as const } : {}),
     // #2273: only when on, so plans reviewed before this field keep their hash.
     ...(input.draft.excludeFacebookReels ? { excludeFacebookReels: true as const } : {}),
     targeting: input.draft.targeting,
@@ -212,6 +192,25 @@ export function buildCanonicalReviewPayload(
   };
 }
 
+export function checkReviewFreshness(
+  review: ReviewDTO,
+  expected: ReviewFreshnessInput,
+): ReviewFreshnessResult {
+  if (!review.canCreatePaused || !review.planHash) {
+    return { fresh: false, reason: "PREFLIGHT_BLOCKED" };
+  }
+  if (review.draftVersion !== expected.draftVersion) {
+    return { fresh: false, reason: "DRAFT_CHANGED" };
+  }
+  if (review.connectionGeneration !== expected.connectionGeneration) {
+    return { fresh: false, reason: "CONNECTION_CHANGED" };
+  }
+  if (review.planHash !== expected.planHash) {
+    return { fresh: false, reason: "REVIEW_CHANGED" };
+  }
+  return { fresh: true };
+}
+
 export function buildCreativeReviewPayload(creatives: PreflightCreative[]) {
   return [...creatives].sort((left, right) => left.id.localeCompare(right.id)).map(creative => ({
     id: creative.id,
@@ -220,6 +219,8 @@ export function buildCreativeReviewPayload(creatives: PreflightCreative[]) {
     primaryText: creative.primaryText ?? "",
     description: creative.description ?? null,
     cta: creative.cta ?? null,
+    // #781: only for an owner's video, so photo plans keep their hash; a swapped video is a different Review.
+    ...(creative.video ? { video: { assetId: creative.video.assetId, videoId: creative.video.videoId ?? null } } : {}),
   }));
 }
 
@@ -313,7 +314,11 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
       : say("interestsUnnamed")));
   }
 
-  const adSetCount = draft.abTest ? 2 : 1;
+  const adSetCount = campaignAdSetCount(draft.abTest, age?.min, age?.max);
+  const adCount = campaignAdCount(draft.creativeIds.length, draft.abTest, age?.min, age?.max);
+  if (input.mediaPilotEnabled && adCount > MEDIA_PILOT_AD_LIMIT) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_CREATIVES", say("pilotLimitExceeded", { max: MEDIA_PILOT_AD_LIMIT, count: adCount })));
+  }
   const perAdSetDailyBudgetRupees = draft.dailyBudgetRupees;
   const totalDailyBudgetRupees = effectiveDailyBudget(perAdSetDailyBudgetRupees, adSetCount);
   const payload = buildCanonicalReviewPayload(input);
@@ -355,6 +360,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers,
     planHash,
     creativeHash,
+    ...(input.mediaPilotEnabled ? { mediaPilot: true as const } : {}),
     destination: draft.destination ?? "instant_form",
     whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
     ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
@@ -373,23 +379,4 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     ...(draft.destination === "whatsapp" && input.whatsappMessage ? { whatsappMessage: reviewedMessage(input.whatsappMessage) } : {}),
     ...(input.geo.areaExclusions ? { serviceArea: describeServiceArea(input.geo.areaExclusions) } : {}),
   };
-}
-
-export function checkReviewFreshness(
-  review: ReviewDTO,
-  expected: ReviewFreshnessInput,
-): ReviewFreshnessResult {
-  if (!review.canCreatePaused || !review.planHash) {
-    return { fresh: false, reason: "PREFLIGHT_BLOCKED" };
-  }
-  if (review.draftVersion !== expected.draftVersion) {
-    return { fresh: false, reason: "DRAFT_CHANGED" };
-  }
-  if (review.connectionGeneration !== expected.connectionGeneration) {
-    return { fresh: false, reason: "CONNECTION_CHANGED" };
-  }
-  if (review.planHash !== expected.planHash) {
-    return { fresh: false, reason: "REVIEW_CHANGED" };
-  }
-  return { fresh: true };
 }

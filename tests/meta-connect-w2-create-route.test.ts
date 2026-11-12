@@ -192,8 +192,6 @@ vi.mock("@/lib/supabase/server", () => ({
       }
       if (table === "creatives") {
         const creativeData = { data: [{ id: creativeId, business_id: businessId, status: "approved", image_url: "https://example.com/ad.png", headline: "Headline", primary_text: "Message", cta: "Learn More", generation: { concept: { description: mocks.description } }, media_asset_id: mocks.mediaAssetId }], error: null };
-        mocks.creativeReads++;
-        if (mocks.changeCreativeBeforeExecution && mocks.creativeReads > 1) creativeData.data[0].primary_text = "Unreviewed copy";
         type CreativeResult = { data: typeof creativeData.data; error: null };
         type CreativeQuery = Promise<CreativeResult> & { eq: () => CreativeQuery };
         const creativeResult = (): CreativeQuery => ({
@@ -201,14 +199,26 @@ vi.mock("@/lib/supabase/server", () => ({
           then: (onfulfilled, onrejected) => Promise.resolve(creativeData).then(onfulfilled, onrejected),
         } as CreativeQuery);
         return {
-          select: () => ({
-            in: () => creativeResult(),
+          select: (columns: string) => ({
+            in: () => {
+              if (columns !== "id, media_asset_id") {
+                mocks.creativeReads++;
+                if (mocks.changeCreativeBeforeExecution && mocks.creativeReads > 1) creativeData.data[0].primary_text = "Unreviewed copy";
+              }
+              return creativeResult();
+            },
           }),
         };
       }
       if (table === "media_assets") {
-        const assets = { data: [{ id: mocks.mediaAssetId, kind: "image", source: "upload" }], error: null };
-        return { select: () => ({ in: () => ({ eq: async () => assets }) }) };
+        const asset = { id: mocks.mediaAssetId, business_id: businessId, kind: "image", status: "ready", deleted_at: null, path: "fixture/image.png", source: "upload" };
+        const assets = { data: [asset], error: null };
+        return {
+          select: () => ({
+            eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: asset, error: null }) }) }),
+            in: () => ({ eq: async () => assets }),
+          }),
+        };
       }
       if (table === "businesses") {
         return {

@@ -1,3 +1,4 @@
+import { loadCreativeVideos } from "@/lib/campaign/creative-video";
 import { createHash } from "node:crypto";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { renderStoriesWithin } from "@/lib/creative/story";
@@ -8,8 +9,10 @@ import { buildCreativeReviewPayload, isReviewedWhatsAppMessage } from "./preflig
 import { createOperationCheckpoint } from "./operation-store";
 import { executeOperation, OperationPhaseError, OperationRolledBackError, recordExternalId, type OperationRecord } from "./operations";
 import { effectiveDailyBudget } from "./spend";
+import { campaignAdCount, MEDIA_PILOT_AD_LIMIT, splitAgeRange } from "./ad-count";
 import { savedCreativeDescription } from "@/lib/creative/concept";
-import { MetaCreateRolledBackError, splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
+import { MetaCreateRolledBackError, type CreateCampaignResult } from "@/lib/meta/client";
+import { mediaPilotEnabled } from "@/lib/media/pilot";
 import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { boundWhatsAppNumbers } from "@/lib/meta/whatsapp-bindings";
 import type { CampaignSupabase } from "./preflight-runtime";
@@ -62,6 +65,21 @@ export async function executeReviewedCampaign(input: {
       run: async () => {
         if (signal?.aborted) throw new OperationPhaseError("Campaign execution was stopped before transmission.", { transmitted: false });
         const targeting = draft.input.targeting;
+        let pilot: boolean;
+        try {
+          pilot = mediaPilotEnabled(actor.businessId);
+        } catch (error) {
+          console.error("Media pilot eligibility check failed.", error instanceof Error ? error.name : "UnknownError");
+          const failure = new OperationPhaseError("Media pilot eligibility could not be checked.", { transmitted: false });
+          failure.cause = error;
+          throw failure;
+        }
+        if (pilot !== Boolean(review.mediaPilot)) {
+          throw new OperationPhaseError("Media pilot eligibility changed. Check the campaign again before sending.", { transmitted: false });
+        }
+        if (pilot && campaignAdCount(draft.input.creativeIds.length, draft.input.abTest, targeting.age?.min, targeting.age?.max) > MEDIA_PILOT_AD_LIMIT) {
+          throw new OperationPhaseError(`This pilot can run at most ${MEDIA_PILOT_AD_LIMIT} ads. Check the campaign again before sending.`, { transmitted: false });
+        }
         const created = await withMetaConnection(actor, {
           purpose: "create_paused",
           binding: { adAccountId: review.selected!.adAccountId, pageId: review.selected!.pageId },
@@ -78,10 +96,15 @@ export async function executeReviewedCampaign(input: {
           const byId = new Map((creatives ?? []).map(creative => [creative.id, creative]));
           const creativeInputs = draft.input.creativeIds.map(id => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));
           if (creativeInputs.length !== draft.input.creativeIds.length) throw new OperationPhaseError("Selected creative changed before execution.", { transmitted: false });
+          // #781: Review blocks videos still processing at Meta; refuse here if one slipped through, and a website can't take a video yet.
+          const videos = await loadCreativeVideos(database, actor.businessId, draft.input.creativeIds, async () => review.selected!.adAccountId);
+          if ([...videos.values()].some(video => video.state !== "ready" || !video.videoId) || (videos.size > 0 && draft.input.destination === "website")) {
+            throw new OperationPhaseError("A video isn't ready to launch.", { transmitted: false });
+          }
           const creativeHash = createHash("sha256").update(JSON.stringify(buildCreativeReviewPayload(creativeInputs.map(creative => ({
             id: creative.id, businessId: actor.businessId, approved: true, imageUrl: creative.image_url,
             headline: creative.headline, primaryText: creative.primary_text, cta: creative.cta,
-            description: savedCreativeDescription(creative.generation),
+            description: savedCreativeDescription(creative.generation), video: videos.get(creative.id),
           }))))).digest("hex");
           if (creativeHash !== review.creativeHash) throw new OperationPhaseError("Selected creative changed since review.", { transmitted: false });
           // #333: Stories and Reels get a 9:16 layout of the same reviewed design; on any failure they keep the 4:5.
@@ -121,7 +144,7 @@ export async function executeReviewedCampaign(input: {
             ...(prefill ? { whatsappGreeting: prefill } : {}),
             // Brands saved before #470 may hold a bare domain; Meta needs a full link.
             link: websiteLink ?? normalizeWebsite(business.website) ?? "https://facebook.com",
-            creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index] })),
+            creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index], videoId: videos.get(creative.id)?.videoId ?? null })),
             location, excludedLocation, ageMin: targeting.age?.min, ageMax: targeting.age?.max,
             gender: targeting.gender ?? "all", interests: review.audienceInterests,
             variants: draft.input.abTest ? splitAgeRange(targeting.age?.min ?? 25, targeting.age?.max ?? 60).map(band => ({

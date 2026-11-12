@@ -43,6 +43,9 @@ vi.mock("@/lib/results-card/store", () => ({
 }));
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test", NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co" }) }));
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({ auth: { getUser: async () => ({ data: { user: null } }) }, from: vi.fn() }),
+}));
 const operator = vi.hoisted(() => ({ allowed: true }));
 vi.mock("@/lib/privacy-requests", () => ({ privacyOperatorAllowed: async () => operator.allowed }));
 vi.mock("@/components/studio", () => ({ Studio: () => <div>Studio loaded</div> }));

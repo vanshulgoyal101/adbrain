@@ -8,7 +8,8 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 | --- | --- |
 | [draft-store.ts](draft-store.ts) | Versioned, owner-scoped drafts (seven-day expiry, at most 50 active) |
 | [preflight-service.ts](preflight-service.ts) | `prepareCampaignReview`: loads the exact draft version and runs [preflight.ts](preflight.ts) |
-| [preflight.ts](preflight.ts) | Review rules, blockers, `planHash` and `checkReviewFreshness` |
+| [preflight.ts](preflight.ts) | Review rules, blockers, canonical `planHash` and `checkReviewFreshness` |
+| [review-canonicalization.ts](review-canonicalization.ts) | Stable JSON for the review hash and WhatsApp message comparison |
 | [create-service.ts](create-service.ts) | `executeReviewedCampaign`: creates the reviewed campaign in Meta, PAUSED, and saves it |
 | [operations.ts](operations.ts) | The create state machine: claim, phases, checkpoints, `needs_reconciliation` |
 | [operation-store.ts](operation-store.ts) | `campaign_operations` RPCs: enqueue, claim, checkpoint, finish |

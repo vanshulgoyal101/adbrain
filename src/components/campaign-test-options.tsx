@@ -1,10 +1,12 @@
 import { formatMoney } from "@/lib/format";
 
 /** The composer's test choices: the audience A/B by age, and (#2273, team accounts only) the no-Facebook-Reels test. */
-export function CampaignTestOptions({ abTest, onAbTest, totalDailyBudget, noFacebookReels, onNoFacebookReels }: {
+export function CampaignTestOptions({ abTest, onAbTest, totalDailyBudget, adSetCount = 2, agePending = false, noFacebookReels, onNoFacebookReels }: {
   abTest: boolean;
   onAbTest: (value: boolean) => void;
   totalDailyBudget: number;
+  adSetCount?: number;
+  agePending?: boolean;
   /** Absent for everyone outside internal-accounts.ts. */
   noFacebookReels?: boolean;
   onNoFacebookReels?: (value: boolean) => void;
@@ -16,7 +18,10 @@ export function CampaignTestOptions({ abTest, onAbTest, totalDailyBudget, noFace
         <span className="text-sm">
           <span className="font-medium text-slate-800">A/B test the audience by age</span>
           <span className="block text-xs text-slate-500">
-            Two ad sets, each with the entered daily budget. Total daily budget: {formatMoney(totalDailyBudget)}.
+            {!abTest ? "Up to two ad sets, each with the entered daily budget. Review confirms the total."
+              : agePending ? `Up to two ad sets, each with the entered daily budget. Total daily budget up to ${formatMoney(totalDailyBudget)}; Review confirms it.`
+                : adSetCount === 1 ? `This age range makes one ad set. Total daily budget: ${formatMoney(totalDailyBudget)}.`
+                  : `Two ad sets, each with the entered daily budget. Total daily budget: ${formatMoney(totalDailyBudget)}.`}
           </span>
         </span>
       </label>

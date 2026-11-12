@@ -3,12 +3,13 @@ import type { translator } from "@/i18n/locale";
 import type { WebsiteBlocker } from "@/lib/campaign/website-review";
 import type { AppLocale } from "@/i18n/locale";
 import type { ConversionGoal, TrackingBlocker } from "@/lib/campaign/website-tracking";
+import type { PreflightVideo } from "@/lib/campaign/creative-video";
 
 /** #2333: Review's blocker sentences, in the owner's language. */
 export type ReviewSay = ReturnType<typeof translator<"review">>;
 
 /** The fields of a chosen ad its blocker sentence reads. */
-type BlockedCreative = { id: string; businessId: string; approved: boolean; imageUrl: string | null; headline: string | null };
+type BlockedCreative = { id: string; businessId: string; approved: boolean; imageUrl: string | null; headline: string | null; video?: Pick<PreflightVideo, "state" | "reason" | "problem"> };
 
 /** The ad's quoted, shortened headline; null without one (the sentence then says "the ad you chose"). */
 function adName(creative: BlockedCreative): string | null {
@@ -49,7 +50,7 @@ export function trackingBlockerWords(problem: TrackingBlocker, goal: ConversionG
 }
 
 /** #681: which chosen ad is wrong and what to do about it, not one sentence for every fault. */
-export function creativesBlockerMessage(draft: Pick<DraftInput, "businessId" | "creativeIds">, creatives: BlockedCreative[], say: ReviewSay): string | null {
+export function creativesBlockerMessage(draft: Pick<DraftInput, "businessId" | "creativeIds" | "destination">, creatives: BlockedCreative[], say: ReviewSay): string | null {
   if (draft.creativeIds.length === 0) return say("noAds");
   const unique = new Set(draft.creativeIds).size === draft.creativeIds.length;
   const found = creatives.filter((creative) => creative.businessId === draft.businessId && draft.creativeIds.includes(creative.id));
@@ -62,6 +63,14 @@ export function creativesBlockerMessage(draft: Pick<DraftInput, "businessId" | "
     const ad = { named: name ? "yes" : "no", name: name ?? "" };
     if (!creative.approved) return [say("adNotApproved", ad)];
     if (!creative.imageUrl) return [say("adNoPicture", ad)];
+    if (creative.video?.problem === "media_missing") return [say("adMediaGone", ad)];
+    if (creative.video && draft.destination === "website") return [say("adVideoWebsite", ad)];
+    if (creative.video?.state === "processing") return [say("adVideoProcessing", ad)];
+    if (creative.video?.state === "error") {
+      const problem = creative.video.problem;
+      const reason = problem ? say(`videoProblem.${problem}`) : creative.video.reason ?? "";
+      return [say("adVideoError", { ...ad, reason })];
+    }
     return [];
   });
   if (!problems.length) return null;
