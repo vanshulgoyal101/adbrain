@@ -1,7 +1,7 @@
 import { observeRoute, currentRequestId, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contracts";
+import { draftDtoSchema, draftInputSchema, websiteGoalSchema } from "@/lib/campaign/connect-contracts";
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
 import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_GROQ_MAX_TOKENS, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
@@ -59,8 +59,14 @@ async function handlePOST(req: Request) {
     goal: z.string().trim().min(1).max(2_000),
     audienceDraft: draftInputSchema.optional(),
     destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
+    websiteGoal: websiteGoalSchema.optional(),
     whatsappNumber: z.string().regex(maskedWhatsAppNumberPattern).optional(),
     answers: z.union([z.string().max(12_000), z.array(plannerAnswerSchema).max(30)]).optional(),
+  }).refine(({ audienceDraft, destination, websiteGoal }) => {
+    if (websiteGoal === undefined && audienceDraft?.websiteGoal === undefined) return true;
+    return (audienceDraft?.destination ?? destination) === "website"
+      && (destination === undefined || destination === "website")
+      && (websiteGoal === undefined || !audienceDraft || (audienceDraft.websiteGoal ?? "visits") === websiteGoal);
   }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: await ownerError("planRequestInvalid") }, { status: 400 });
   const goal = parsed.data.goal;
@@ -301,7 +307,11 @@ async function handlePOST(req: Request) {
 
   const now = new Date().toISOString();
   // Preflight resolves this mask against the business's own numbers, as for a manual draft.
-  const draftInput = destination === "whatsapp" && parsed.data.whatsappNumber ? { ...draftResult.draft, whatsappNumber: parsed.data.whatsappNumber } : draftResult.draft;
+  const draftInput = {
+    ...draftResult.draft,
+    ...(parsed.data.websiteGoal !== undefined ? { websiteGoal: parsed.data.websiteGoal } : {}),
+    ...(destination === "whatsapp" && parsed.data.whatsappNumber ? { whatsappNumber: parsed.data.whatsappNumber } : {}),
+  };
   const plan = prepareDraftCreate({ actor, draftInput, now, ttlMs: DRAFT_TTL_MS });
   if ("ok" in plan) {
     return NextResponse.json({ error: plan.message }, { status: plan.code === "FORBIDDEN" ? 403 : 400 });
