@@ -75,10 +75,10 @@ export function formatClock(date: Date | string, now: Date = new Date()): string
   return `${p.day} ${p.month}, ${time}`;
 }
 
-/** #1290: a day without the time ("24 Oct"), by the India calendar. "" for an invalid date. */
-export function formatDay(date: Date | string): string {
+/** #1290: a day without the time ("24 Oct"), optionally with its year, by the India calendar. */
+export function formatDay(date: Date | string, includeYear = false): string {
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "";
-  const p = parts(d, { day: "numeric", month: "short" });
-  return `${p.day} ${p.month}`;
+  const p = parts(d, { day: "numeric", month: "short", ...(includeYear ? { year: "numeric" } : {}) });
+  return `${p.day} ${p.month}${includeYear ? ` ${p.year}` : ""}`;
 }
