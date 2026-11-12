@@ -242,9 +242,25 @@ describe("creative generation route", () => {
     expect(mocks.generateVariants).not.toHaveBeenCalled();
   });
 
+  it("refuses a library video before admitting image-only Create (#748)", async () => {
+    const videoId = "22222222-2222-4222-8222-222222222222";
+    mocks.pickedMedia.mockResolvedValueOnce([
+      { id: mediaId, business_id: "business", kind: "image", status: "ready" },
+      { id: videoId, business_id: "business", kind: "video", status: "ready" },
+    ]);
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", mediaIds: [mediaId, videoId] }));
+    expect(response.status).toBe(415);
+    expect(await response.json()).toMatchObject({ code: "MEDIA_KIND_UNSUPPORTED" });
+    expect(mocks.readAdPhotos).not.toHaveBeenCalled();
+    expect(mocks.admitted.size).toBe(0);
+    expect(mocks.adPhotos).not.toHaveBeenCalled();
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+  });
+
   it("refuses a photo that can't be read before admitting a paid batch, so no hold is stranded (#780)", async () => {
     const { MediaError } = await import("@/lib/media/store");
-    mocks.pickedMedia.mockResolvedValueOnce([{ id: mediaId, business_id: "business" }]);
+    mocks.pickedMedia.mockResolvedValueOnce([{ id: mediaId, business_id: "business", kind: "image" }]);
     mocks.readAdPhotos.mockRejectedValueOnce(new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't read the photo. Try again."));
     const { POST } = await import("@/app/api/creatives/generate/route");
     const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", mediaIds: [mediaId] }));
@@ -256,7 +272,7 @@ describe("creative generation route", () => {
   });
 
   it("writes each ad's words for its library photo, bills the vision call and keeps the signed link out of the receipt (#780)", async () => {
-    const row = { id: mediaId, business_id: "business" };
+    const row = { id: mediaId, business_id: "business", kind: "image" };
     const notes = { description: "A hand-painted sign on a salon wall.", visibleText: "Haircut ₹149" };
     const read = { row, url: signed, notes: null, bytes: new Uint8Array([1]) };
     mocks.pickedMedia.mockResolvedValueOnce([row]);
