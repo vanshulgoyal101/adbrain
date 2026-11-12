@@ -138,13 +138,14 @@ function imageAttemptUsage(
 export function failedVariantUsage(
   error: unknown,
   context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId" | "creativeId">,
+  angleId?: string,
 ): LLMUsageEvent[] {
   if (
     !(error instanceof CreativeValidationError) &&
     !(error instanceof CreativeImageError)
   )
     return [];
-  const metadata = error instanceof CreativeValidationError ? {
+  const validationMetadata = error instanceof CreativeValidationError ? {
     validationStage: error.stage,
     validationRules: conceptValidationRules(error.issues),
   } : undefined;
@@ -157,10 +158,15 @@ export function failedVariantUsage(
     // #614: a provider failure keeps its own code; only a reply our checks rejected is a validation error.
     // #687: copy that passed is no error when only the image failed; the image rows carry that code.
     errorCode: entry.failure ? `LLM_${entry.failure}` : error instanceof CreativeImageError ? undefined : error.name,
-    ...(validation ? { metadata: { validationStage: validation.stage, validationRules: validation.rules } }
-      : metadata && index === error.usage.length - 1 ? { metadata } : {}),
+    ...((angleId || validation || (validationMetadata && index === error.usage.length - 1)) ? {
+      metadata: {
+        ...(angleId ? { angle: angleId } : {}),
+        ...(validation ? { validationStage: validation.stage, validationRules: validation.rules }
+          : validationMetadata && index === error.usage.length - 1 ? validationMetadata : {}),
+      },
+    } : {}),
   }));
   return error instanceof CreativeImageError
-    ? [...textEvents, ...error.imageAttempts.map((entry, index) => imageAttemptUsage(entry, context, index + 1))]
+    ? [...textEvents, ...error.imageAttempts.map((entry, index) => imageAttemptUsage(entry, context, index + 1, angleId))]
     : textEvents;
 }
