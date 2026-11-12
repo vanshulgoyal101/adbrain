@@ -8,6 +8,8 @@ import { logEvent } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
 import { copyClaimWarnings, editableCopySchema, type EditableCopy } from "@/lib/creative/concept";
+import { brandFacts } from "@/lib/creative/brand-facts";
+import { ownWordsCopyError } from "@/lib/creative/own-words-validation";
 import type { Creative } from "@/lib/types";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -75,19 +77,22 @@ export async function updateCreativeCopy(
     const quotes = Array.isArray(concept.sourceQuotes)
       ? concept.sourceQuotes.filter((quote): quote is string => typeof quote === "string")
       : [];
-    const instructions = await getActiveInstructionsText(creative.business_id).catch(() => "");
+    let instructions: string;
+    if (generation.ownWords === true) {
+      try {
+        instructions = await getActiveInstructionsText(creative.business_id);
+      } catch (error) {
+        console.error("[creative.edit.instructions]", error);
+        return { ok: false, error: "Couldn't load your Brand instructions. Try again." };
+      }
+      const problem = ownWordsCopyError([parsed.data], brandFacts(business, instructions), business.vertical);
+      if (problem) return { ok: false, error: problem.message };
+    } else {
+      instructions = await getActiveInstructionsText(creative.business_id).catch(() => "");
+    }
     const warnings = copyClaimWarnings(
       parsed.data,
-      [
-        business.name,
-        business.description,
-        business.target_audience,
-        ...(business.usps ?? []),
-        ...(business.offers ?? []),
-        ...(business.locations ?? []),
-        instructions,
-        ...quotes,
-      ],
+      brandFacts(business, instructions, ...quotes),
       business.vertical,
       // #1617: an AI picture can't be called "our work"; the owner's own photo can (#1901: the tile badge's flag).
       { ownPicture: pictureSource(generation) === "yours" },

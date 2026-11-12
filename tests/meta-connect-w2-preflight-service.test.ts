@@ -67,6 +67,38 @@ describe("campaign preflight orchestration", () => {
     expect(result.kind === "review" && result.review.blockers.map((item) => item.reason)).toContain("REVIEW_AD_POLICY");
   });
 
+  it("rechecks owner-written copy against current Brand facts before returning Review (#780)", async () => {
+    const creative = (await loaders().findCreatives(actor.businessId, draft.input.creativeIds))[0];
+    const findOwnWordsContext = vi.fn(async () => ({ brandFacts: ["₹499 bridal package"], vertical: "bridal salon" }));
+    const result = await prepareCampaignReview({
+      ...loaders({
+        findCreatives: async () => [{
+          ...creative,
+          ownWords: true,
+          headline: "₹4,999 bridal package",
+          primaryText: "Book a consultation.",
+          description: "",
+        }],
+      }),
+      findOwnWordsContext,
+    }, { actor, draftId: draft.id, requestedDraftVersion: draft.version, now: "2026-09-08T10:00:00.000Z" });
+
+    expect(findOwnWordsContext).toHaveBeenCalledWith(actor);
+    expect(result.kind === "review" && result.review.blockers.map((item) => item.reason)).toContain("REVIEW_AD_POLICY");
+  });
+
+  it("does not return a passing Review when current Brand facts cannot be read for own words", async () => {
+    const creative = (await loaders().findCreatives(actor.businessId, draft.input.creativeIds))[0];
+    const findOwnWordsContext = vi.fn(async () => { throw new Error("Brand facts could not be checked."); });
+    const review = prepareCampaignReview({
+      ...loaders({ findCreatives: async () => [{ ...creative, ownWords: true }] }),
+      findOwnWordsContext,
+    }, { actor, draftId: draft.id, requestedDraftVersion: draft.version, now: "2026-09-08T10:00:00.000Z" });
+
+    await expect(review).rejects.toThrow("Brand facts could not be checked.");
+    expect(findOwnWordsContext).toHaveBeenCalledWith(actor);
+  });
+
   it("blocks an ad with the owner's own photo until they confirm their rights, and asks only then (#784)", async () => {
     const now = "2026-09-08T10:00:00.000Z";
     const own = async () => [{ ...(await loaders().findCreatives(actor.businessId, draft.input.creativeIds))[0], ownMedia: true }];

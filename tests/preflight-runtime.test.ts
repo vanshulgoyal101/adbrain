@@ -56,14 +56,53 @@ describe("preflight loaders for the Review warnings (#419 2b)", () => {
     const design = { format: "portrait", width: 1080, height: 1350, brandName: "Solaride", logoUrl: null, headline: "Cut your bill", subhead: "Free site survey",
       benefits: [], phone: null, contactLine: null, ctaLabel: "Contact Us", primaryColor: "#1d3a2e", ctaTextColor: "#ffffff", fontFamily: "sans-serif", layout: "top" };
     const rows = [
-      { id: "c1", business_id: "b1", status: "approved", image_url: "https://x/1.png", headline: "A", primary_text: "a", cta: null, generation: { composition: "overlay", photoUrl: "https://x/p.png", design } },
+      { id: "c1", business_id: "b1", status: "approved", image_url: "https://x/1.png", headline: "A", primary_text: "a", cta: null, generation: { composition: "overlay", photoUrl: "https://x/p.png", design, ownWords: true } },
       { id: "c2", business_id: "b1", status: "approved", image_url: "https://x/2.png", headline: "B", primary_text: "b", cta: null, generation: { composition: "image-only" } },
     ];
     const query = { select: () => query, in: () => query, eq: async () => ({ data: rows }) };
     const loaders = buildCampaignPreflightLoaders({ from: () => query } as never, actor);
-    expect((await loaders.findCreatives("b1", ["c1", "c2"])).map((creative) => creative.storyReady)).toEqual([true, false]);
+    expect((await loaders.findCreatives("b1", ["c1", "c2"])).map((creative) => [creative.storyReady, creative.ownWords])).toEqual([[true, true], [false, false]]);
     expect(await loaders.findCostPerResult?.(actor, "whatsapp")).toBe(69);
     expect(evidence.getCostPerResult).toHaveBeenCalledWith("b1", "whatsapp");
+  });
+});
+
+describe("owner-written ad context loader (#780)", () => {
+  const loadWith = (response: { data: Record<string, unknown> | null; error: unknown }) => {
+    const business = {
+      select: vi.fn(() => business),
+      eq: vi.fn(() => business),
+      maybeSingle: vi.fn(async () => response),
+    };
+    const loaders = buildCampaignPreflightLoaders({ from: () => business } as never, actor);
+    return { business, loaders };
+  };
+
+  it("reads current Brand facts and vertical", async () => {
+    const { business, loaders } = loadWith({
+      data: {
+        name: "Study Hub", description: "Small-group lessons", target_audience: "Adults",
+        usps: ["Flexible schedule"], offers: ["Free assessment"], locations: ["Austin"], vertical: "Education",
+      },
+      error: null,
+    });
+
+    const readOwnWordsContext = loaders.findOwnWordsContext;
+    if (!readOwnWordsContext) throw new Error("The owner-written Brand context loader is missing.");
+    await expect(readOwnWordsContext(actor)).resolves.toEqual({
+      brandFacts: ["Study Hub", "Small-group lessons", "Adults", "Flexible schedule", "Free assessment", "Austin"],
+      vertical: "Education",
+    });
+    expect(business.select).toHaveBeenCalledWith("name, description, target_audience, usps, offers, locations, vertical");
+    expect(business.eq).toHaveBeenCalledWith("id", "b1");
+  });
+
+  it("rejects when the current Brand read fails", async () => {
+    const { loaders } = loadWith({ data: null, error: { message: "timeout" } });
+
+    const readOwnWordsContext = loaders.findOwnWordsContext;
+    if (!readOwnWordsContext) throw new Error("The owner-written Brand context loader is missing.");
+    await expect(readOwnWordsContext(actor)).rejects.toThrow("Current Brand facts could not be checked");
   });
 });
 

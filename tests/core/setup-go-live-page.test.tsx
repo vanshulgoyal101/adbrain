@@ -68,6 +68,18 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     expect(m.campaigns.mock.calls[0][0].newCampaign.budget).toBeUndefined();
   });
 
+  it("#780: a selected owner-written ad reaches Review instead of the first-timer setup redirect", async () => {
+    const ownerAd = { ...ad("owner-photo"), generation: { ownWords: true, sourceFacts: [] } };
+    m.getApprovedCreatives.mockResolvedValue([ownerAd]);
+    await expect(page({ new: "1", review: "1", creatives: "owner-photo" })).rejects.toThrow("redirect:/create");
+    await page({ all: "1", new: "1", review: "1", creatives: "owner-photo" });
+    expect(m.goLive).not.toHaveBeenCalled();
+    expect(m.campaigns.mock.calls[0][0]).toMatchObject({
+      approved: [{ id: "owner-photo", status: "approved" }],
+      newCampaign: { creativeIds: ["owner-photo"], review: true },
+    });
+  });
+
   it("#1432: approved ads made from an earlier step 1 (or outside the setup) send the owner back to step 2", async () => {
     m.getApprovedCreatives.mockResolvedValue([ad("old", "Get WhatsApp enquiries for rooftop solar in Mohali, leading with: Free site survey"),
       { ...ad("studio"), generation: { sourceFacts: [] } }]);

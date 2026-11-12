@@ -51,7 +51,9 @@ connection capability, INR currency, resolved targeting, and budget. For health,
 education and solar/interiors businesses it also reads each ad's saved wording
 with Create's banned-claim rule (whole words only), so an owner-edited "Cures back
 pain" or "Guaranteed savings" is blocked before Meta (`REVIEW_AD_POLICY`, #739,
-#2423). The WhatsApp welcome, pre-typed message and quick questions that launch
+#2423). Owner-written ads are also checked against the current Brand facts and
+vertical for unsupported commercial claims and policy violations; Review fails
+closed if those Brand facts cannot be read (#780). The WhatsApp welcome, pre-typed message and quick questions that launch
 will send (suggested, saved or edited) get the same rule plus #738's policy rules,
 naming the field (`REVIEW_WHATSAPP_MESSAGE`, #2422). Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.
@@ -97,7 +99,7 @@ with the ad, area or interest Meta named. Support can paste the row's message an
 | `REVIEW_WEBSITE_UNREACHABLE` | Website ads only (#2599): "AdBrain couldn't open your website {site}", "answered with an error ({code})", "isn't a public website address" or "sends visitors on to {other site}" | "Fix link in Your business" (opens Brand), or "Use WhatsApp chat instead (no website needed)" | Fix the address so it opens your own site, get the site back up, or switch to WhatsApp chat ads. |
 | `REVIEW_TRACKING` | Website leads or sales goals only (#2714): "No website tracking source is available to this ad account" (check that the ad account can use your Meta pixel, or set one up in Events Manager), "Choose which website tracking counts", "couldn't read your website tracking", "reported nothing from {since} to {until}" or "reported no {website lead (Lead)/sale (Purchase)} from {since} to {until}" | "Check tracking in Your business" (opens Brand) | Give this ad account access to the pixel, add or choose tracking that reports the goal's event, connect Facebook again, or choose the visits goal. |
 | `REVIEW_GOAL_WORDS` | Website leads or sales goals only (#2714): the ad has a Shop now button on a website leads goal, or a Sign up button on a sales goal | "Choose your ads" (jumps to the ads) | Choose an ad whose button fits the goal, or change the goal. |
-| `REVIEW_AD_POLICY` | "{word}" in an ad is a health promise (clinics) or a promise (others) "Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | Say what the service is, not what it cures or guarantees. |
+| `REVIEW_AD_POLICY` | An unsupported owner-written claim, personal-attribute wording, or "{word}" in an ad is a health promise (clinics) or a promise (others) Meta rejects | "Edit the ad's wording" | Say what the service is, use a current Brand fact for commercial claims, and avoid promises or wording about the reader's personal attributes. |
 | `REVIEW_MEDIA_RIGHTS` | "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta." | "Confirm your photo rights" (opens Assets) | Tick the rights box with your photos on Assets (only the current owner's confirmation since hand-over counts), or choose AdBrain's pictures instead. |
 | `REVIEW_BUDGET` | "Set a daily budget above ₹0." or "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | Pick ₹300, ₹500 or ₹1,000 a day. |
 | `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | Set the ages, or tap **Recommend audience**. |

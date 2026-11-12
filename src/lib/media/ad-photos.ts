@@ -17,6 +17,7 @@ export async function pickedMedia(client: SupabaseClient, businessId: string, id
   for (const row of rows) {
     if (row.business_id !== businessId) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
     if (row.status !== "ready") throw new MediaError(409, "MEDIA_NOT_UPLOADED", "This photo isn't ready yet.");
+    if (row.kind !== "image") throw new MediaError(400, "MEDIA_NOT_IMAGE", "Pick a photo, not a video.");
   }
   return rows;
 }
