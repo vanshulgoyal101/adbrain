@@ -8,6 +8,7 @@ import { createAnnualPaymentQuote, DEFAULT_ANNUAL_PAYMENT_PAISE, MIN_ANNUAL_PAYM
 import { CheckoutRequestError, paymentJsonBody, paymentReply, readPaymentBody } from "./checkout-request";
 import { getProductionCollectionPolicy, getProductionPaymentConfig, productionPaymentPolicySchema, ProductionPaymentError,
   quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
+import { handlePlanWebhook } from "@/lib/plan/webhook";
 import { createProductionPaymentClient } from "./razorpay-production";
 import { flagManagedSpendCap } from "@/lib/managed/spend-cap-wiring";
 import { capturedPaymentMatchesOrder, verifyRazorpayCheckoutSignature, verifyRazorpayWebhookSignature } from "./razorpay-verification";
@@ -220,6 +221,25 @@ export async function handleProductionPayments(request: Request, action: Action)
       try { input = JSON.parse(raw.toString("utf8")); }
       catch { throw new CheckoutRequestError(400, "Invalid webhook JSON."); }
       const event = parsed(z.object({ account_id: z.literal(config.accountId), environment: z.literal("live").optional(), event: z.string().max(100), payload: z.unknown() }), input);
+      // #718: the ₹999 plan's Payment Link events settle plan months and never touch the ad-money ledger.
+      const plan = await handlePlanWebhook(event, {
+        fetchPlanLink: linkId => createProductionPaymentClient(process.env, signal).fetchPlanLink(linkId),
+        // The same ownership rule `observe` applies: the order's receipt names one of our stored ad-money orders.
+        isAdMoneyPayment: async (paymentId, providerOrderId) => {
+          const client = createProductionPaymentClient(process.env, signal);
+          const order = await client.fetchOrder(providerOrderId ?? (await client.fetchPayment(paymentId)).order_id);
+          const localId = z.uuid().safeParse(order.receipt);
+          return localId.success && await stored(database.rpc("production_payment_recovery", { ...scope, p_order_id: localId.data }), recoverySchema.nullable()) !== null;
+        },
+        rpc: async (name: "plan_period_paid" | "plan_period_expire", args: Record<string, string>) => {
+          const { data, error } = await (name === "plan_period_paid"
+            ? createAdminClient().rpc(name, args as { p_link_id: string; p_payment_id: string; p_paid_at: string })
+            : createAdminClient().rpc(name, args as { p_link_id: string })).abortSignal(signal);
+          if (error) throw new ProductionPaymentError("PROVIDER_UNAVAILABLE");
+          return data;
+        },
+      });
+      if (plan) return paymentReply({ received: true, ignored: plan === "ignored", plan });
       const kind = event.event.startsWith("payment.dispute.") ? "dispute" : event.event.startsWith("refund.") ? "refund"
         : ["payment.captured", "order.paid"].includes(event.event) ? "capture" : ["payment.authorized", "payment.failed"].includes(event.event) ? "pending" : null;
       if (!kind) return paymentReply({ received: true, ignored: true });
