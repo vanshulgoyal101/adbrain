@@ -1,53 +1,21 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
-import { getEnv } from "@/lib/env";
-import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
+import { mediaUploadsEnabled, mediaVideoEnabled } from "@/lib/media/config";
+import { MEDIA_ASSET_COLUMNS, MediaError, mediaViews, type MediaKind, type MediaRow, type MediaView } from "@/lib/media/models";
+import { finalizeVideoUpload } from "@/lib/media/video-finalize";
 import {
   isMediaMime, isMediaVideoMime, MAX_AD_PHOTOS, mediaBucket, MEDIA_EXTENSION, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, MEDIA_MONTHLY_UPLOADS,
-  MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_EXTENSION, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, type MediaFit, type MediaMime,
+  MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_EXTENSION, mediaFit, videoRefusal, type MediaFit, type MediaMime,
 } from "@/lib/media/rules";
+export { mediaUploadsEnabled, mediaVideoEnabled };
+export { MediaError, mediaViews };
+export type { MediaKind, MediaRow, MediaView };
 
-/**
- * #1209 (#748): owners' own photos. The browser asks `sign` for a one-time upload URL, uploads the bytes straight
- * to the private `media` bucket, then calls `finalize`, which re-reads the stored object before it's listed.
- * Only the service role writes rows and objects; owners read their own under RLS.
- */
-export function mediaUploadsEnabled(): boolean {
-  return getEnv().MEDIA_UPLOADS_ENABLED;
-}
-
-/** #748 (#2653 = A): videos need their own flag on top of uploads (the bucket must take MP4/MOV first). */
-export function mediaVideoEnabled(): boolean {
-  const env = getEnv();
-  return env.MEDIA_UPLOADS_ENABLED && env.MEDIA_VIDEO_ENABLED;
-}
-
-export type MediaKind = "image" | "video";
 /** A month's uploads per kind; the database holds the same numbers (20261103_media_upload_quota.sql). */
 export const MEDIA_MONTHLY_LIMIT: Record<MediaKind, number> = { image: MEDIA_MONTHLY_UPLOADS, video: MEDIA_MONTHLY_VIDEOS };
 
-export type MediaRow = {
-  id: string; business_id: string; kind: MediaKind; path: string; name: string | null; tags: string[]; sha256: string;
-  bytes: number | null; mime: string | null; width: number | null; height: number | null; duration_ms: number | null;
-  checks: Record<string, unknown>; status: "pending" | "ready" | "delete_failed"; deleted_at: string | null; created_at: string;
-  /** #780: what the photo shows and the words printed in it, saved by the first Create that used it. */
-  description?: string | null; visible_text?: string | null;
-};
-export type MediaView = {
-  id: string; kind: MediaKind; name: string | null; tags: string[]; width: number | null; height: number | null; bytes: number | null;
-  durationMs: number | null; fit: MediaFit | null; url: string | null; createdAt: string;
-};
-
-export class MediaError extends Error {
-  constructor(public status: number, public code: string, message: string) {
-    super(message);
-    this.name = "MediaError";
-  }
-}
-
-const COLUMNS = "id, business_id, kind, path, name, tags, sha256, bytes, mime, width, height, duration_ms, checks, status, deleted_at, created_at, description, visible_text";
-const URL_SECONDS = 3600;
+const COLUMNS = MEDIA_ASSET_COLUMNS;
 
 /** Start of the current month in India (the pilots' billing month), as an ISO instant. */
 export function monthStartIst(now = new Date()): string {
@@ -149,6 +117,7 @@ type Refuse = (status: number, code: string, message: string) => Promise<never>;
 /** Re-reads the stored object: the bytes must be the photo or video the browser described, or the object and row go. */
 export async function finalizeUpload(admin: SupabaseClient, row: MediaRow): Promise<MediaView> {
   if (row.status === "ready") return (await mediaViews(admin, [row]))[0];
+  if (row.kind === "video") return finalizeVideoUpload(admin, row);
   const { data: blob, error } = await admin.storage.from(mediaBucket(row.kind)).download(row.path);
   if (error || !blob) throw new MediaError(409, "MEDIA_NOT_UPLOADED", "The upload didn't finish. Try again.");
   const bytes = Buffer.from(await blob.arrayBuffer());
@@ -161,7 +130,7 @@ export async function finalizeUpload(admin: SupabaseClient, row: MediaRow): Prom
       .eq("id", row.id).eq("path", row.path).eq("status", "pending");
     throw new MediaError(status, code, message);
   };
-  return row.kind === "video" ? finalizeVideo(admin, row, bytes, refuse) : finalizePhoto(admin, row, bytes, refuse);
+  return finalizePhoto(admin, row, bytes, refuse);
 }
 
 async function finalizePhoto(admin: SupabaseClient, row: MediaRow, bytes: Buffer, reject: Refuse): Promise<MediaView> {
@@ -187,28 +156,10 @@ async function finalizePhoto(admin: SupabaseClient, row: MediaRow, bytes: Buffer
   return promote(admin, row, stored, { mime, extension: MEDIA_EXTENSION[mime], width, height, durationMs: null, fit });
 }
 
-/** #748: an MP4/MOV is checked from its boxes (container, length, shown size) and kept as it is, minus location. */
-async function finalizeVideo(admin: SupabaseClient, row: MediaRow, bytes: Buffer, reject: Refuse): Promise<MediaView> {
-  const wrongType = "Please choose an MP4 or MOV video.";
-  if (!mediaVideoEnabled()) return reject(415, "MEDIA_TYPE", wrongType);
-  if (bytes.length > MEDIA_VIDEO_MAX_BYTES) return reject(413, "MEDIA_TOO_LARGE", videoRefusal("video/mp4", bytes.length, row.duration_ms ?? 1)!.message);
-  if (createHash("sha256").update(bytes).digest("hex") !== row.sha256) return reject(422, "MEDIA_CHANGED", "The video changed while uploading. Add it again.");
-  const info = readVideo(bytes);
-  if (!info) return reject(415, "MEDIA_TYPE", wrongType);
-  const refusal = videoRefusal(info.mime, bytes.length, info.durationMs);
-  if (refusal) return reject(refusal.status, refusal.code, refusal.message);
-  // Reviewer (#1245): no location leaves with an owner's media. Phones write it into `udta`/`meta` boxes.
-  const stored = stripVideoMetadata(bytes);
-  return promote(admin, row, stored, {
-    mime: info.mime, extension: MEDIA_VIDEO_EXTENSION[info.mime], width: info.width, height: info.height,
-    durationMs: info.durationMs, fit: mediaFit(info.width, info.height, "video"),
-  });
-}
-
 type Checked = { mime: string; extension: string; width: number; height: number; durationMs: number | null; fit: MediaFit };
 
 async function promote(admin: SupabaseClient, row: MediaRow, stored: Uint8Array, checked: Checked): Promise<MediaView> {
-  const noun = row.kind === "video" ? "video" : "photo";
+  const noun = "photo";
   // Dev 7 (#1245 attack): the checked bytes go to a new path no upload token was ever signed for, and the row moves
   // there only if it still points at the upload path we read. A token still live for the upload path (a retry's, or one
   // signed while this ran) can then never put unchecked bytes behind a ready one.
@@ -249,23 +200,6 @@ export async function readVerifiedMedia(admin: SupabaseClient, row: MediaRow): P
     throw new MediaError(409, "MEDIA_CHANGED", "This photo changed after it was added. Add it again.");
   }
   return bytes;
-}
-
-/** Rows to what the library shows. Only a `ready` row gets a signed URL to its private object (an hour): a pending
- * row's object is whatever an upload token stored, unchecked (Reviewer, #1245). */
-export async function mediaViews(client: SupabaseClient, rows: MediaRow[]): Promise<MediaView[]> {
-  const ready = rows.filter((row) => row.status === "ready");
-  const urls = new Map<string | null, string>();
-  for (const kind of ["image", "video"] as const) {
-    const paths = ready.filter((row) => (row.kind ?? "image") === kind).map((row) => row.path);
-    if (!paths.length) continue;
-    const { data: signed } = await client.storage.from(mediaBucket(kind)).createSignedUrls(paths, URL_SECONDS);
-    for (const item of signed ?? []) if (item.signedUrl) urls.set(item.path, item.signedUrl);
-  }
-  return rows.map((row) => ({
-    id: row.id, kind: row.kind ?? "image", name: row.name, tags: row.tags ?? [], width: row.width, height: row.height, bytes: row.bytes,
-    durationMs: row.duration_ms ?? null, fit: row.width && row.height ? mediaFit(row.width, row.height, row.kind ?? "image") : null, url: row.status === "ready" ? urls.get(row.path) ?? null : null, createdAt: row.created_at,
-  }));
 }
 
 /** The owner's ready photos, newest first; `before` pages by created_at. Read under the owner's RLS. */
@@ -334,4 +268,3 @@ export async function deleteMedia(admin: SupabaseClient, row: MediaRow): Promise
   const { error: saveError } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id);
   if (saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't delete the photo. Try again.");
 }
-

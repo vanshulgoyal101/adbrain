@@ -57,36 +57,53 @@ export function useMediaUploads({ t, businessId, onAdded, deps, codec, videoRead
   const counter = useRef(0);
   const inFlight = useRef(new Set<string>());
   const live = useRef<UploadItem[]>([]);
-  useEffect(() => { live.current = items; }, [items]);
+  const videoQueue = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => () => live.current.forEach(dropThumb), []);
-  const update = useCallback((key: string, change: Partial<UploadItem>) => {
-    setItems((current) => current.map((item) => item.key === key ? { ...item, ...change } : item));
+  const changeItems = useCallback((change: (current: UploadItem[]) => UploadItem[]) => {
+    live.current = change(live.current);
+    setItems(live.current);
   }, []);
+  const update = useCallback((key: string, change: Partial<UploadItem>) => {
+    changeItems((current) => current.map((item) => item.key === key ? { ...item, ...change } : item));
+  }, [changeItems]);
 
   const pick = useCallback(async (files: File[], allowVideo = false) => {
     const chosen = files.slice(0, MEDIA_PICK_MAX);
     setLimitNote(files.length > MEDIA_PICK_MAX ? t("upload.limitCount", { max: MEDIA_PICK_MAX }) : null);
     const fresh = chosen.map((file) => ({ file, item: { key: `pick-${++counter.current}`, name: file.name, status: "checking" as const, message: null, thumb: thumbFor(file) } }));
     // Finished uploads drop off the sheet when the owner picks again; anything waiting or failed stays.
-    setItems((current) => {
+    changeItems((current) => {
       const done = (item: UploadItem) => item.status === "added" || item.status === "duplicate";
       current.filter(done).forEach(dropThumb);
       return [...current.filter((item) => !done(item)), ...fresh.map(({ item }) => item)];
     });
     await Promise.all(fresh.map(async ({ file, item }) => {
       try {
-        const prepared = allowVideo && file.type.startsWith("video/") ? await prepareVideo(file, videoReader) : await prepareImage(file, codec);
+        let prepared: Prepared | null;
+        if (allowVideo && file.type.startsWith("video/")) {
+          const next = videoQueue.current.then(() =>
+            live.current.some((entry) => entry.key === item.key) ? prepareVideo(file, videoReader) : null);
+          videoQueue.current = next.then(() => undefined, () => undefined);
+          prepared = await next;
+        } else prepared = await prepareImage(file, codec);
+        if (!prepared) return;
         update(item.key, { status: "ready", prepared, message: fitText(t, prepared.width, prepared.height, prepared.kind) });
       } catch (error) {
         update(item.key, { status: "refused", message: errorText(t, error, "upload.format") });
       }
     }));
-  }, [codec, t, update, videoReader]);
+  }, [changeItems, codec, t, update, videoReader]);
 
   const send = useCallback(async (all: UploadItem[]) => {
-    const targets = all.flatMap((item) => item.prepared && !inFlight.current.has(item.key) ? [{ ...item, prepared: item.prepared }] : []);
+    const targets: (UploadItem & { prepared: Prepared })[] = [];
+    for (const selected of all) {
+      const item = live.current.find((entry) => entry.key === selected.key);
+      if (!item?.prepared || (item.status !== "ready" && item.status !== "failed") || inFlight.current.has(item.key)) continue;
+      inFlight.current.add(item.key);
+      targets.push({ ...item, prepared: item.prepared });
+    }
     if (!targets.length) return;
-    targets.forEach((item) => { inFlight.current.add(item.key); update(item.key, { status: "queued" }); });
+    targets.forEach((item) => update(item.key, { status: "queued" }));
     // A retry or a second pick while a batch runs joins it: "Uploading 3 of 6…".
     setBatch((current) => current.running ? { ...current, total: current.total + targets.length, running: current.running + 1 } : { total: targets.length, done: 0, running: 1 });
     for (const item of targets) {
@@ -95,7 +112,7 @@ export function useMediaUploads({ t, businessId, onAdded, deps, codec, videoRead
         const result = await uploadPrepared(businessId, item.prepared, deps ?? defaultDeps(),
           item.prepared.kind === "video" ? { onSigned: () => setVideoAttempts((count) => count + 1) } : undefined);
         update(item.key, { status: result.status, message: result.status === "duplicate" ? t("upload.duplicate") : null });
-        if (result.status === "added") onAdded(result.asset);
+        onAdded(result.asset);
       } catch (error) {
         update(item.key, { status: "failed", message: errorText(t, error, "upload.failed") });
       } finally {
@@ -117,13 +134,13 @@ export function useMediaUploads({ t, businessId, onAdded, deps, codec, videoRead
 
   const progress = batch.running > 0 && batch.done < batch.total ? t("upload.progress", { n: batch.done + 1, total: batch.total }) : null;
   const remove = useCallback((key: string) => {
-    setItems((current) => {
+    changeItems((current) => {
       const item = current.find((entry) => entry.key === key);
       if (!item || item.status === "uploading" || inFlight.current.has(key)) return current;
       dropThumb(item);
       return current.filter((entry) => entry.key !== key);
     });
-  }, []);
+  }, [changeItems]);
   const request: typeof fetch = useCallback((...args) => (deps?.fetch ?? fetch)(...args), [deps?.fetch]);
   return { items, limitNote, progress, pick, send, remove, request, videoAttempts };
 }

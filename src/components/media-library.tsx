@@ -134,7 +134,13 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   const [media, setMedia] = useState(initialMedia);
   const [sheetOpen, setSheetOpen] = useState(startOpen);
   const [rightsDone, setRightsDone] = useState(consented);
-  const onAdded = useCallback((asset: MediaView) => setMedia((current) => [asset, ...current.filter((item) => item.id !== asset.id)]), []);
+  const removedIds = useRef(new Set<string>());
+  const onAdded = useCallback((asset: MediaView) => {
+    if (removedIds.current.has(asset.id)) return;
+    setMedia((current) => current.some((item) => item.id === asset.id)
+      ? current.map((item) => item.id === asset.id ? asset : item)
+      : [asset, ...current]);
+  }, []);
   const uploads = useMediaUploads({ t, businessId: business.id, onAdded, deps, codec, videoReader });
   const { request } = uploads;
   const onRenamed = useCallback((asset: MediaView) => setMedia((current) => current.map((item) => item.id === asset.id ? asset : item)), []);
@@ -144,11 +150,14 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
   const [deleted, setDeleted] = useState<{ asset: MediaView; index: number } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restore = useCallback((asset: MediaView, index: number) => setMedia((current) => {
-    const next = current.filter((item) => item.id !== asset.id);
-    next.splice(Math.min(index, next.length), 0, asset);
-    return next;
-  }), []);
+  const restore = useCallback((asset: MediaView, index: number) => {
+    removedIds.current.delete(asset.id);
+    setMedia((current) => {
+      const next = current.filter((item) => item.id !== asset.id);
+      next.splice(Math.min(index, next.length), 0, asset);
+      return next;
+    });
+  }, []);
   const pending = useRef<{ asset: MediaView; index: number } | null>(null);
   const commit = useCallback(async (asset: MediaView, index: number) => {
     if (pending.current?.asset.id === asset.id) pending.current = null;
@@ -170,6 +179,7 @@ export function MediaLibrary({ words, business, media: initialMedia, creatives, 
     if (deleted) void commit(deleted.asset, deleted.index);
     const index = media.findIndex((item) => item.id === asset.id);
     setDeleteError(null);
+    removedIds.current.add(asset.id);
     setMedia((current) => current.filter((item) => item.id !== asset.id));
     setDeleted({ asset, index });
     pending.current = { asset, index };
