@@ -15,6 +15,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 | [render.tsx](render.tsx), [ad-composite.tsx](ad-composite.tsx) | Rasterise the spec into the finished poster (Satori/resvg, bundled fonts, Indic shaping) |
 | [persist.ts](persist.ts) | Store images and thumbnails in the `creatives` bucket |
 | [receipt.ts](receipt.ts) | Generation receipt and usage events for each variant |
+| [brand-photo-vetting.ts](brand-photo-vetting.ts) | Create leaves out saved brand photos with printed text or logos: one cached vision call per photo, fetched only from our Supabase storage host over https, never throws; an unreadable photo is kept (#2912) |
 | [slopScan.ts](slopScan.ts), [policy-rules.ts](policy-rules.ts) | Copy checks: AI-cliché phrases, vertical banned claims, ad-policy findings |
 
 ## Rules
@@ -31,7 +32,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 
 - [creative-concept tests](../../../tests/creative-concept.test.ts), [creative-pipeline tests](../../../tests/creative-pipeline.test.tsx), [interview tests](../../../tests/interview.test.ts), [design tests](../../../tests/design.test.ts)
 - [slop-scan tests](../../../tests/slop-scan.test.ts), [creative-policy-rules tests](../../../tests/creative-policy-rules.test.ts), [creative-generation-route tests](../../../tests/creative-generation-route.test.ts)
-- Core (recorded responses in [fixtures](../../../tests/core/fixtures/)): [create-concept](../../../tests/core/create-concept.test.ts), [create-route](../../../tests/core/create-route.test.ts), [create-interview](../../../tests/core/create-interview.test.ts), [creative-indic](../../../tests/core/creative-indic.test.tsx)
+- Core (recorded responses in [fixtures](../../../tests/core/fixtures/)): [create-concept](../../../tests/core/create-concept.test.ts), [create-route](../../../tests/core/create-route.test.ts), [create-interview](../../../tests/core/create-interview.test.ts), [creative-indic](../../../tests/core/creative-indic.test.tsx), [create-brand-photo-vetting](../../../tests/core/create-brand-photo-vetting.test.ts)
 
 ## More
 

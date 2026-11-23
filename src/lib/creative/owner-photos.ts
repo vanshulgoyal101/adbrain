@@ -12,6 +12,12 @@ export function ownerPhotoFor(angle: AdAngle, photos: readonly string[] | undefi
   return place >= 0 && place < OWNER_PHOTO_ADS ? photos?.[place] : undefined;
 }
 
+/** Photos with no printed text first (stable), so a flyer or logo-heavy photo is the last pick for ads 1 to 3. */
+export function preferCleanPhotos(photos: readonly string[], notes: Readonly<Record<string, OwnerPhotoNotes>>): string[] {
+  const printed = (photo: string) => Boolean(notes[photo]?.visibleText?.trim());
+  return [...photos.filter((photo) => !printed(photo)), ...photos.filter(printed)];
+}
+
 /** #2222: the owner photo an ad uses when paid pictures are paused; the ad's place picks it, so a retry gets the same one. */
 export function pausedPhotoFor(angle: AdAngle, photos: readonly string[] | undefined): string | undefined {
   return photos?.length ? photos[Math.max(0, AD_ANGLES.findIndex((item) => item.id === angle.id)) % photos.length] : undefined;

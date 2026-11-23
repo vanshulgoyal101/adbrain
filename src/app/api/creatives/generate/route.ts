@@ -22,6 +22,8 @@ import { CREATE_HEARTBEAT_MS, CREATE_TOP_UP_BUDGET_MS, CREATE_TOP_UP_START_MS, P
 import { isProspectAccount } from "@/lib/internal-accounts";
 import { AD_ANGLES, type AdAngle } from "@/lib/templates/ads";
 import { freeImagesOnly } from "@/lib/llm/spend-policy";
+import { vetBrandPhotos } from "@/lib/creative/brand-photo-vetting";
+import { preferCleanPhotos } from "@/lib/creative/owner-photos";
 import { cloudflareConfigured } from "@/lib/imageGen/providers/cloudflare";
 import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { preferenceContext } from "@/lib/preferences/store";
@@ -286,8 +288,23 @@ async function generate(req: Request, live?: LiveCreate) {
       if (!recorded) usageUnknown = true;
       await progress(recorded ? visionEvents.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
     }
-    const ownerPhotos = photos.length ? photos.map((photo) => photo.url) : brandPhotos;
-    const ownerPhotoNotes = Object.fromEntries(photos.flatMap((photo) => photo.notes ? [[photo.url, photo.notes] as const] : []));
+    let ownerPhotos: string[] | undefined;
+    let ownerPhotoNotes: Record<string, { description: string; visibleText: string | null }>;
+    if (photos.length) {
+      ownerPhotoNotes = Object.fromEntries(photos.flatMap((photo) => photo.notes ? [[photo.url, photo.notes] as const] : []));
+      ownerPhotos = preferCleanPhotos(photos.map((photo) => photo.url), ownerPhotoNotes);
+    } else {
+      // The brand's saved photos were used unchecked: skip any with printed words or logos so they don't clash with the ad.
+      const vetted = await vetBrandPhotos(brandPhotos, usageContext);
+      if (vetted.events.length) {
+        addCost(vetted.events);
+        const recorded = await persistLLMUsage(vetted.events);
+        if (!recorded) usageUnknown = true;
+        await progress(recorded ? vetted.events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
+      }
+      ownerPhotos = vetted.photos;
+      ownerPhotoNotes = vetted.notes;
+    }
     const mediaIdFor = new Map(photos.map((photo) => [photo.url, photo.mediaId]));
     const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
     const run = {
