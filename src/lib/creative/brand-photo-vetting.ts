@@ -7,16 +7,29 @@ const VET_LIMIT = 6;
 const MAX_BYTES = 6_000_000;
 const FETCH_TIMEOUT_MS = 8_000;
 /** Process-local: a brand photo is described once per server instance, not on every Create. */
-const notesByUrl = new Map<string, PhotoNotes | null>();
+const notesByUrl = new Map<string, PhotoNotes>();
+const CACHE_LIMIT = 500;
+
+/** Brand photo URLs are stored data: only fetch https from our own Supabase storage host, never an arbitrary address. */
+function ownStorageUrl(url: string): boolean {
+  try {
+    const own = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
+    const target = new URL(url);
+    return target.protocol === "https:" && target.hostname === own.hostname && target.pathname.startsWith("/storage/v1/");
+  } catch {
+    return false;
+  }
+}
 
 type Context = Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId" | "generationId">;
 
 async function fetchImage(url: string, signal: AbortSignal): Promise<{ data: Uint8Array; mediaType: string } | null> {
   try {
-    if (new URL(url).protocol !== "https:") return null;
-    const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]) });
+    if (!ownStorageUrl(url)) return null;
+    const response = await fetch(url, { redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]) });
     const mediaType = response.headers.get("content-type")?.split(";")[0] ?? "";
     if (!response.ok || !mediaType.startsWith("image/")) return null;
+    if (Number(response.headers.get("content-length")) > MAX_BYTES) return null;
     const data = new Uint8Array(await response.arrayBuffer());
     return data.length && data.length <= MAX_BYTES ? { data, mediaType } : null;
   } catch {
@@ -40,7 +53,9 @@ export async function vetBrandPhotos(
     const image = await fetchImage(url, signal);
     if (!image) return;
     const notes = await describePhoto(image, { signal, onAttempt: (attempt) => events.push(describeUsageEvent(attempt, url, context)) });
-    if (notes) notesByUrl.set(url, notes);
+    if (!notes) return;
+    if (notesByUrl.size >= CACHE_LIMIT) notesByUrl.clear();
+    notesByUrl.set(url, notes);
   }));
   const printed = (url: string) => Boolean(notesByUrl.get(url)?.visibleText?.trim());
   const photos = [...candidates.filter((url) => !printed(url)), ...urls.slice(VET_LIMIT)];
