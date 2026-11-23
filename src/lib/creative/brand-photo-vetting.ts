@@ -15,7 +15,7 @@ function ownStorageUrl(url: string): boolean {
   try {
     const own = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
     const target = new URL(url);
-    return target.protocol === "https:" && target.hostname === own.hostname && target.pathname.startsWith("/storage/v1/");
+    return target.protocol === "https:" && target.hostname === own.hostname && target.port === own.port && target.pathname.startsWith("/storage/v1/");
   } catch {
     return false;
   }
